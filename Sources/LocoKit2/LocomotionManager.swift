@@ -7,10 +7,12 @@
 
 import Foundation
 import CoreLocation
+import Observation
 
-public final class LocomotionManager: Observable {
+@Observable
+public final class LocomotionManager {
 
-    static let highlander = LocomotionManager()
+    public static let highlander = LocomotionManager()
 
     // MARK: - Public
     
@@ -20,14 +22,13 @@ public final class LocomotionManager: Observable {
     // MARK: -
     
     public func startRecording() {
-        if recordingState == .recording { return }
-
         print("LocomotionManager.startRecording()")
 
         // start updating locations
         locationManager.distanceFilter = kCLDistanceFilterNone
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.startUpdatingLocation()
+        locationManager.startMonitoringSignificantLocationChanges() // is it allowed to start both?
 
         recordingState = .recording
     }
@@ -42,10 +43,12 @@ public final class LocomotionManager: Observable {
     private func startSleeping() {
         print("LocomotionManager.startSleeping()")
         
-        // need to call start, because might have come here from didPauseLocationUpdates
-        locationManager.startUpdatingLocation()
+        // note: need to call start because might be coming from off state
+        // or might be coming from locationManagerDidPauseLocationUpdates()
         locationManager.distanceFilter = kCLLocationAccuracyThreeKilometers
         locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        locationManager.startUpdatingLocation()
+        locationManager.startMonitoringSignificantLocationChanges() // is it allowed to start both?
 
         recordingState = .sleeping
     }
@@ -54,6 +57,7 @@ public final class LocomotionManager: Observable {
 
     private init() {}
 
+    @ObservationIgnored
     private lazy var locationManager: CLLocationManager = {
         let manager = CLLocationManager()
         manager.distanceFilter = kCLDistanceFilterNone
@@ -65,16 +69,19 @@ public final class LocomotionManager: Observable {
         return manager
     }()
     
-    private let locationDelegate = Delegate(parent: self)
+    @ObservationIgnored
+    private lazy var locationDelegate = {
+        return Delegate(parent: self)
+    }()
 
     // MARK: - CLLocationManagerDelegate
 
     private class Delegate: NSObject, CLLocationManagerDelegate {
-        weak let parent: LocomotionManager
+        let parent: LocomotionManager
 
         init(parent: LocomotionManager) {
-            super.init()
             self.parent = parent
+            super.init()
         }
 
         func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {

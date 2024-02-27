@@ -11,6 +11,9 @@ let package = Package(
     products: [
         .library(name: "LocoKit2", targets: ["LocoKit2"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/Jounce/Surge", from: "2.3.0"),
+    ], 
     targets: [
         .target(name: "LocoKit2"),
         .testTarget(name: "LocoKit2Tests", dependencies: ["LocoKit2"])
