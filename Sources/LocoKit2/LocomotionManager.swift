@@ -6,18 +6,24 @@
 //
 
 import Foundation
-import CoreLocation
 import Observation
+import CoreLocation
 
 @Observable
 public final class LocomotionManager {
 
     public static let highlander = LocomotionManager()
 
+    private let activityBrain = ActivityBrain()
+
     // MARK: - Public
     
     public private(set) var recordingState: RecordingState = .off
     public internal(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
+
+    public var rawLocations: [CLLocation] = []
+    public var oldKLocations: [CLLocation] = []
+    public var newKLocations: [CLLocation] = []
 
     // MARK: -
     
@@ -74,6 +80,15 @@ public final class LocomotionManager {
         return Delegate(parent: self)
     }()
 
+    func add(location: CLLocation) {
+        rawLocations.append(location)
+        activityBrain.add(location: location)
+        newKLocations.append(activityBrain.newKalman.currentEstimatedLocation())
+        if let coord = activityBrain.oldKalman.coordinate {
+            oldKLocations.append(CLLocation(latitude: coord.latitude, longitude: coord.longitude))
+        }
+    }
+
     // MARK: - CLLocationManagerDelegate
 
     private class Delegate: NSObject, CLLocationManagerDelegate {
@@ -85,7 +100,10 @@ public final class LocomotionManager {
         }
 
         func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-            print("CLLocationManagerDelegate.didUpdateLocations() locations: \(locations.count)")
+//            print("CLLocationManagerDelegate.didUpdateLocations() locations: \(locations.count)")
+            for location in locations {
+                parent.add(location: location)
+            }
         }
 
         func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
