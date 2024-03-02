@@ -16,7 +16,6 @@ class ActivityBrain {
     func add(location: CLLocation) {
         newKalman.add(location: location)
         oldKalman.add(location: location)
-
     }
 
 }

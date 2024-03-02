@@ -10,6 +10,8 @@ import CoreLocation
 import Surge
 
 internal class KalmanFilter {
+    
+    private var lastTimestamp: Date?
 
     // State vector: [latitude, longitude, velocity north, velocity east]
     private var stateVector: Matrix<Double> = Matrix([[0], [0], [0], [0]])
@@ -25,22 +27,21 @@ internal class KalmanFilter {
         [0, 0, 0, 1]
     ])
 
-    private var lastTimestamp: Date?
+    // Q (lower values = higher trust in model prediction)
+    private let processNoiseCov = Matrix<Double>([
+        [0.0001, 0, 0, 0],
+        [0, 0.0001, 0, 0],
+        [0, 0, 0.0001, 0],
+        [0, 0, 0, 0.0001]
+    ])
 
-    // R
+    // R (lower values = higher trust in raw data)
+    // note: no point in modifying this though - it's only initial state
     private var measurementNoiseCov = Matrix<Double>([
         [1.0, 0, 0, 0],
         [0, 1.0, 0, 0],
         [0, 0, 1.0, 0],
         [0, 0, 0, 1.0]
-    ])
-
-    // Q
-    private let processNoiseCov = Matrix<Double>([
-        [0.0001, 0, 0, 0], // Smaller noise for position (latitude)
-        [0, 0.0001, 0, 0], // Smaller noise for position (longitude)
-        [0, 0, 0.001, 0],  // Larger noise for velocity (northward)
-        [0, 0, 0, 0.001]   // Larger noise for velocity (eastward)
     ])
 
     // H
@@ -56,7 +57,7 @@ internal class KalmanFilter {
     func add(location: CLLocation) {
         // TODO: reject locations with bogus coordinates
         
-        print(String(format: "INPUT     coordinate: %.6f, %.6f; horizontalAccuracy: \(location.horizontalAccuracy), speed: \(location.speed), course: \(location.course), speedAccuracy: \(location.speedAccuracy), courseAccuracy: \(location.courseAccuracy)",
+        print(String(format: "INPUT     coordinate: %.8f, %.8f; horizontalAccuracy: \(location.horizontalAccuracy), speed: \(location.speed), course: \(location.course), speedAccuracy: \(location.speedAccuracy), courseAccuracy: \(location.courseAccuracy)",
               location.coordinate.latitude, location.coordinate.longitude))
 
         let invalidVelocity = location.course < 0 || location.speed < 0
@@ -70,14 +71,17 @@ internal class KalmanFilter {
             [velocityToLongitudeChangePerSecond(velocity: msVelEast, atLatitude: location.coordinate.latitude)]
         ])
 
+        print("measurement:\n", measurement)
+
         if let last = lastTimestamp {
             let deltaTime = location.timestamp.timeIntervalSince(last)
             lastTimestamp = location.timestamp
 
             adjustTransitionMatrix(deltaTime: deltaTime)
-            
+
             predict()
-            print(String(format: "PREDICTED coordinate: %.6f, %.6f", stateVector[0, 0], stateVector[1, 0]))
+
+            print(String(format: "PREDICTED coordinate: %.8f, %.8f", stateVector[0, 0], stateVector[1, 0]))
 
             updateMeasurementNoise(with: location)
             update(measurement: measurement)
@@ -87,7 +91,7 @@ internal class KalmanFilter {
             lastTimestamp = location.timestamp
         }
 
-        print(String(format: "UPDATED   coordinate: %.6f, %.6f", stateVector[0, 0], stateVector[1, 0]))
+        print(String(format: "RESULT    coordinate: %.8f, %.8f", stateVector[0, 0], stateVector[1, 0]))
     }
 
     func currentEstimatedLocation() -> CLLocation {
@@ -101,14 +105,12 @@ internal class KalmanFilter {
         let speed = sqrt((velocityNorth * velocityNorth) + (velocityEast * velocityEast)) // Pythagorean theorem
         let course = atan2(velocityEast, velocityNorth) * (180 / .pi) // Convert radians to degrees
 
-        // Assuming lastTimestamp is updated with each call to add(location:)
-        let timestamp = lastTimestamp ?? Date()
-
         // Create a new CLLocation object with the estimated state
         let estimatedLocation = CLLocation(
             coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
             altitude: 0, horizontalAccuracy: 0, verticalAccuracy: 0,
-            course: course, speed: speed, timestamp: timestamp
+            course: course, speed: speed,
+            timestamp: lastTimestamp ?? .now
         )
 
         return estimatedLocation
@@ -149,9 +151,18 @@ internal class KalmanFilter {
         // Calculate the measurement prediction
         let y = measurement - (measurementMatrix * stateVector)
 
-        // Calculate the Kalman Gain
+        print("y:\n", y)
+
+        // Calculate the Kalman Gain (K)
         let S = measurementMatrix * covarianceMatrix * transpose(measurementMatrix) + measurementNoiseCov
         let kalmanGain = covarianceMatrix * transpose(measurementMatrix) * inv(S)
+
+        let push = kalmanGain * y
+        let latDiff = abs(y[0,0] - push[0,0])
+        let lonDiff = abs(y[1,0] - push[1,0])
+        print("kalmanGain:\n", kalmanGain)
+        print("kalmanGain * y:\n", kalmanGain * y)
+        print(String(format: "latDiff: %.8f, lonDiff: %.8f", latDiff, lonDiff))
 
         // Update the state vector with the new measurement
         stateVector = stateVector + (kalmanGain * y)
@@ -164,13 +175,14 @@ internal class KalmanFilter {
     // MARK: - Conversions
 
     func velocityToLatitudeChangePerSecond(velocity: CLLocationSpeed) -> Double {
-        let earthRadiusMetres = 111_319.9 // Approximate radius of the Earth in meters at the equator
-        return (velocity / earthRadiusMetres) * (180 / .pi) // Convert to degrees per second
+        let metersPerDegree = 111_320.0
+        return velocity / metersPerDegree
     }
 
     func velocityToLongitudeChangePerSecond(velocity: CLLocationSpeed, atLatitude latitude: CLLocationDegrees) -> Double {
-        let earthRadiusMetres = 111_319.9 * cos(latitude.radians) // Adjust for latitude
-        return (velocity / earthRadiusMetres) * (180 / .pi) // Convert to degrees per second
+        let metersPerDegreeAtEquator = 111_320.0
+        let adjustmentFactor = cos(latitude.radians)
+        return velocity / (metersPerDegreeAtEquator * adjustmentFactor)
     }
 
     func accuracyToDegrees(accuracy: CLLocationAccuracy, atLatitude latitude: CLLocationDegrees) -> Double {

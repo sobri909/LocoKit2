@@ -81,6 +81,32 @@ public final class LocomotionManager {
     }()
 
     func add(location: CLLocation) {
+//        if !rawLocations.isEmpty { return }
+
+        reallyAdd(location: location)
+
+        return
+
+        let simulated1 = simulated(from: location, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 10)
+        reallyAdd(location: simulated1)
+
+        let simulated2 = simulated(from: simulated1, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
+        reallyAdd(location: simulated2)
+
+        let simulated3 = simulated(from: simulated2, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
+        reallyAdd(location: simulated3)
+
+        let simulated4 = simulated(from: simulated3, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
+        reallyAdd(location: simulated4)
+
+        let simulated5 = simulated(from: simulated4, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
+        reallyAdd(location: simulated5)
+
+        let simulated6 = simulated(from: simulated5, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
+        reallyAdd(location: simulated6)
+    }
+    
+    func reallyAdd(location: CLLocation) {
         rawLocations.append(location)
         activityBrain.add(location: location)
         newKLocations.append(activityBrain.newKalman.currentEstimatedLocation())
@@ -123,6 +149,57 @@ public final class LocomotionManager {
         func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
             print("CLLocationManagerDelegate.didFailWithError(): \(error)")
         }
+    }
+
+    func simulated(
+        from initialLocation: CLLocation,
+        displacementMeters: Double,
+        displacementCourse: CLLocationDirection,
+        elapsedTime: TimeInterval, // Added parameter for explicit control over time delta
+        speed: CLLocationSpeed? = nil, // nil to calculate based on displacement and elapsedTime
+        course: CLLocationDirection? = nil, // nil to use displacementCourse
+        horizontalAccuracy: CLLocationAccuracy = 10,
+        speedAccuracy: CLLocationAccuracy? = nil
+    ) -> CLLocation {
+
+        // Calculate the new latitude and longitude based on the displacement and course
+        let bearingRadians = displacementCourse * .pi / 180.0
+        let distanceRadians = displacementMeters / 6372797.6 // Earth's radius in meters
+        let initialLatRadians = initialLocation.coordinate.latitude * .pi / 180.0
+        let initialLonRadians = initialLocation.coordinate.longitude * .pi / 180.0
+
+        let newLatRadians = asin(
+            sin(initialLatRadians) * cos(distanceRadians) +
+            cos(initialLatRadians) * sin(distanceRadians) * cos(bearingRadians)
+        )
+        let newLonRadians = initialLonRadians + atan2(
+            sin(bearingRadians) * sin(distanceRadians) * cos(initialLatRadians),
+            cos(distanceRadians) - sin(initialLatRadians) * sin(newLatRadians)
+        )
+
+        let newLatitude = newLatRadians * 180.0 / .pi
+        let newLongitude = newLonRadians * 180.0 / .pi
+
+        // Calculate speed based on displacement and elapsedTime if not provided
+        let calculatedSpeed = speed ?? (displacementMeters / elapsedTime)
+
+        // Set default speed accuracy if not provided
+        let finalSpeedAccuracy = speedAccuracy ?? 1.0 // Assuming a default speed accuracy if not specified
+
+        // Create the new CLLocation
+        let newLocation = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: newLatitude, longitude: newLongitude),
+            altitude: initialLocation.altitude,
+            horizontalAccuracy: horizontalAccuracy,
+            verticalAccuracy: initialLocation.verticalAccuracy,
+            course: course ?? displacementCourse,
+            courseAccuracy: course != nil ? 0 : 5, // Assuming a default course accuracy
+            speed: calculatedSpeed,
+            speedAccuracy: finalSpeedAccuracy,
+            timestamp: initialLocation.timestamp + elapsedTime
+        )
+
+        return newLocation
     }
 
 }
