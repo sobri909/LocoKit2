@@ -29,8 +29,8 @@ internal class KalmanFilter {
 
     // Q (lower values = higher trust in model prediction)
     private let processNoiseCov = Matrix<Double>([
-        [0.0001, 0, 0, 0],
-        [0, 0.0001, 0, 0],
+        [1e-9, 0, 0, 0],
+        [0, 1e-9, 0, 0],
         [0, 0, 0.0001, 0],
         [0, 0, 0, 0.0001]
     ])
@@ -60,18 +60,16 @@ internal class KalmanFilter {
         print(String(format: "INPUT     coordinate: %.8f, %.8f; horizontalAccuracy: \(location.horizontalAccuracy), speed: \(location.speed), course: \(location.course), speedAccuracy: \(location.speedAccuracy), courseAccuracy: \(location.courseAccuracy)",
               location.coordinate.latitude, location.coordinate.longitude))
 
-        let invalidVelocity = location.course < 0 || location.speed < 0
-        let msVelNorth = invalidVelocity ? 0 : location.speed * cos(location.course.radians)
-        let msVelEast = invalidVelocity ? 0 : location.speed * sin(location.course.radians)
+        let invalidVelocity = location.invalidVelocity
+        let velocityMetresNorth = invalidVelocity ? 0 : location.speed * cos(location.course.radians)
+        let velocityMetresEast = invalidVelocity ? 0 : location.speed * sin(location.course.radians)
 
         let measurement = Matrix<Double>([
             [location.coordinate.latitude],
             [location.coordinate.longitude],
-            [velocityToLatitudeChangePerSecond(velocity: msVelNorth)],
-            [velocityToLongitudeChangePerSecond(velocity: msVelEast, atLatitude: location.coordinate.latitude)]
+            [degreesLatitude(fromMetresNorth: velocityMetresNorth)],
+            [degreesLongitude(fromMetresEast: velocityMetresEast, atLatitude: location.coordinate.latitude)]
         ])
-
-        print("measurement:\n", measurement)
 
         if let last = lastTimestamp {
             let deltaTime = location.timestamp.timeIntervalSince(last)
@@ -129,90 +127,66 @@ internal class KalmanFilter {
     }
     
     private func updateMeasurementNoise(with location: CLLocation) {
-        // TODO: should capture negative accuracy values and change them to something awful and high
-
-        let horizontalAccuracy = max(location.horizontalAccuracy, 1.0)
-        let speedAccuracy = location.speedAccuracy >= 0 ? max(location.speedAccuracy, 0.1) : 100.0
         let latitude = location.coordinate.latitude
+        let invalidVelocity = location.invalidVelocity
 
-        let accuracyDegrees = accuracyToDegrees(accuracy: horizontalAccuracy, atLatitude: latitude)
-        let accuracyVariance = accuracyDegrees * accuracyDegrees
-        measurementNoiseCov[0, 0] = accuracyVariance
-        measurementNoiseCov[1, 1] = accuracyVariance
+        // sanitise values
+        let horizontalAccuracy = max(location.horizontalAccuracy, 1.0)
+        let speedAccuracy = invalidVelocity ? 1.0 : max(location.speedAccuracy, 0.1)
 
-        let speedAccuracyDps = convertSpeedAccuracyToDegreesPerSecond(speedAccuracy: speedAccuracy, atLatitude: latitude)
-        let speedAccuracyVariance = speedAccuracyDps * speedAccuracyDps
+        // lat,lon noise
+        let hAccuracyDegrees = degrees(fromMetres: horizontalAccuracy, atLatitude: latitude)
+        let hAccuracyVariance = hAccuracyDegrees * hAccuracyDegrees
+        measurementNoiseCov[0, 0] = hAccuracyVariance
+        measurementNoiseCov[1, 1] = hAccuracyVariance
+
+        // velocities noise
+        let speedAccuracyDegrees = degrees(fromMetres: speedAccuracy, atLatitude: latitude)
+        let speedAccuracyVariance = speedAccuracyDegrees * speedAccuracyDegrees
         measurementNoiseCov[2, 2] = speedAccuracyVariance
         measurementNoiseCov[3, 3] = speedAccuracyVariance
     }
 
     private func update(measurement: Matrix<Double>) {
 
-        // Calculate the measurement prediction
+        // measurement prediction
         let y = measurement - (measurementMatrix * stateVector)
 
-        print("y:\n", y)
-
-        // Calculate the Kalman Gain (K)
+        // Kalman Gain (K)
         let S = measurementMatrix * covarianceMatrix * transpose(measurementMatrix) + measurementNoiseCov
         let kalmanGain = covarianceMatrix * transpose(measurementMatrix) * inv(S)
 
-        let push = kalmanGain * y
-        let latDiff = abs(y[0,0] - push[0,0])
-        let lonDiff = abs(y[1,0] - push[1,0])
-        print("kalmanGain:\n", kalmanGain)
-        print("kalmanGain * y:\n", kalmanGain * y)
-        print(String(format: "latDiff: %.8f, lonDiff: %.8f", latDiff, lonDiff))
-
-        // Update the state vector with the new measurement
+        // update the state vector / apply the Kalman
         stateVector = stateVector + (kalmanGain * y)
 
-        // Update the covariance matrix
+        // update the covariance matrix
         let identityMatrix = Matrix<Double>.eye(rows: covarianceMatrix.rows, columns: covarianceMatrix.columns)
         covarianceMatrix = (identityMatrix - (kalmanGain * measurementMatrix)) * covarianceMatrix
     }
 
     // MARK: - Conversions
 
-    func velocityToLatitudeChangePerSecond(velocity: CLLocationSpeed) -> Double {
-        let metersPerDegree = 111_320.0
-        return velocity / metersPerDegree
+    func degreesLatitude(fromMetresNorth metresNorth: CLLocationDistance) -> Double {
+        let metersPerDegree = 111_319.9
+        return metresNorth / metersPerDegree
     }
 
-    func velocityToLongitudeChangePerSecond(velocity: CLLocationSpeed, atLatitude latitude: CLLocationDegrees) -> Double {
-        let metersPerDegreeAtEquator = 111_320.0
-        let adjustmentFactor = cos(latitude.radians)
-        return velocity / (metersPerDegreeAtEquator * adjustmentFactor)
+    func degreesLongitude(fromMetresEast metresEast: CLLocationDistance, atLatitude latitude: CLLocationDegrees) -> Double {
+        let metersPerDegree = 111_319.9
+        return metresEast / (metersPerDegree * cos(latitude.radians))
     }
 
-    func accuracyToDegrees(accuracy: CLLocationAccuracy, atLatitude latitude: CLLocationDegrees) -> Double {
-        // Convert the accuracy radius from meters to degrees of latitude
-        let degreesLat = (accuracy / 111_319.9) * (180 / .pi)
-
-        // Convert the accuracy radius from meters to degrees of longitude, adjusted for latitude
-        let earthRadiusMetres = 111_319.9 * cos(latitude.radians)
-        let degreesLon = (accuracy / earthRadiusMetres) * (180 / .pi)
-
-        // Return the average of the latitude and longitude degrees
-        return (degreesLat + degreesLon) / 2
+    func degrees(fromMetres metres: CLLocationDistance, atLatitude latitude: CLLocationDegrees) -> Double {
+        let metersPerDegree = 111_319.9
+        let degreesLatitude = metres / metersPerDegree
+        let degreesLongitude = metres / (metersPerDegree * cos(latitude.radians))
+        return (degreesLatitude + degreesLongitude) / 2
     }
 
-    func convertSpeedAccuracyToDegreesPerSecond(speedAccuracy: CLLocationSpeed, atLatitude latitude: CLLocationDegrees) -> Double {
-        // Earth's radius in metres at the equator
-        let earthRadiusMetres = 111_319.9
+}
 
-        // Convert speed accuracy from m/s to degrees per second for latitude
-        // For latitude, we can use the Earth's radius directly because 1 degree of latitude is approximately the same distance anywhere on Earth
-        let speedAccuracyDegreesLatitude = speedAccuracy / earthRadiusMetres
-
-        // For longitude, we need to adjust based on the latitude because 1 degree of longitude varies in distance
-        let speedAccuracyDegreesLongitude = speedAccuracy / (earthRadiusMetres * cos(latitude.radians))
-
-        // You might choose to use the larger of the two values to ensure the variance covers the worst-case scenario
-        // Alternatively, you could average them, but using the larger value is a conservative approach
-        let speedAccuracyDegreesPerSecond = max(speedAccuracyDegreesLatitude, speedAccuracyDegreesLongitude)
-
-        return speedAccuracyDegreesPerSecond
+extension CLLocation {
+    var invalidVelocity: Bool {
+        course < 0 || speed < 0 || courseAccuracy < 0 || speedAccuracy < 0
     }
-
 }
