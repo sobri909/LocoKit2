@@ -61,7 +61,9 @@ public final class LocomotionManager {
 
     // MARK: -
 
-    private init() {}
+    private init() {
+        _ = locationManager
+    }
 
     @ObservationIgnored
     private lazy var locationManager: CLLocationManager = {
