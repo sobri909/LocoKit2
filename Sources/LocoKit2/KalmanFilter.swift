@@ -56,9 +56,19 @@ internal class KalmanFilter {
 
     func add(location: CLLocation) {
         // TODO: reject locations with bogus coordinates
-        
-        print(String(format: "INPUT     coordinate: %.8f, %.8f; horizontalAccuracy: \(location.horizontalAccuracy), speed: \(location.speed), course: \(location.course), speedAccuracy: \(location.speedAccuracy), courseAccuracy: \(location.courseAccuracy)",
-              location.coordinate.latitude, location.coordinate.longitude))
+
+        print("*** add(location:) ***")
+
+        print(String(
+            format: "INPUT     coordinate: %.8f, %.8f; horizontalAccuracy: %.4f, speed: %.4f, course: %.1f, speedAccuracy: %.2f, courseAccuracy: %.2f",
+            location.coordinate.latitude,
+            location.coordinate.longitude,
+            location.horizontalAccuracy,
+            location.speed,
+            location.course,
+            location.speedAccuracy,
+            location.courseAccuracy
+        ))
 
         let invalidVelocity = location.invalidVelocity
         let velocityMetresNorth = invalidVelocity ? 0 : location.speed * cos(location.course.radians)
