@@ -29,10 +29,10 @@ internal class KalmanFilter {
 
     // Q (lower values = higher trust in model prediction)
     private let processNoiseCov = Matrix<Double>([
-        [1e-9, 0, 0, 0],
-        [0, 1e-9, 0, 0],
-        [0, 0, 0.0001, 0],
-        [0, 0, 0, 0.0001]
+        [1e-10, 0, 0, 0],
+        [0, 1e-10, 0, 0],
+        [0, 0, 0.1, 0],
+        [0, 0, 0, 0.1]
     ])
 
     // R (lower values = higher trust in raw data)
@@ -132,7 +132,11 @@ internal class KalmanFilter {
 
         // sanitise values
         let horizontalAccuracy = max(location.horizontalAccuracy, 1.0)
-        let speedAccuracy = invalidVelocity ? 1.0 : max(location.speedAccuracy, 0.1)
+
+        // invalidVelocity is encoded as 0 velocities in the measurement
+        // so giving that a super high accuracy means it should produce
+        // super stable location when indoors (ie when getting -1 speed/course/accuracy)
+        let speedAccuracy = invalidVelocity ? 0.01 : max(location.speedAccuracy, 0.01)
 
         // lat,lon noise
         let hAccuracyDegrees = degrees(fromMetres: horizontalAccuracy, atLatitude: latitude)
