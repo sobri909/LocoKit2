@@ -55,7 +55,7 @@ internal class KalmanFilter {
     // MARK: -
 
     func add(location: CLLocation) {
-        // TODO: reject locations with bogus coordinates
+        guard location.coordinate.isUsable else { return }
 
         print("*** add(location:) ***")
 
@@ -257,4 +257,10 @@ extension CLLocation {
     var invalidVelocity: Bool {
         course < 0 || speed < 0 || courseAccuracy < 0 || speedAccuracy < 0
     }
+}
+
+extension CLLocationCoordinate2D {
+    var isUsable: Bool { !isNullIsland && isValid }
+    var isNullIsland: Bool { latitude == 0 && longitude == 0 }
+    var isValid: Bool { CLLocationCoordinate2DIsValid(self) }
 }
