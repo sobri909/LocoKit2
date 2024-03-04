@@ -93,26 +93,64 @@ internal class KalmanFilter {
     }
 
     func currentEstimatedLocation() -> CLLocation {
-        // Extract the estimated latitude, longitude, velocityNorth, and velocityEast from the state vector
-        let latitude = stateVector[0, 0]
-        let longitude = stateVector[1, 0]
-        let velocityNorth = stateVector[2, 0]
-        let velocityEast = stateVector[3, 0]
-
-        // Calculate the overall speed and course from velocityNorth and velocityEast
-        let speed = sqrt((velocityNorth * velocityNorth) + (velocityEast * velocityEast)) // Pythagorean theorem
-        let course = atan2(velocityEast, velocityNorth) * (180 / .pi) // Convert radians to degrees
-
-        // Create a new CLLocation object with the estimated state
-        let estimatedLocation = CLLocation(
-            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-            altitude: 0, horizontalAccuracy: 0, verticalAccuracy: 0,
-            course: course, speed: speed,
+        return CLLocation(
+            coordinate: currentEstimatedCoordinate(),
+            altitude: 0,
+            horizontalAccuracy: currentEstimatedHorizontalAccuracy(),
+            verticalAccuracy: -1,
+            course: currentEstimatedCourse(),
+            speed: currentEstimatedSpeed(),
             timestamp: lastTimestamp ?? .now
         )
-
-        return estimatedLocation
     }
+
+    func currentEstimatedCoordinate() -> CLLocationCoordinate2D {
+        return CLLocationCoordinate2D(
+            latitude: stateVector[0, 0],
+            longitude: stateVector[1, 0]
+        )
+    }
+
+    func currentEstimatedHorizontalAccuracy() -> CLLocationAccuracy {
+        let varianceLatitude = covarianceMatrix[0, 0]
+        let varianceLongitude = covarianceMatrix[1, 1]
+
+        // Convert latitude variance directly to meters
+        let accuracyLatitudeMeters = sqrt(varianceLatitude) * 111_319.9
+
+        // Adjust longitude variance conversion using latitude
+        let metersPerDegreeLongitude = 111_319.9 * cos(stateVector[0, 0].radians)
+        let accuracyLongitudeMeters = sqrt(varianceLongitude) * metersPerDegreeLongitude
+
+        return (accuracyLatitudeMeters + accuracyLongitudeMeters) / 2
+    }
+
+    func currentEstimatedCourse() -> CLLocationDegrees {
+        let velocityNorthDegrees = stateVector[2, 0]
+        let velocityEastDegrees = stateVector[3, 0]
+
+        let courseRadians = atan2(velocityEastDegrees, velocityNorthDegrees)
+        let courseDegrees = courseRadians * (180 / .pi)
+
+        // Ensure the course is within 0-360 degrees
+        return (courseDegrees + 360).truncatingRemainder(dividingBy: 360)
+    }
+
+    func currentEstimatedSpeed() -> CLLocationSpeed {
+        let latitude = stateVector[0, 0]
+        let velocityNorthDegrees = stateVector[2, 0] 
+        let velocityEastDegrees = stateVector[3, 0]
+
+        // Convert angular velocity northward to linear velocity (m/s)
+        let velocityNorthMeters = velocityNorthDegrees * 111_319.9 
+
+        // Convert angular velocity eastward to linear velocity (m/s), adjusting for latitude
+        let metersPerDegreeLongitude = 111_319.9 * cos(latitude.radians) 
+        let velocityEastMeters = velocityEastDegrees * metersPerDegreeLongitude
+
+        return sqrt((velocityNorthMeters * velocityNorthMeters) + (velocityEastMeters * velocityEastMeters))
+    }
+
 
     // MARK: - Private
 
