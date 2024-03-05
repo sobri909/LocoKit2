@@ -110,6 +110,7 @@ internal class KalmanFilter {
         } else {
             stateVector = measurement
             lastTimestamp = location.timestamp
+            updateMeasurementNoise(with: location)
         }
 
         let result = currentEstimatedLocation()
