@@ -13,11 +13,16 @@ internal class KalmanFilter {
     
     private var lastTimestamp: Date?
 
-    // State vector: [latitude, longitude, velocity north, velocity east]
+    // [latitude, longitude, velocity north, velocity east]
     private var stateVector: Matrix<Double> = Matrix([[0], [0], [0], [0]])
 
     // P
-    private var covarianceMatrix: Matrix<Double> = Matrix(rows: 4, columns: 4, repeatedValue: 0.0)
+    private var covarianceMatrix: Matrix<Double> = Matrix([
+        [0.001, 0, 0, 0],
+        [0, 0.001, 0, 0],
+        [0, 0, 0.001, 0],
+        [0, 0, 0, 0.001]
+    ])
 
     // F
     private var transitionMatrix: Matrix<Double> = Matrix([
