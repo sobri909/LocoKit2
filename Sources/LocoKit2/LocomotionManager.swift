@@ -24,17 +24,18 @@ public final class LocomotionManager {
     public var rawLocations: [CLLocation] = []
     public var oldKLocations: [CLLocation] = []
     public var newKLocations: [CLLocation] = []
+    public var currentMovingState: MovingStateDetails?
+    public var lastKnownMovingState: MovingStateDetails?
 
     // MARK: -
     
     public func startRecording() {
         print("LocomotionManager.startRecording()")
-
-        // start updating locations
-        locationManager.distanceFilter = kCLDistanceFilterNone
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        
         locationManager.startUpdatingLocation()
         locationManager.startMonitoringSignificantLocationChanges() // is it allowed to start both?
+
+        sleepLocationManager.stopUpdatingLocation()
 
         recordingState = .recording
     }
@@ -48,13 +49,11 @@ public final class LocomotionManager {
     
     private func startSleeping() {
         print("LocomotionManager.startSleeping()")
-        
-        // note: need to call start because might be coming from off state
-        // or might be coming from locationManagerDidPauseLocationUpdates()
-        locationManager.distanceFilter = kCLLocationAccuracyThreeKilometers
-        locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
-        locationManager.startUpdatingLocation()
-        locationManager.startMonitoringSignificantLocationChanges() // is it allowed to start both?
+
+        sleepLocationManager.startUpdatingLocation()
+        sleepLocationManager.startMonitoringSignificantLocationChanges() // is it allowed to start both?
+
+        locationManager.stopUpdatingLocation()
 
         recordingState = .sleeping
     }
@@ -68,9 +67,21 @@ public final class LocomotionManager {
     @ObservationIgnored
     private lazy var locationManager: CLLocationManager = {
         let manager = CLLocationManager()
-        manager.distanceFilter = kCLDistanceFilterNone
+        manager.distanceFilter = 1
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.pausesLocationUpdatesAutomatically = true // EXPERIMENTAL
+        manager.showsBackgroundLocationIndicator = true
+        manager.allowsBackgroundLocationUpdates = true
+        manager.delegate = self.locationDelegate
+        return manager
+    }()
+    
+    @ObservationIgnored
+    private lazy var sleepLocationManager: CLLocationManager = {
+        let manager = CLLocationManager()
+        manager.distanceFilter = kCLLocationAccuracyThreeKilometers
+        manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
         manager.allowsBackgroundLocationUpdates = true
         manager.delegate = self.locationDelegate
@@ -83,37 +94,37 @@ public final class LocomotionManager {
     }()
 
     func add(location: CLLocation) {
-//        if !rawLocations.isEmpty { return }
+        Task { await reallyAdd(location: location) }
 
-        reallyAdd(location: location)
-
-        return
-
-        let simulated1 = simulated(from: location, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 10)
-        reallyAdd(location: simulated1)
-
-        let simulated2 = simulated(from: simulated1, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
-        reallyAdd(location: simulated2)
-
-        let simulated3 = simulated(from: simulated2, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
-        reallyAdd(location: simulated3)
-
-        let simulated4 = simulated(from: simulated3, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
-        reallyAdd(location: simulated4)
-
-        let simulated5 = simulated(from: simulated4, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
-        reallyAdd(location: simulated5)
-
-        let simulated6 = simulated(from: simulated5, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
-        reallyAdd(location: simulated6)
+//        let simulated1 = simulated(from: location, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 10)
+//        reallyAdd(location: simulated1)
+//
+//        let simulated2 = simulated(from: simulated1, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
+//        reallyAdd(location: simulated2)
+//
+//        let simulated3 = simulated(from: simulated2, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
+//        reallyAdd(location: simulated3)
+//
+//        let simulated4 = simulated(from: simulated3, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
+//        reallyAdd(location: simulated4)
+//
+//        let simulated5 = simulated(from: simulated4, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
+//        reallyAdd(location: simulated5)
+//
+//        let simulated6 = simulated(from: simulated5, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
+//        reallyAdd(location: simulated6)
     }
     
-    func reallyAdd(location: CLLocation) {
+    func reallyAdd(location: CLLocation) async {
         rawLocations.append(location)
-        activityBrain.add(location: location)
+        let movingState = await activityBrain.add(location: location)
         newKLocations.append(activityBrain.newKalman.currentEstimatedLocation())
         if let coord = activityBrain.oldKalman.coordinate {
             oldKLocations.append(CLLocation(latitude: coord.latitude, longitude: coord.longitude))
+        }
+        await MainActor.run {
+            currentMovingState = movingState.current
+            lastKnownMovingState = movingState.lastKnown
         }
     }
 
