@@ -91,19 +91,7 @@ internal class KalmanFilter {
             lastTimestamp = location.timestamp
 
             adjustTransitionMatrix(deltaTime: deltaTime)
-
             predict()
-
-            let predicted = currentEstimatedLocation()
-            print(String(
-                format: "PREDICTED coordinate: %.8f, %.8f; horizontalAccuracy: %.4f, speed: %.4f, course: %.1f",
-                predicted.coordinate.latitude,
-                predicted.coordinate.longitude,
-                predicted.horizontalAccuracy,
-                predicted.speed,
-                predicted.course
-            ))
-
             updateMeasurementNoise(with: location)
             update(measurement: measurement)
 
@@ -112,16 +100,6 @@ internal class KalmanFilter {
             lastTimestamp = location.timestamp
             updateMeasurementNoise(with: location)
         }
-
-        let result = currentEstimatedLocation()
-        print(String(
-            format: "RESULT    coordinate: %.8f, %.8f; horizontalAccuracy: %.4f, speed: %.4f, course: %.1f",
-            result.coordinate.latitude,
-            result.coordinate.longitude,
-            result.horizontalAccuracy,
-            result.speed,
-            result.course
-        ))
     }
 
     func currentEstimatedLocation() -> CLLocation {
