@@ -1,5 +1,5 @@
 //
-//  ActivityBrain.swift
+//  StationaryStateDetector.swift
 //  
 //
 //  Created by Matt Greenfield on 26/2/24.
@@ -7,57 +7,6 @@
 
 import Foundation
 import CoreLocation
-
-
-class ActivityBrain {
-    let newKalman = KalmanFilter()
-    let oldKalman = KalmanCoordinates(qMetresPerSecond: 4)
-    let stationaryBrain = StationaryStateDetector()
-
-    func add(location: CLLocation) async -> (lastKnown: MovingStateDetails?, current: MovingStateDetails) {
-        newKalman.add(location: location)
-        oldKalman.add(location: location)
-        
-        let kalmanLocation = newKalman.currentEstimatedLocation()
-        let currentState = await stationaryBrain.addSample(location: kalmanLocation)
-        let lastKnownState = await stationaryBrain.lastKnownState
-        return (lastKnownState, currentState)
-    }
-}
-
-public enum MovingState: Int, Codable {
-    case uncertain  = -1
-    case stationary = 0
-    case moving     = 1
-
-    public var stringValue: String {
-        switch self {
-        case .uncertain:  return "uncertain"
-        case .stationary: return "stationary"
-        case .moving:     return "moving"
-        }
-    }
-}
-
-public struct MovingStateDetails {
-    public let movingState: MovingState
-    public let n: Int
-    public let timestamp: Date
-    public let duration: TimeInterval
-    public let meanAccuracy: CLLocationAccuracy?
-    public let weightedMeanSpeed: CLLocationSpeed?
-    public let weightedStdDev: CLLocationSpeed?
-
-    internal init(_ movingState: MovingState, n: Int, timestamp: Date = .now, duration: TimeInterval, meanAccuracy: CLLocationAccuracy? = nil, weightedMeanSpeed: CLLocationSpeed? = nil, weightedStdDev: CLLocationSpeed? = nil) {
-        self.movingState = movingState
-        self.n = n
-        self.timestamp = timestamp
-        self.duration = duration
-        self.meanAccuracy = meanAccuracy
-        self.weightedMeanSpeed = weightedMeanSpeed
-        self.weightedStdDev = weightedStdDev
-    }
-}
 
 actor StationaryStateDetector {
     private let targetTimeWindow: TimeInterval = 10.0 // Target time window duration in seconds
@@ -91,7 +40,6 @@ actor StationaryStateDetector {
 
         // Check if there are enough samples in the buffer
         guard n >= minSampleCount else {
-            print("determineStationaryState() n: \(n) < minSampleCount")
             return MovingStateDetails(.uncertain, n: n, duration: 0)
         }
 
@@ -101,7 +49,6 @@ actor StationaryStateDetector {
 
         // Check if the time difference exceeds the maximum allowed duration
         guard duration <= maxAllowedDuration else {
-            print("determineStationaryState() duration: \(duration) > maxAllowedDuration")
             return MovingStateDetails(.uncertain, n: n, duration: duration)
         }
 
@@ -110,7 +57,6 @@ actor StationaryStateDetector {
 
         // Check if the mean accuracy is within the acceptable threshold
         guard meanAccuracy <= accuracyThreshold else {
-            print("determineStationaryState() meanAccuracy: \(meanAccuracy) > accuracyThreshold")
             return MovingStateDetails(.uncertain, n: n, duration: duration, meanAccuracy: meanAccuracy)
         }
 

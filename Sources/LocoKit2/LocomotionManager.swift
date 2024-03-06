@@ -14,8 +14,6 @@ public final class LocomotionManager {
 
     public static let highlander = LocomotionManager()
 
-    private let activityBrain = ActivityBrain()
-
     // MARK: - Public
     
     public private(set) var recordingState: RecordingState = .off
@@ -46,6 +44,16 @@ public final class LocomotionManager {
     }
 
     // MARK: - Private
+
+    private let newKalman = KalmanFilter()
+    private let oldKalman = KalmanCoordinates(qMetresPerSecond: 4)
+    private let stationaryBrain = StationaryStateDetector()
+
+    // MARK: -
+
+    private init() {
+        _ = locationManager
+    }
     
     private func startSleeping() {
         print("LocomotionManager.startSleeping()")
@@ -59,10 +67,6 @@ public final class LocomotionManager {
     }
 
     // MARK: -
-
-    private init() {
-        _ = locationManager
-    }
 
     @ObservationIgnored
     private lazy var locationManager: CLLocationManager = {
@@ -116,15 +120,21 @@ public final class LocomotionManager {
     }
     
     func reallyAdd(location: CLLocation) async {
-        rawLocations.append(location)
-        let movingState = await activityBrain.add(location: location)
-        newKLocations.append(activityBrain.newKalman.currentEstimatedLocation())
-        if let coord = activityBrain.oldKalman.coordinate {
-            oldKLocations.append(CLLocation(latitude: coord.latitude, longitude: coord.longitude))
-        }
+        newKalman.add(location: location)
+        oldKalman.add(location: location)
+        
+        let kalmanLocation = newKalman.currentEstimatedLocation()
+        let currentState = await stationaryBrain.addSample(location: kalmanLocation)
+        let lastKnownState = await stationaryBrain.lastKnownState
+
         await MainActor.run {
-            currentMovingState = movingState.current
-            lastKnownMovingState = movingState.lastKnown
+            rawLocations.append(location)
+            newKLocations.append(kalmanLocation)
+            if let coord = oldKalman.coordinate {
+                oldKLocations.append(CLLocation(latitude: coord.latitude, longitude: coord.longitude))
+            }
+            currentMovingState = currentState
+            lastKnownMovingState = lastKnownState
         }
     }
 

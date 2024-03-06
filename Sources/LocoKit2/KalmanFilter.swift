@@ -161,10 +161,9 @@ internal class KalmanFilter {
         return sqrt((velocityNorthMeters * velocityNorthMeters) + (velocityEastMeters * velocityEastMeters))
     }
 
-
     // MARK: - Private
 
-    func adjustTransitionMatrix(deltaTime: TimeInterval) {
+    private func adjustTransitionMatrix(deltaTime: TimeInterval) {
         transitionMatrix[0, 2] = deltaTime
         transitionMatrix[1, 3] = deltaTime
     }
