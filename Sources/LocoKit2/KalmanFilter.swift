@@ -100,6 +100,16 @@ internal class KalmanFilter {
             lastTimestamp = location.timestamp
             updateMeasurementNoise(with: location)
         }
+
+        let prediction = currentEstimatedLocation()
+        print(String(
+            format: "OUTPUT    coordinate: %.8f, %.8f; horizontalAccuracy: %.4f, speed: %.4f, course: %.1f",
+            prediction.coordinate.latitude,
+            prediction.coordinate.longitude,
+            prediction.horizontalAccuracy,
+            prediction.speed,
+            prediction.course
+        ))
     }
 
     func currentEstimatedLocation() -> CLLocation {
