@@ -12,27 +12,34 @@ actor SleepModeDetector {
 
     // MARK: - Config
 
-    private let sleepModeDelay: TimeInterval = 120.0 // 2 minutes
-    private let minGeofenceRadius: CLLocationDistance = 10.0 // Minimum geofence radius in meters
-    private let maxGeofenceRadius: CLLocationDistance = 100.0 // Maximum geofence radius in meters
+    private let sleepModeDelay: TimeInterval = 120.0 
+    private let minGeofenceRadius: CLLocationDistance = 10.0
+    private let maxGeofenceRadius: CLLocationDistance = 100.0
 
-    // MARK: - Output
+    // MARK: - Public
 
-    private(set) var geofenceCenter: CLLocationCoordinate2D?
-    private(set) var lastGeofenceEnterTime: Date?
-    private(set) var isLocationWithinGeofence: Bool = false
-    private(set) var geofenceRadius: CLLocationDistance = 50.0
-
-    var durationWithinGeofence: TimeInterval { lastGeofenceEnterTime?.age ?? 0 }
-
-    // MARK: - Input
+    private(set) var state = SleepDetectorState()
 
     func add(location: CLLocation) {
+        if state.isFrozen {
+            // If frozen, don't update the geofence and only check if the location is within the geofence
+            if let center = state.geofenceCenter {
+                state.isLocationWithinGeofence = isWithinGeofence(location, center: center)
+            }
+            return
+        }
+
         sampleBuffer.append(location)
 
         // Remove samples older than sleepModeDelay
         while sampleBuffer.count > 1, let oldest = sampleBuffer.first, location.timestamp.timeIntervalSince(oldest.timestamp) > sleepModeDelay {
             sampleBuffer.removeFirst()
+        }
+
+        // debug stats
+        state.n = sampleBuffer.count
+        if let oldest = sampleBuffer.first {
+            state.sampleDuration = location.timestamp.timeIntervalSince(oldest.timestamp)
         }
 
         // Update geofence if enough samples are available
@@ -41,22 +48,30 @@ actor SleepModeDetector {
         }
 
         // Check if the location is within the geofence
-        if let center = geofenceCenter {
-            isLocationWithinGeofence = isWithinGeofence(location, center: center)
+        if let center = state.geofenceCenter {
+            state.isLocationWithinGeofence = isWithinGeofence(location, center: center)
 
-            if isLocationWithinGeofence {
+            if state.isLocationWithinGeofence {
                 // Update the last geofence enter time if not already set
-                if lastGeofenceEnterTime == nil {
-                    lastGeofenceEnterTime = location.timestamp
+                if state.lastGeofenceEnterTime == nil {
+                    state.lastGeofenceEnterTime = location.timestamp
                 }
             } else {
                 // Reset the last geofence enter time if the location is outside the geofence
-                lastGeofenceEnterTime = nil
+                state.lastGeofenceEnterTime = nil
             }
         } else {
-            isLocationWithinGeofence = false
-            lastGeofenceEnterTime = nil
+            state.isLocationWithinGeofence = false
+            state.lastGeofenceEnterTime = nil
         }
+    }
+
+    func freeze() {
+        state.isFrozen = true
+    }
+
+    func unfreeze() {
+        state.isFrozen = false
     }
 
     // MARK: - Private
@@ -66,14 +81,14 @@ actor SleepModeDetector {
     private func updateGeofence() {
         guard let center = sampleBuffer.weightedCenter() else { return }
 
-        geofenceCenter = center
+        state.geofenceCenter = center
 
         // Calculate the average horizontal accuracy from the sample buffer
         let averageAccuracy = sampleBuffer.reduce(0.0) { $0 + $1.horizontalAccuracy } / Double(sampleBuffer.count)
 
         // early exit and simple maths if n = 1
         if sampleBuffer.count == 1 {
-            geofenceRadius = min(max(averageAccuracy * 2, minGeofenceRadius), maxGeofenceRadius)
+            state.geofenceRadius = min(max(averageAccuracy * 2, minGeofenceRadius), maxGeofenceRadius)
             return
         }
 
@@ -85,7 +100,7 @@ actor SleepModeDetector {
         let meanDistance = totalDistance / Double(sampleBuffer.count)
 
         // Clamp the geofence radius within the specified range
-        geofenceRadius = min(max(averageAccuracy + meanDistance, minGeofenceRadius), maxGeofenceRadius)
+        state.geofenceRadius = min(max(averageAccuracy + meanDistance, minGeofenceRadius), maxGeofenceRadius)
     }
 
     private func isWithinGeofence(_ location: CLLocation, center: CLLocationCoordinate2D) -> Bool {
@@ -93,7 +108,21 @@ actor SleepModeDetector {
         let distance = location.distance(from: CLLocation(latitude: center.latitude, longitude: center.longitude))
 
         // Check if the distance is within the geofence radius
-        return distance <= geofenceRadius
+        return distance <= state.geofenceRadius
     }
 
+}
+
+public struct SleepDetectorState {
+    public var isFrozen: Bool = false
+    public var geofenceCenter: CLLocationCoordinate2D? = nil
+    public var lastGeofenceEnterTime: Date? = nil
+    public var isLocationWithinGeofence: Bool = false
+    public var geofenceRadius: CLLocationDistance = 50.0
+    public var sampleDuration: TimeInterval = 0
+    public var n: Int = 0
+
+    public var durationWithinGeofence: TimeInterval {
+        lastGeofenceEnterTime?.age ?? 0
+    }
 }
