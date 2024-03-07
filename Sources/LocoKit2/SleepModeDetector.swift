@@ -10,36 +10,34 @@ import CoreLocation
 
 actor SleepModeDetector {
 
-    var geofenceRadius: CLLocationDistance = 50.0
+    // MARK: - Config
+
     private let sleepModeDelay: TimeInterval = 120.0 // 2 minutes
-    private let minSampleCount: Int = 5 // Minimum number of samples required for geofence calculation
     private let minGeofenceRadius: CLLocationDistance = 10.0 // Minimum geofence radius in meters
     private let maxGeofenceRadius: CLLocationDistance = 100.0 // Maximum geofence radius in meters
     private let horizontalAccuracyMultiplier: Double = 2.0 // Multiplier for horizontal accuracy
 
-    private var sampleBuffer: [CLLocation] = []
+    // MARK: - Output
+
     private(set) var geofenceCenter: CLLocationCoordinate2D?
     private(set) var lastGeofenceEnterTime: Date?
-
     private(set) var isLocationWithinGeofence: Bool = false
+    private(set) var geofenceRadius: CLLocationDistance = 50.0
 
-    var durationWithinGeofence: TimeInterval {
-        guard let lastEnterTime = lastGeofenceEnterTime else {
-            return 0
-        }
-        return lastEnterTime.age
-    }
+    var durationWithinGeofence: TimeInterval { lastGeofenceEnterTime?.age ?? 0 }
+
+    // MARK: - Input
 
     func add(location: CLLocation) {
         sampleBuffer.append(location)
 
         // Remove samples older than sleepModeDelay
-        while let oldest = sampleBuffer.first, location.timestamp.timeIntervalSince(oldest.timestamp) > sleepModeDelay {
+        while sampleBuffer.count > 1, let oldest = sampleBuffer.first, location.timestamp.timeIntervalSince(oldest.timestamp) > sleepModeDelay {
             sampleBuffer.removeFirst()
         }
 
         // Update geofence if enough samples are available
-        if sampleBuffer.count >= minSampleCount {
+        if !sampleBuffer.isEmpty {
             updateGeofence()
         }
 
@@ -62,11 +60,14 @@ actor SleepModeDetector {
         }
     }
 
+    // MARK: - Private
+
+    private var sampleBuffer: [CLLocation] = []
+
     private func updateGeofence() {
         // Calculate the average horizontal accuracy from the sample buffer
         let averageAccuracy = sampleBuffer.reduce(0.0) { $0 + $1.horizontalAccuracy } / Double(sampleBuffer.count)
 
-        print("averageAccuracy: \(averageAccuracy)")
         // Calculate the geofence radius based on the average horizontal accuracy
         geofenceRadius = min(max(averageAccuracy * horizontalAccuracyMultiplier, minGeofenceRadius), maxGeofenceRadius)
 
