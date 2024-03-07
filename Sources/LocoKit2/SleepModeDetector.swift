@@ -15,7 +15,6 @@ actor SleepModeDetector {
     private let sleepModeDelay: TimeInterval = 120.0 // 2 minutes
     private let minGeofenceRadius: CLLocationDistance = 10.0 // Minimum geofence radius in meters
     private let maxGeofenceRadius: CLLocationDistance = 100.0 // Maximum geofence radius in meters
-    private let horizontalAccuracyMultiplier: Double = 2.0 // Multiplier for horizontal accuracy
 
     // MARK: - Output
 
@@ -65,16 +64,28 @@ actor SleepModeDetector {
     private var sampleBuffer: [CLLocation] = []
 
     private func updateGeofence() {
+        guard let center = sampleBuffer.weightedCenter() else { return }
+
+        geofenceCenter = center
+
         // Calculate the average horizontal accuracy from the sample buffer
         let averageAccuracy = sampleBuffer.reduce(0.0) { $0 + $1.horizontalAccuracy } / Double(sampleBuffer.count)
 
-        // Calculate the geofence radius based on the average horizontal accuracy
-        geofenceRadius = min(max(averageAccuracy * horizontalAccuracyMultiplier, minGeofenceRadius), maxGeofenceRadius)
-
-        // Calculate the center of the geofence based on the sample buffer
-        if let center = sampleBuffer.weightedCenter() {
-            geofenceCenter = center
+        // early exit and simple maths if n = 1
+        if sampleBuffer.count == 1 {
+            geofenceRadius = min(max(averageAccuracy * 2, minGeofenceRadius), maxGeofenceRadius)
+            return
         }
+
+        // Create a single CLLocation instance for the center
+        let centerLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
+
+        // Calculate the mean distance from the weighted center
+        let totalDistance = sampleBuffer.reduce(0.0) { $0 + $1.distance(from: centerLocation) }
+        let meanDistance = totalDistance / Double(sampleBuffer.count)
+
+        // Clamp the geofence radius within the specified range
+        geofenceRadius = min(max(averageAccuracy + meanDistance, minGeofenceRadius), maxGeofenceRadius)
     }
 
     private func isWithinGeofence(_ location: CLLocation, center: CLLocationCoordinate2D) -> Bool {
