@@ -18,10 +18,10 @@ internal class KalmanFilter {
 
     // P
     private var covarianceMatrix: Matrix<Double> = Matrix([
-        [0.001, 0, 0, 0],
-        [0, 0.001, 0, 0],
-        [0, 0, 0.001, 0],
-        [0, 0, 0, 0.001]
+        [0.0001, 0, 0, 0],
+        [0, 0.0001, 0, 0],
+        [0, 0, 0.0001, 0],
+        [0, 0, 0, 0.0001]
     ])
 
     // F
