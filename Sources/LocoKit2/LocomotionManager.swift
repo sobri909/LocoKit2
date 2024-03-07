@@ -24,6 +24,9 @@ public final class LocomotionManager {
     public var newKLocations: [CLLocation] = []
     public var currentMovingState: MovingStateDetails?
     public var lastKnownMovingState: MovingStateDetails?
+    public var sleepDetectorEnterDate: Date?
+    public var sleepDetectorCentre: CLLocationCoordinate2D?
+    public var sleepDetectorRadius: CLLocationDistance?
 
     // MARK: -
     
@@ -48,6 +51,7 @@ public final class LocomotionManager {
     private let newKalman = KalmanFilter()
     private let oldKalman = KalmanCoordinates(qMetresPerSecond: 4)
     private let stationaryBrain = StationaryStateDetector()
+    private let sleepModeDetector = SleepModeDetector()
 
     // MARK: -
 
@@ -124,8 +128,13 @@ public final class LocomotionManager {
         oldKalman.add(location: location)
         
         let kalmanLocation = newKalman.currentEstimatedLocation()
-        let currentState = await stationaryBrain.addSample(location: kalmanLocation)
+        let currentState = await stationaryBrain.add(location: kalmanLocation)
         let lastKnownState = await stationaryBrain.lastKnownState
+
+        await sleepModeDetector.add(location: kalmanLocation)
+        let detectorCentre = await sleepModeDetector.geofenceCenter
+        let detectorEnterDate = await sleepModeDetector.lastGeofenceEnterTime
+        let detectorRadius = await sleepModeDetector.geofenceRadius
 
         await MainActor.run {
             rawLocations.append(location)
@@ -135,6 +144,9 @@ public final class LocomotionManager {
             }
             currentMovingState = currentState
             lastKnownMovingState = lastKnownState
+            sleepDetectorCentre = detectorCentre
+            sleepDetectorRadius = detectorRadius
+            sleepDetectorEnterDate = detectorEnterDate
         }
     }
 

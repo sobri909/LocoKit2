@@ -18,7 +18,7 @@ actor StationaryStateDetector {
 
     private(set) var lastKnownState: MovingStateDetails?
 
-    func addSample(location: CLLocation) -> MovingStateDetails {
+    func add(location: CLLocation) -> MovingStateDetails {
         sampleBuffer.append(location)
 
         // Remove samples outside the target time window
