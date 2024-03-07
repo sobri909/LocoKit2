@@ -32,11 +32,14 @@ public final class LocomotionManager {
         print("LocomotionManager.startRecording()")
         
         locationManager.startUpdatingLocation()
-        locationManager.startMonitoringSignificantLocationChanges() // is it allowed to start both?
-
+        locationManager.startMonitoringSignificantLocationChanges() 
         sleepLocationManager.stopUpdatingLocation()
 
         recordingState = .recording
+
+        restartTheFallbackTimer()
+
+        Task { await sleepModeDetector.unfreeze() }
     }
 
     public func requestAuthorization() {
@@ -50,6 +53,8 @@ public final class LocomotionManager {
     private let oldKalman = KalmanCoordinates(qMetresPerSecond: 4)
     private let stationaryBrain = StationaryStateDetector()
     private let sleepModeDetector = SleepModeDetector()
+    private var fallbackUpdateTimer: Timer?
+    private var wakeupTimer: Timer?
 
     // MARK: -
 
@@ -61,11 +66,28 @@ public final class LocomotionManager {
         print("LocomotionManager.startSleeping()")
 
         sleepLocationManager.startUpdatingLocation()
-        sleepLocationManager.startMonitoringSignificantLocationChanges() // is it allowed to start both?
-
+        sleepLocationManager.startMonitoringSignificantLocationChanges()
         locationManager.stopUpdatingLocation()
 
+        restartTheWakeupTimer()
+
         recordingState = .sleeping
+        
+        Task { await sleepModeDetector.freeze() }
+    }
+
+    private func startWakeup() {
+        if recordingState == .wakeup { return }
+        if recordingState == .recording { return }
+
+        print("LocomotionManager.startWakeup()")
+
+        locationManager.startUpdatingLocation()
+
+        // need to be able to detect nolos
+        restartTheFallbackTimer()
+
+        recordingState = .wakeup
     }
 
     // MARK: -
@@ -76,7 +98,7 @@ public final class LocomotionManager {
         manager.distanceFilter = 1
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.pausesLocationUpdatesAutomatically = true // EXPERIMENTAL
-        manager.showsBackgroundLocationIndicator = true
+        manager.showsBackgroundLocationIndicator = false
         manager.allowsBackgroundLocationUpdates = true
         manager.delegate = self.locationDelegate
         return manager
@@ -99,29 +121,19 @@ public final class LocomotionManager {
         return Delegate(parent: self)
     }()
 
-    func add(location: CLLocation) {
-        Task { await reallyAdd(location: location) }
+    internal func add(location: CLLocation) {
+        if RecordingState.sleepStates.contains(recordingState) {
+            print("location during sleep")
+            return
+        }
 
-//        let simulated1 = simulated(from: location, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 10)
-//        reallyAdd(location: simulated1)
-//
-//        let simulated2 = simulated(from: simulated1, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
-//        reallyAdd(location: simulated2)
-//
-//        let simulated3 = simulated(from: simulated2, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
-//        reallyAdd(location: simulated3)
-//
-//        let simulated4 = simulated(from: simulated3, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
-//        reallyAdd(location: simulated4)
-//
-//        let simulated5 = simulated(from: simulated4, displacementMeters: 10, displacementCourse: 0, elapsedTime: 1, course: 0, horizontalAccuracy: 10, speedAccuracy: 100)
-//        reallyAdd(location: simulated5)
-//
-//        let simulated6 = simulated(from: simulated5, displacementMeters: 10, displacementCourse: 90, elapsedTime: 1, course: 90, horizontalAccuracy: 10, speedAccuracy: 100)
-//        reallyAdd(location: simulated6)
+        Task {
+            await reallyAdd(location: location)
+            await updateTheRecordingState()
+        }
     }
     
-    func reallyAdd(location: CLLocation) async {
+    private func reallyAdd(location: CLLocation) async {
         newKalman.add(location: location)
         oldKalman.add(location: location)
         
@@ -144,6 +156,63 @@ public final class LocomotionManager {
         }
     }
 
+    private func updateTheRecordingState() async {
+        print("updateTheRecordingState()")
+        switch recordingState {
+        case .recording:
+            await sleepModeDetector.updateTheState()
+            let sleepState = await sleepModeDetector.state
+            Task { @MainActor in
+                sleepDetectorState = sleepState
+            }
+
+            if let sleepState = sleepDetectorState, sleepState.durationWithinGeofence >= 120 {
+                startSleeping()
+            } else {
+                restartTheFallbackTimer()
+            }   
+
+        case .wakeup:
+            if let sleepState = sleepDetectorState {
+                if sleepState.isLocationWithinGeofence {
+                    startSleeping()
+                } else {
+                    startRecording()
+                }
+            } else {
+                restartTheFallbackTimer()
+            }
+
+        case .sleeping, .deepSleeping:
+            break
+
+        case .standby, .off:
+            break
+        }
+    }
+
+    private func restartTheFallbackTimer() {
+        Task { @MainActor in
+            fallbackUpdateTimer?.invalidate()
+            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+                if let self {
+                    print("fallbackUpdateTimer")
+                    Task { await self.updateTheRecordingState() }
+                }
+            }
+        }
+    }
+
+    private func restartTheWakeupTimer() {
+        Task { @MainActor in
+            wakeupTimer?.invalidate()
+            wakeupTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+                print("wakeupTimer")
+                self?.startWakeup()
+            }
+        }
+    }
+
     // MARK: - CLLocationManagerDelegate
 
     private class Delegate: NSObject, CLLocationManagerDelegate {
@@ -155,7 +224,6 @@ public final class LocomotionManager {
         }
 
         func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-//            print("CLLocationManagerDelegate.didUpdateLocations() locations: \(locations.count)")
             for location in locations {
                 parent.add(location: location)
             }

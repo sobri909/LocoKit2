@@ -9,4 +9,7 @@ import Foundation
 
 public enum RecordingState: String, Codable {
     case recording, sleeping, deepSleeping, wakeup, standby, off
+
+    public static let sleepStates = [sleeping, deepSleeping]
+
 }

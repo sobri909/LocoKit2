@@ -30,16 +30,27 @@ actor SleepModeDetector {
         }
 
         sampleBuffer.append(location)
+        sampleBuffer.sort { $0.timestamp < $1.timestamp }
 
-        // Remove samples older than sleepModeDelay
-        while sampleBuffer.count > 1, let oldest = sampleBuffer.first, location.timestamp.timeIntervalSince(oldest.timestamp) > sleepModeDelay {
+        updateTheState()
+    }
+
+    func updateTheState() {
+        if state.isFrozen { return }
+
+        guard let newest = sampleBuffer.last else { return }
+
+        print("updateTheState()")
+
+        // age out samples older than sleepModeDelay
+        while sampleBuffer.count > 1, let oldest = sampleBuffer.first, oldest.timestamp.age > sleepModeDelay {
             sampleBuffer.removeFirst()
         }
 
         // debug stats
         state.n = sampleBuffer.count
         if let oldest = sampleBuffer.first {
-            state.sampleDuration = location.timestamp.timeIntervalSince(oldest.timestamp)
+            state.sampleDuration = newest.timestamp.timeIntervalSince(oldest.timestamp)
         }
 
         // Update geofence if enough samples are available
@@ -49,12 +60,12 @@ actor SleepModeDetector {
 
         // Check if the location is within the geofence
         if let center = state.geofenceCenter {
-            state.isLocationWithinGeofence = isWithinGeofence(location, center: center)
+            state.isLocationWithinGeofence = isWithinGeofence(newest, center: center)
 
             if state.isLocationWithinGeofence {
                 // Update the last geofence enter time if not already set
                 if state.lastGeofenceEnterTime == nil {
-                    state.lastGeofenceEnterTime = location.timestamp
+                    state.lastGeofenceEnterTime = newest.timestamp
                 }
             } else {
                 // Reset the last geofence enter time if the location is outside the geofence
