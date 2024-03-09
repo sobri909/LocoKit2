@@ -9,60 +9,81 @@ import Foundation
 import CoreLocation
 
 actor StationaryStateDetector {
-    private let targetTimeWindow: TimeInterval = 10.0 // Target time window duration in seconds
-    private let maxAllowedDuration: TimeInterval = 60.0 // Maximum allowed duration between samples
-    private let accuracyThreshold: CLLocationAccuracy = 50.0 // Accuracy threshold in meters
-    private let minSampleCount: Int = 3 // Minimum number of samples required for calculations
 
-    private var sampleBuffer: [CLLocation] = []
+    private let targetTimeWindow: TimeInterval = 10.0 // Target time window duration in seconds
+    private let accuracyThreshold: CLLocationAccuracy = 50.0 // Accuracy threshold in meters
+    private let meanSpeedThreshold: CLLocationSpeed = 0.5
+    private let sdSpeedThreshold: CLLocationSpeed = 0.3
 
     private(set) var lastKnownState: MovingStateDetails?
 
     func add(location: CLLocation) -> MovingStateDetails {
-        sampleBuffer.append(location)
+        sample.append(location)
 
-        // Remove samples outside the target time window
-        while let oldest = sampleBuffer.first, location.timestamp.timeIntervalSince(oldest.timestamp) > targetTimeWindow {
-            sampleBuffer.removeFirst()
-        }
-
-        return determineStationaryState()
+        let result = determineStationaryState()
+        scheduleUpdate()
+        return result
     }
 
-    func determineStationaryState() -> MovingStateDetails {
-        let currentTimestamp = Date()
+    func freeze() {
+        frozen = true
+    }
 
-        let n = sampleBuffer.count
+    func unfreeze() {
+        frozen = false
+        scheduleUpdate()
+    }
 
-        guard n > 0 else {
-            return MovingStateDetails(.uncertain, n: n, duration: 0)
+    // MARK: - Private
+
+    private var sample: [CLLocation] = []
+    private var frozen: Bool = false
+
+    private func scheduleUpdate() {
+        if frozen { return }
+
+        print("scheduleUpdate()")
+
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            determineStationaryState()
+            scheduleUpdate()
+        }
+    }
+
+    @discardableResult
+    private func determineStationaryState() -> MovingStateDetails {
+        guard let newest = sample.last else {
+            return MovingStateDetails(.uncertain, n: 0, timestamp: .now, duration: 0)
         }
 
-        // Check if there are enough samples in the buffer
-        guard n >= minSampleCount else {
-            return MovingStateDetails(.uncertain, n: n, duration: 0)
+        print("determineStationaryState()")
+
+        // Remove samples outside the target time window
+        while sample.count > 1, let oldest = sample.first, newest.timestamp.timeIntervalSince(oldest.timestamp) > targetTimeWindow {
+            sample.removeFirst()
         }
 
-        // Calculate the time difference between the oldest and newest samples
-        let oldestTimestamp = sampleBuffer.first!.timestamp
-        let duration = currentTimestamp.timeIntervalSince(oldestTimestamp)
+        let n = sample.count
 
-        // Check if the time difference exceeds the maximum allowed duration
-        guard duration <= maxAllowedDuration else {
-            return MovingStateDetails(.uncertain, n: n, duration: duration)
+        if n == 1 {
+            let result: MovingState = (newest.speed < meanSpeedThreshold + sdSpeedThreshold) ? .stationary : .moving
+            return MovingStateDetails(result, n: 1, timestamp: newest.timestamp, duration: 0, meanSpeed: newest.speed)
         }
+
+        let duration = newest.timestamp.timeIntervalSince(sample.first!.timestamp)
 
         // Calculate the mean accuracy of the samples in the buffer
-        let meanAccuracy = sampleBuffer.map { $0.horizontalAccuracy }.reduce(0, +) / Double(sampleBuffer.count)
+        let meanAccuracy = sample.map { $0.horizontalAccuracy }.reduce(0, +) / Double(sample.count)
 
         // Check if the mean accuracy is within the acceptable threshold
         guard meanAccuracy <= accuracyThreshold else {
-            return MovingStateDetails(.uncertain, n: n, duration: duration, meanAccuracy: meanAccuracy)
+            return MovingStateDetails(.uncertain, n: n, timestamp: newest.timestamp, duration: duration, meanAccuracy: meanAccuracy)
         }
 
         // Calculate weighted statistics based on the samples in the buffer
-        let speeds = sampleBuffer.map { $0.speed }
-        let weights = sampleBuffer.map { 1.0 / $0.horizontalAccuracy }
+        let speeds = sample.map { $0.speed }
+        let weights = sample.map { 1.0 / $0.horizontalAccuracy }
         let totalWeight = weights.reduce(0, +)
         let weightedSpeeds = zip(speeds, weights).map { $0 * $1 }
         let weightedMeanSpeed = weightedSpeeds.reduce(0, +) / totalWeight
@@ -71,13 +92,15 @@ actor StationaryStateDetector {
         let weightedStdDev = sqrt(weightedVariance)
 
         // Determine the stationary state based on the weighted statistics
-        let result: MovingState = (weightedMeanSpeed < 0.5 && weightedStdDev < 0.3) ? .stationary : .moving
+        let result: MovingState = (weightedMeanSpeed < meanSpeedThreshold && sdSpeedThreshold < 0.3) ? .stationary : .moving
 
         let resultDetails = MovingStateDetails(
-            result, n: n, duration: duration,
+            result, n: n,
+            timestamp: newest.timestamp,
+            duration: duration,
             meanAccuracy: meanAccuracy,
-            weightedMeanSpeed: weightedMeanSpeed,
-            weightedStdDev: weightedStdDev
+            meanSpeed: weightedMeanSpeed,
+            sdSpeed: weightedStdDev
         )
 
         lastKnownState = resultDetails
