@@ -29,8 +29,8 @@ actor SleepModeDetector {
             return
         }
 
-        sampleBuffer.append(location)
-        sampleBuffer.sort { $0.timestamp < $1.timestamp }
+        sample.append(location)
+        sample.sort { $0.timestamp < $1.timestamp }
 
         updateTheState()
     }
@@ -47,28 +47,26 @@ actor SleepModeDetector {
 
     // MARK: - Private
 
-    private var sampleBuffer: [CLLocation] = []
+    private var sample: [CLLocation] = []
 
     private func updateTheState() {
         if state.isFrozen { return }
 
-        guard let newest = sampleBuffer.last else { return }
-
-        print("updateTheState()")
+        guard let newest = sample.last else { return }
 
         // age out samples older than sleepModeDelay
-        while sampleBuffer.count > 1, let oldest = sampleBuffer.first, oldest.timestamp.age > sleepModeDelay {
-            sampleBuffer.removeFirst()
+        while sample.count > 1, let oldest = sample.first, oldest.timestamp.age > sleepModeDelay {
+            sample.removeFirst()
         }
 
         // debug stats
-        state.n = sampleBuffer.count
-        if let oldest = sampleBuffer.first {
+        state.n = sample.count
+        if let oldest = sample.first {
             state.sampleDuration = newest.timestamp.timeIntervalSince(oldest.timestamp)
         }
 
         // Update geofence if enough samples are available
-        if !sampleBuffer.isEmpty {
+        if !sample.isEmpty {
             updateGeofence()
         }
 
@@ -98,15 +96,15 @@ actor SleepModeDetector {
     }
 
     private func updateGeofence() {
-        guard let center = sampleBuffer.weightedCenter() else { return }
+        guard let center = sample.weightedCenter() else { return }
 
         state.geofenceCenter = center
 
         // Calculate the average horizontal accuracy from the sample buffer
-        let averageAccuracy = sampleBuffer.reduce(0.0) { $0 + $1.horizontalAccuracy } / Double(sampleBuffer.count)
+        let averageAccuracy = sample.reduce(0.0) { $0 + $1.horizontalAccuracy } / Double(sample.count)
 
         // early exit and simple maths if n = 1
-        if sampleBuffer.count == 1 {
+        if sample.count == 1 {
             state.geofenceRadius = min(max(averageAccuracy * 2, minGeofenceRadius), maxGeofenceRadius)
             return
         }
@@ -115,8 +113,8 @@ actor SleepModeDetector {
         let centerLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
 
         // Calculate the mean distance from the weighted center
-        let totalDistance = sampleBuffer.reduce(0.0) { $0 + $1.distance(from: centerLocation) }
-        let meanDistance = totalDistance / Double(sampleBuffer.count)
+        let totalDistance = sample.reduce(0.0) { $0 + $1.distance(from: centerLocation) }
+        let meanDistance = totalDistance / Double(sample.count)
 
         // Clamp the geofence radius within the specified range
         state.geofenceRadius = min(max(averageAccuracy + meanDistance, minGeofenceRadius), maxGeofenceRadius)
