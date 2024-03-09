@@ -9,7 +9,7 @@ import Foundation
 import CoreLocation
 import Surge
 
-internal class KalmanFilter {
+internal actor KalmanFilter {
     
     private var lastTimestamp: Date?
 

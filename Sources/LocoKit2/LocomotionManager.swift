@@ -142,11 +142,13 @@ public final class LocomotionManager {
     }
     
     private func reallyAdd(location: CLLocation) async {
-        newKalman.add(location: location)
+        await newKalman.add(location: location)
         oldKalman.add(location: location)
         
-        let kalmanLocation = newKalman.currentEstimatedLocation()
-        let currentState = await stationaryBrain.add(location: kalmanLocation)
+        let kalmanLocation = await newKalman.currentEstimatedLocation()
+        
+        await stationaryBrain.add(location: kalmanLocation)
+        let currentState = await stationaryBrain.currentState
         let lastKnownState = await stationaryBrain.lastKnownState
 
         await sleepModeDetector.add(location: kalmanLocation)
