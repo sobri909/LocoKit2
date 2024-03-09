@@ -10,19 +10,20 @@ import CoreLocation
 
 actor StationaryStateDetector {
 
-    private let targetTimeWindow: TimeInterval = 10.0 // Target time window duration in seconds
-    private let accuracyThreshold: CLLocationAccuracy = 50.0 // Accuracy threshold in meters
+    private let targetTimeWindow: TimeInterval = 10.0 
+    private let accuracyThreshold: CLLocationAccuracy = 50.0
     private let meanSpeedThreshold: CLLocationSpeed = 0.5
     private let sdSpeedThreshold: CLLocationSpeed = 0.3
 
+    private(set) var currentState: MovingStateDetails?
     private(set) var lastKnownState: MovingStateDetails?
 
-    func add(location: CLLocation) -> MovingStateDetails {
+    func add(location: CLLocation) {
         sample.append(location)
+        sample.sort { $0.timestamp < $1.timestamp }
 
-        let result = determineStationaryState()
+        determineStationaryState()
         scheduleUpdate()
-        return result
     }
 
     func freeze() {
@@ -38,23 +39,27 @@ actor StationaryStateDetector {
 
     private var sample: [CLLocation] = []
     private var frozen: Bool = false
+    private var updateTask: Task<(), Never>?
 
     private func scheduleUpdate() {
         if frozen { return }
 
         print("scheduleUpdate()")
 
-        Task {
+        updateTask?.cancel()
+        updateTask = Task {
             try? await Task.sleep(for: .seconds(2))
-            determineStationaryState()
-            scheduleUpdate()
+            if !Task.isCancelled {
+                determineStationaryState()
+                scheduleUpdate()
+            }
         }
     }
 
-    @discardableResult
-    private func determineStationaryState() -> MovingStateDetails {
+    private func determineStationaryState() {
         guard let newest = sample.last else {
-            return MovingStateDetails(.uncertain, n: 0, timestamp: .now, duration: 0)
+            currentState = MovingStateDetails(.uncertain, n: 0, timestamp: .now, duration: 0)
+            return
         }
 
         print("determineStationaryState()")
@@ -66,19 +71,23 @@ actor StationaryStateDetector {
 
         let n = sample.count
 
-        if n == 1 {
+        guard n > 1 else {
             let result: MovingState = (newest.speed < meanSpeedThreshold + sdSpeedThreshold) ? .stationary : .moving
-            return MovingStateDetails(result, n: 1, timestamp: newest.timestamp, duration: 0, meanSpeed: newest.speed)
+            let state = MovingStateDetails(
+                result, n: 1, timestamp: newest.timestamp, duration: 0,
+                meanAccuracy: newest.horizontalAccuracy, meanSpeed: newest.speed
+            )
+            currentState = state
+            lastKnownState = state
+            return
         }
 
         let duration = newest.timestamp.timeIntervalSince(sample.first!.timestamp)
-
-        // Calculate the mean accuracy of the samples in the buffer
         let meanAccuracy = sample.map { $0.horizontalAccuracy }.reduce(0, +) / Double(sample.count)
 
-        // Check if the mean accuracy is within the acceptable threshold
         guard meanAccuracy <= accuracyThreshold else {
-            return MovingStateDetails(.uncertain, n: n, timestamp: newest.timestamp, duration: duration, meanAccuracy: meanAccuracy)
+            currentState = MovingStateDetails(.uncertain, n: n, timestamp: newest.timestamp, duration: duration, meanAccuracy: meanAccuracy)
+            return
         }
 
         // Calculate weighted statistics based on the samples in the buffer
@@ -94,7 +103,7 @@ actor StationaryStateDetector {
         // Determine the stationary state based on the weighted statistics
         let result: MovingState = (weightedMeanSpeed < meanSpeedThreshold && sdSpeedThreshold < 0.3) ? .stationary : .moving
 
-        let resultDetails = MovingStateDetails(
+        let state = MovingStateDetails(
             result, n: n,
             timestamp: newest.timestamp,
             duration: duration,
@@ -102,10 +111,8 @@ actor StationaryStateDetector {
             meanSpeed: weightedMeanSpeed,
             sdSpeed: weightedStdDev
         )
-
-        lastKnownState = resultDetails
-
-        return resultDetails
+        currentState = state
+        lastKnownState = state
     }
 
 }
