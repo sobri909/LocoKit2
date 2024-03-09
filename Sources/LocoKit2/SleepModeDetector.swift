@@ -35,7 +35,21 @@ actor SleepModeDetector {
         updateTheState()
     }
 
-    func updateTheState() {
+    func freeze() {
+        state.isFrozen = true
+    }
+
+    func unfreeze() {
+        state.isFrozen = false
+        state.lastGeofenceEnterTime = nil
+        updateTheState()
+    }
+
+    // MARK: - Private
+
+    private var sampleBuffer: [CLLocation] = []
+
+    private func updateTheState() {
         if state.isFrozen { return }
 
         guard let newest = sampleBuffer.last else { return }
@@ -75,20 +89,13 @@ actor SleepModeDetector {
             state.isLocationWithinGeofence = false
             state.lastGeofenceEnterTime = nil
         }
+
+        // location updates might stall, but need to keep state current
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            await updateTheState()
+        }
     }
-
-    func freeze() {
-        state.isFrozen = true
-    }
-
-    func unfreeze() {
-        state.isFrozen = false
-        state.lastGeofenceEnterTime = nil
-    }
-
-    // MARK: - Private
-
-    private var sampleBuffer: [CLLocation] = []
 
     private func updateGeofence() {
         guard let center = sampleBuffer.weightedCenter() else { return }

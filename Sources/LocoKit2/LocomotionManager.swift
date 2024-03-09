@@ -162,7 +162,6 @@ public final class LocomotionManager {
         print("updateTheRecordingState()")
         switch recordingState {
         case .recording:
-            await sleepModeDetector.updateTheState()
             let sleepState = await sleepModeDetector.state
             Task { @MainActor in
                 sleepDetectorState = sleepState
