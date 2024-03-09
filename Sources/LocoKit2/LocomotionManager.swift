@@ -196,7 +196,7 @@ public final class LocomotionManager {
     private func restartTheFallbackTimer() {
         Task { @MainActor in
             fallbackUpdateTimer?.invalidate()
-            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: false) { [weak self] _ in
                 if let self {
                     print("fallbackUpdateTimer")
                     Task { await self.updateTheRecordingState() }
@@ -208,7 +208,7 @@ public final class LocomotionManager {
     private func restartTheWakeupTimer() {
         Task { @MainActor in
             wakeupTimer?.invalidate()
-            wakeupTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
+            wakeupTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: false) { [weak self] _ in
                 print("wakeupTimer")
                 self?.startWakeup()
             }
