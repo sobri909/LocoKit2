@@ -83,6 +83,7 @@ actor SleepModeDetector {
 
     func unfreeze() {
         state.isFrozen = false
+        state.lastGeofenceEnterTime = nil
     }
 
     // MARK: - Private
