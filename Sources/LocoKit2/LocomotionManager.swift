@@ -30,7 +30,9 @@ public final class LocomotionManager {
     
     public func startRecording() {
         print("LocomotionManager.startRecording()")
-        
+
+        backgroundSession = CLBackgroundActivitySession()
+
         locationManager.startUpdatingLocation()
         locationManager.startMonitoringSignificantLocationChanges() 
         sleepLocationManager.stopUpdatingLocation()
@@ -52,6 +54,7 @@ public final class LocomotionManager {
 
     // MARK: - Private
 
+    private var backgroundSession: CLBackgroundActivitySession?
     private let newKalman = KalmanFilter()
     private let oldKalman = KalmanCoordinates(qMetresPerSecond: 4)
     private let stationaryBrain = StationaryStateDetector()
