@@ -97,7 +97,7 @@ public final class LocomotionManager {
         let manager = CLLocationManager()
         manager.distanceFilter = 1
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.pausesLocationUpdatesAutomatically = true // EXPERIMENTAL
+        manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = false
         manager.allowsBackgroundLocationUpdates = true
         manager.delegate = self.locationDelegate
@@ -120,6 +120,8 @@ public final class LocomotionManager {
     private lazy var locationDelegate = {
         return Delegate(parent: self)
     }()
+
+    // MARK: -
 
     internal func add(location: CLLocation) {
         if RecordingState.sleepStates.contains(recordingState) {
