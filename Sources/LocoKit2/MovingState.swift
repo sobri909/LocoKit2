@@ -28,16 +28,22 @@ public struct MovingStateDetails {
     public let timestamp: Date
     public let duration: TimeInterval
     public let meanAccuracy: CLLocationAccuracy?
-    public let weightedMeanSpeed: CLLocationSpeed?
-    public let weightedStdDev: CLLocationSpeed?
+    public let meanSpeed: CLLocationSpeed?
+    public let sdSpeed: CLLocationSpeed?
 
-    internal init(_ movingState: MovingState, n: Int, timestamp: Date = .now, duration: TimeInterval, meanAccuracy: CLLocationAccuracy? = nil, weightedMeanSpeed: CLLocationSpeed? = nil, weightedStdDev: CLLocationSpeed? = nil) {
+    internal init(
+        _ movingState: MovingState,
+        n: Int, timestamp: Date, duration: TimeInterval,
+        meanAccuracy: CLLocationAccuracy? = nil,
+        meanSpeed: CLLocationSpeed? = nil,
+        sdSpeed: CLLocationSpeed? = nil
+    ) {
         self.movingState = movingState
         self.n = n
         self.timestamp = timestamp
         self.duration = duration
         self.meanAccuracy = meanAccuracy
-        self.weightedMeanSpeed = weightedMeanSpeed
-        self.weightedStdDev = weightedStdDev
+        self.meanSpeed = meanSpeed
+        self.sdSpeed = sdSpeed
     }
 }
