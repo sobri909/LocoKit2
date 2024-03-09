@@ -39,7 +39,10 @@ public final class LocomotionManager {
 
         restartTheFallbackTimer()
 
-        Task { await sleepModeDetector.unfreeze() }
+        Task {
+            await stationaryBrain.unfreeze()
+            await sleepModeDetector.unfreeze()
+        }
     }
 
     public func requestAuthorization() {
@@ -73,7 +76,10 @@ public final class LocomotionManager {
 
         recordingState = .sleeping
         
-        Task { await sleepModeDetector.freeze() }
+        Task {
+            await stationaryBrain.freeze()
+            await sleepModeDetector.freeze()
+        }
     }
 
     private func startWakeup() {
