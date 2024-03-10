@@ -101,7 +101,7 @@ actor StationaryStateDetector {
         let weightedStdDev = sqrt(weightedVariance)
 
         // Determine the stationary state based on the weighted statistics
-        let result: MovingState = (weightedMeanSpeed < meanSpeedThreshold && sdSpeedThreshold < 0.3) ? .stationary : .moving
+        let result: MovingState = (weightedMeanSpeed < meanSpeedThreshold && weightedStdDev < sdSpeedThreshold) ? .stationary : .moving
 
         let state = MovingStateDetails(
             result, n: n,
