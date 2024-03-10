@@ -16,15 +16,18 @@ public final class LocomotionManager {
 
     // MARK: - Public
     
+    public var sleepCycleDuration: TimeInterval = 20
+    public var fallbackUpdateDuration: TimeInterval = 6
+
     public private(set) var recordingState: RecordingState = .off
     public internal(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
 
-    public var rawLocations: [CLLocation] = []
-    public var oldKLocations: [CLLocation] = []
-    public var newKLocations: [CLLocation] = []
-    public var currentMovingState: MovingStateDetails?
-    public var lastKnownMovingState: MovingStateDetails?
-    public var sleepDetectorState: SleepDetectorState?
+    public private(set) var rawLocations: [CLLocation] = []
+    public private(set) var oldKLocations: [CLLocation] = []
+    public private(set) var newKLocations: [CLLocation] = []
+    public private(set) var currentMovingState: MovingStateDetails?
+    public private(set) var lastKnownMovingState: MovingStateDetails?
+    public private(set) var sleepDetectorState: SleepDetectorState?
 
     // MARK: -
     
@@ -206,7 +209,7 @@ public final class LocomotionManager {
     private func restartTheFallbackTimer() {
         Task { @MainActor in
             fallbackUpdateTimer?.invalidate()
-            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: false) { [weak self] _ in
+            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: fallbackUpdateDuration, repeats: false) { [weak self] _ in
                 if let self {
                     print("fallbackUpdateTimer")
                     Task { await self.updateTheRecordingState() }
@@ -218,7 +221,7 @@ public final class LocomotionManager {
     private func restartTheWakeupTimer() {
         Task { @MainActor in
             wakeupTimer?.invalidate()
-            wakeupTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: false) { [weak self] _ in
+            wakeupTimer = Timer.scheduledTimer(withTimeInterval: sleepCycleDuration, repeats: false) { [weak self] _ in
                 print("wakeupTimer")
                 self?.startWakeup()
             }
