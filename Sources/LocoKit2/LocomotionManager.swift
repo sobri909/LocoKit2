@@ -78,10 +78,10 @@ public final class LocomotionManager {
         sleepLocationManager.startMonitoringSignificantLocationChanges()
         locationManager.stopUpdatingLocation()
 
+        recordingState = .sleeping
+
         restartTheWakeupTimer()
 
-        recordingState = .sleeping
-        
         Task {
             await stationaryBrain.freeze()
             await sleepModeDetector.freeze()
