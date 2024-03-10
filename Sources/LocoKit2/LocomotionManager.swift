@@ -334,7 +334,7 @@ public final class LocomotionManager {
         }
 
         func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-            DebugLogger.logger.info("locationManagerDidChangeAuthorization() authorizationStatus: \(manager.authorizationStatus)")
+            DebugLogger.logger.info("authorizationStatus: \(manager.authorizationStatus)")
             parent.authorizationStatus = manager.authorizationStatus
         }
 
