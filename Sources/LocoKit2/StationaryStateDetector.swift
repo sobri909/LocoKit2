@@ -44,8 +44,6 @@ actor StationaryStateDetector {
     private func scheduleUpdate() {
         if frozen { return }
 
-        print("scheduleUpdate()")
-
         updateTask?.cancel()
         updateTask = Task {
             try? await Task.sleep(for: .seconds(2))
@@ -61,8 +59,6 @@ actor StationaryStateDetector {
             currentState = MovingStateDetails(.uncertain, n: 0, timestamp: .now, duration: 0)
             return
         }
-
-        print("determineStationaryState()")
 
         // Remove samples outside the target time window
         while sample.count > 1, let oldest = sample.first, newest.timestamp.timeIntervalSince(oldest.timestamp) > targetTimeWindow {

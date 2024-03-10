@@ -137,7 +137,7 @@ public final class LocomotionManager {
 
     internal func add(location: CLLocation) {
         if RecordingState.sleepStates.contains(recordingState) {
-            print("location during sleep")
+            print("Ignoring location during sleep")
             return
         }
 
@@ -173,7 +173,6 @@ public final class LocomotionManager {
     }
 
     private func updateTheRecordingState() async {
-        print("updateTheRecordingState()")
         switch recordingState {
         case .recording:
             let sleepState = await sleepModeDetector.state
@@ -211,7 +210,6 @@ public final class LocomotionManager {
             fallbackUpdateTimer?.invalidate()
             fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: fallbackUpdateDuration, repeats: false) { [weak self] _ in
                 if let self {
-                    print("fallbackUpdateTimer")
                     Task { await self.updateTheRecordingState() }
                 }
             }
@@ -222,7 +220,6 @@ public final class LocomotionManager {
         Task { @MainActor in
             wakeupTimer?.invalidate()
             wakeupTimer = Timer.scheduledTimer(withTimeInterval: sleepCycleDuration, repeats: false) { [weak self] _ in
-                print("wakeupTimer")
                 self?.startWakeup()
             }
         }
