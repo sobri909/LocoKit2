@@ -13,6 +13,7 @@ public enum Subsystem: String {
     case misc, database
 }
 
+@Observable
 public class DebugLogger: LoggingFormatAndPipe.Pipe {
 
     public static let highlander = DebugLogger()
@@ -28,11 +29,13 @@ public class DebugLogger: LoggingFormatAndPipe.Pipe {
     private var fibn = 1
 
     private init() {
-        do {
-            try FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true, attributes: nil)
-        } catch {
-            os_log("Couldn't create logs dir", type: .error)
-        }
+        let filename = ISO8601DateFormatter.string(
+            from: .now, timeZone: TimeZone.current,
+            formatOptions: [.withFullDate, .withTime, .withColonSeparatorInTime, .withSpaceBetweenDateAndTime]
+        )
+        self.sessionLogFileURL = Self.logsDir.appendingPathComponent("\(filename).log")
+        
+        updateLogFileURLs()
     }
 
     public func handle(_ formattedLogLine: String) {
@@ -52,36 +55,40 @@ public class DebugLogger: LoggingFormatAndPipe.Pipe {
         }
     }
 
-    func delete(_ url: URL) throws {
+    public func delete(_ url: URL) throws {
         try FileManager.default.removeItem(at: url)
+        updateLogFileURLs()
     }
 
     // MARK: -
 
-    private(set) lazy var sessionLogFileURL: URL = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH.mm"
-        let filename = formatter.string(from: Date())
-        return logsDir.appendingPathComponent(filename + ".log")
-    }()
-
-    var logsDir: URL {
-        return try! FileManager.default
+    static var logsDir: URL {
+        try! FileManager.default
             .url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("Logs", isDirectory: true)
     }
 
-    var logFileURLs: [URL] {
+    public let sessionLogFileURL: URL
+
+    private func createSessionLogURL(inDir: URL) -> URL {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH.mm"
+        let filename = formatter.string(from: Date())
+        return inDir.appendingPathComponent(filename + ".log")
+    }
+
+    public var logFileURLs: [URL]?
+
+    public func updateLogFileURLs() {
         do {
             let files = try FileManager.default
-                .contentsOfDirectory(at: logsDir, includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey])
-            return files
+                .contentsOfDirectory(at: Self.logsDir, includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey])
+            logFileURLs = files
                 .filter { !$0.hasDirectoryPath && $0.pathExtension.lowercased() == "log" }
                 .sorted { $0.path > $1.path }
 
         } catch {
             print(error)
-            return []
         }
     }
 
