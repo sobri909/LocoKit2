@@ -8,14 +8,6 @@
 import Foundation
 import CoreLocation
 
-// MARK: - Foundation
-
-extension Date {
-    var age: TimeInterval { -timeIntervalSinceNow }
-}
-
-// MARK: - Core Location
-
 typealias Radians = Double
 
 extension Radians {

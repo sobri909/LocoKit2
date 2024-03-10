@@ -1,0 +1,133 @@
+//
+//  DebugLogger.swift
+//
+//  Created by Matt Greenfield on 8/4/20.
+//
+
+import Foundation
+import os.log
+import Logging
+import LoggingFormatAndPipe
+
+public enum Subsystem: String {
+    case misc, database
+}
+
+public class DebugLogger: LoggingFormatAndPipe.Pipe {
+
+    public static let highlander = DebugLogger()
+
+    public static let logger = Logger(label: "com.bigpaua.LocoKit.main") { _ in
+        return LoggingFormatAndPipe.Handler(
+            formatter: DebugLogger.LogDateFormatter(),
+            pipe: DebugLogger.highlander
+        )
+    }
+
+    private var hourMarkerTimer: Timer?
+    private var fibn = 1
+
+    private init() {
+        do {
+            try FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            os_log("Couldn't create logs dir", type: .error)
+        }
+    }
+
+    public func handle(_ formattedLogLine: String) {
+        Task { @MainActor in
+            do {
+                try formattedLogLine.appendLineTo(self.sessionLogFileURL)
+            } catch {
+                os_log("Couldn't write to log file", type: .error)
+            }
+
+            print(formattedLogLine)
+
+            self.hourMarkerTimer?.invalidate()
+            self.hourMarkerTimer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(self.fibn)), repeats: false) { _ in
+                Self.logger.info("--\(self.fibn)--")
+            }
+        }
+    }
+
+    func delete(_ url: URL) throws {
+        try FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: -
+
+    private(set) lazy var sessionLogFileURL: URL = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH.mm"
+        let filename = formatter.string(from: Date())
+        return logsDir.appendingPathComponent(filename + ".log")
+    }()
+
+    var logsDir: URL {
+        return try! FileManager.default
+            .url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("Logs", isDirectory: true)
+    }
+
+    var logFileURLs: [URL] {
+        do {
+            let files = try FileManager.default
+                .contentsOfDirectory(at: logsDir, includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey])
+            return files
+                .filter { !$0.hasDirectoryPath && $0.pathExtension.lowercased() == "log" }
+                .sorted { $0.path > $1.path }
+
+        } catch {
+            print(error)
+            return []
+        }
+    }
+
+    class LogDateFormatter: LoggingFormatAndPipe.Formatter {
+        var timestampFormatter: DateFormatter = {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm:ss.SSS"
+            return formatter
+        }()
+
+        func processLog(level: Logging.Logger.Level, message: Logging.Logger.Message, prettyMetadata: String?, file: String, function: String, line: UInt) -> String {
+            if message.description.hasPrefix("--") {
+                DebugLogger.highlander.fibn += 1
+            } else {
+                DebugLogger.highlander.fibn = 1
+            }
+            if level == .error {
+                return String(format: "[%@] [ERROR] \(message)", self.timestampFormatter.string(from: Date()))
+            }
+            return String(format: "[%@] \(message)", self.timestampFormatter.string(from: Date()))
+        }
+    }
+
+}
+
+func fib (_ n: Int) -> Int {
+    guard n > 1 else {return n}
+    return fib(n - 1) + fib(n - 2)
+}
+
+extension Logging.Logger {
+    @inlinable
+    public func info(_ message: String, subsystem: Subsystem, source: @autoclosure () -> String? = nil,
+                     file: String = #file, function: String = #function, line: UInt = #line) {
+        self.info("[\(subsystem.rawValue.uppercased())] \(message)", source: source(), file: file, function: function, line: line)
+    }
+    
+    @inlinable
+    public func error(_ message: String, subsystem: Subsystem, source: @autoclosure () -> String? = nil,
+                      file: String = #file, function: String = #function, line: UInt = #line) {
+        self.error("[\(subsystem.rawValue.uppercased())] \(message)", source: source(), file: file, function: function, line: line)
+    }
+    
+    @inlinable
+    public func error(_ error: Error, subsystem: Subsystem, source: @autoclosure () -> String? = nil,
+                      file: String = #file, function: String = #function, line: UInt = #line) {
+        self.error("[\(subsystem.rawValue.uppercased())] \(error)", source: source(), file: file, function: function, line: line)
+    }
+}

@@ -32,7 +32,7 @@ public final class LocomotionManager {
     // MARK: -
     
     public func startRecording() {
-        print("LocomotionManager.startRecording()")
+        DebugLogger.logger.info("LocomotionManager.startRecording()")
 
         backgroundSession = CLBackgroundActivitySession()
 
@@ -51,7 +51,7 @@ public final class LocomotionManager {
     }
 
     public func requestAuthorization() {
-        print("LocomotionManager.requestAuthorization()")
+        DebugLogger.logger.info("LocomotionManager.requestAuthorization()")
         locationManager.requestAlwaysAuthorization()
     }
 
@@ -72,7 +72,7 @@ public final class LocomotionManager {
     }
     
     private func startSleeping() {
-        print("LocomotionManager.startSleeping()")
+        DebugLogger.logger.info("LocomotionManager.startSleeping()")
 
         sleepLocationManager.startUpdatingLocation()
         sleepLocationManager.startMonitoringSignificantLocationChanges()
@@ -92,7 +92,7 @@ public final class LocomotionManager {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
 
-        print("LocomotionManager.startWakeup()")
+        DebugLogger.logger.info("LocomotionManager.startWakeup()")
 
         locationManager.startUpdatingLocation()
 
@@ -137,7 +137,7 @@ public final class LocomotionManager {
 
     internal func add(location: CLLocation) {
         if RecordingState.sleepStates.contains(recordingState) {
-            print("Ignoring location during sleep")
+            DebugLogger.logger.info("Ignoring location during sleep")
             return
         }
 
@@ -242,21 +242,21 @@ public final class LocomotionManager {
         }
 
         func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
-            print("CLLocationManagerDelegate.locationManagerDidPauseLocationUpdates()")
+            DebugLogger.logger.info("locationManagerDidPauseLocationUpdates()")
             parent.startSleeping()
         }
 
         func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
-            print("CLLocationManagerDelegate.locationManagerDidResumeLocationUpdates()")
+            DebugLogger.logger.info("locationManagerDidResumeLocationUpdates()")
         }
 
         func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-            print("CLLocationManagerDelegate.locationManagerDidChangeAuthorization() authorizationStatus: \(manager.authorizationStatus)")
+            DebugLogger.logger.info("locationManagerDidChangeAuthorization() authorizationStatus: \(manager.authorizationStatus)")
             parent.authorizationStatus = manager.authorizationStatus
         }
 
         func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-            print("CLLocationManagerDelegate.didFailWithError(): \(error)")
+            DebugLogger.logger.error(error, subsystem: .misc)
         }
     }
 
