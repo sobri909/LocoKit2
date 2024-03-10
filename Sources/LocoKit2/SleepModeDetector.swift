@@ -92,7 +92,7 @@ actor SleepModeDetector {
         // location updates might stall, but need to keep state current
         updateTask?.cancel()
         updateTask = Task {
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(6))
             if !Task.isCancelled {
                 updateTheState()
             }
