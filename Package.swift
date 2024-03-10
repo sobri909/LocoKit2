@@ -13,9 +13,10 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/Jounce/Surge", from: "2.3.0"),
-    ], 
+        .package(name: "swift-log", url: "https://github.com/apple/swift-log", from: "1.5.0"),
+    ],
     targets: [
-        .target(name: "LocoKit2", dependencies: ["Surge"]),
+        .target(name: "LocoKit2", dependencies: ["Surge", "swift-log"]),
         .testTarget(name: "LocoKit2Tests", dependencies: ["LocoKit2"])
     ]
 )
