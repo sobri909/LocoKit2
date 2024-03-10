@@ -22,7 +22,7 @@ actor SleepModeDetector {
 
     func add(location: CLLocation) {
         if state.isFrozen {
-            // If frozen, don't update the geofence and only check if the location is within the geofence
+            // if frozen, don't update the geofence, only check if the location is within the geofence
             if let center = state.geofenceCenter {
                 state.isLocationWithinGeofence = isWithinGeofence(location, center: center)
             }
@@ -48,6 +48,7 @@ actor SleepModeDetector {
     // MARK: - Private
 
     private var sample: [CLLocation] = []
+    private var updateTask: Task<(), Never>?
 
     private func updateTheState() {
         if state.isFrozen { return }
@@ -89,9 +90,12 @@ actor SleepModeDetector {
         }
 
         // location updates might stall, but need to keep state current
-        Task {
+        updateTask?.cancel()
+        updateTask = Task {
             try? await Task.sleep(for: .seconds(2))
-            await updateTheState()
+            if !Task.isCancelled {
+                updateTheState()
+            }
         }
     }
 
