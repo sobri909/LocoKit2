@@ -50,6 +50,22 @@ public final class LocomotionManager {
         }
     }
 
+    public func stopRecording() {
+        DebugLogger.logger.info("LocomotionManager.stopRecording()")
+
+        locationManager.stopUpdatingLocation()
+        locationManager.stopMonitoringSignificantLocationChanges()
+        sleepLocationManager.stopUpdatingLocation()
+
+        backgroundSession?.invalidate()
+        backgroundSession = nil
+
+        stopTheFallbackTimer()
+        stopTheWakeupTimer()
+
+        recordingState = .off
+    }
+
     public func requestAuthorization() {
         DebugLogger.logger.info("LocomotionManager.requestAuthorization()")
         locationManager.requestAlwaysAuthorization()
@@ -223,6 +239,17 @@ public final class LocomotionManager {
                 self?.startWakeup()
             }
         }
+    }
+
+
+    private func stopTheFallbackTimer() {
+        fallbackUpdateTimer?.invalidate()
+        fallbackUpdateTimer = nil
+    }
+
+    private func stopTheWakeupTimer() {
+        wakeupTimer?.invalidate()
+        wakeupTimer = nil
     }
 
     // MARK: - CLLocationManagerDelegate
