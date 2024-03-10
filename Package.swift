@@ -16,7 +16,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log", from: "1.5.0"),
     ],
     targets: [
-        .target(name: "LocoKit2", dependencies: ["Surge", "Logging"]),
+        .target(name: "LocoKit2", dependencies: ["Surge", "swift-log"]),
         .testTarget(name: "LocoKit2Tests", dependencies: ["LocoKit2"])
     ]
 )
