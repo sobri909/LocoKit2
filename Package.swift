@@ -15,12 +15,13 @@ let package = Package(
         .package(url: "https://github.com/Jounce/Surge", from: "2.3.0"),
         .package(url: "https://github.com/apple/swift-log", from: "1.5.4"),
         .package(url: "https://github.com/Adorkable/swift-log-format-and-pipe", from: "0.1.1"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.25.0"),
     ],
     targets: [
         .target(
             name: "LocoKit2",
             dependencies: [
-                "Surge",
+                "Surge", "GRDB",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "LoggingFormatAndPipe", package: "swift-log-format-and-pipe")
             ]
