@@ -40,8 +40,8 @@ actor SleepModeDetector {
     }
 
     func unfreeze() {
-        state.isFrozen = false
         state.lastGeofenceEnterTime = nil
+        state.isFrozen = false
         updateTheState()
     }
 
@@ -66,22 +66,20 @@ actor SleepModeDetector {
             state.sampleDuration = newest.timestamp.timeIntervalSince(oldest.timestamp)
         }
 
-        // Update geofence if enough samples are available
-        if !sample.isEmpty {
-            updateGeofence()
-        }
+        // keep the fence current
+        updateGeofence()
 
         // Check if the location is within the geofence
         if let center = state.geofenceCenter {
             state.isLocationWithinGeofence = isWithinGeofence(newest, center: center)
 
             if state.isLocationWithinGeofence {
-                // Update the last geofence enter time if not already set
+                // record time of entry into the geofence
                 if state.lastGeofenceEnterTime == nil {
                     state.lastGeofenceEnterTime = newest.timestamp
                 }
             } else {
-                // Reset the last geofence enter time if the location is outside the geofence
+                // location has slipped out of the geofence
                 state.lastGeofenceEnterTime = nil
             }
         } else {
@@ -100,6 +98,8 @@ actor SleepModeDetector {
     }
 
     private func updateGeofence() {
+        if state.isFrozen { return }
+
         guard let center = sample.weightedCenter() else { return }
 
         state.geofenceCenter = center
@@ -125,10 +125,7 @@ actor SleepModeDetector {
     }
 
     private func isWithinGeofence(_ location: CLLocation, center: CLLocationCoordinate2D) -> Bool {
-        // Calculate the distance between the location and the geofence center
         let distance = location.distance(from: CLLocation(latitude: center.latitude, longitude: center.longitude))
-
-        // Check if the distance is within the geofence radius
         return distance <= state.geofenceRadius
     }
 
