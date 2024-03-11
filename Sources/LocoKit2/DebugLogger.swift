@@ -25,7 +25,7 @@ public class DebugLogger: LoggingFormatAndPipe.Pipe {
         )
     }
 
-    private var hourMarkerTimer: Timer?
+    private var fibMarkerTimer: Timer?
     private var fibn = 1
 
     private init() {
@@ -48,8 +48,8 @@ public class DebugLogger: LoggingFormatAndPipe.Pipe {
 
             print(formattedLogLine)
 
-            self.hourMarkerTimer?.invalidate()
-            self.hourMarkerTimer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(self.fibn)), repeats: false) { _ in
+            self.fibMarkerTimer?.invalidate()
+            self.fibMarkerTimer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(self.fibn)), repeats: false) { _ in
                 Self.logger.info("--\(self.fibn)--")
             }
         }
