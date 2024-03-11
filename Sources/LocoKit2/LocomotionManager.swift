@@ -90,7 +90,9 @@ public final class LocomotionManager {
     // MARK: - State changes
 
     private func startSleeping() {
-        DebugLogger.logger.info("LocomotionManager.startSleeping()")
+        if recordingState != .wakeup {
+            DebugLogger.logger.info("LocomotionManager.startSleeping()")
+        }
 
         sleepLocationManager.startUpdatingLocation()
         sleepLocationManager.startMonitoringSignificantLocationChanges()
@@ -109,8 +111,6 @@ public final class LocomotionManager {
     private func startWakeup() {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
-
-        DebugLogger.logger.info("LocomotionManager.startWakeup()")
 
         locationManager.startUpdatingLocation()
 
