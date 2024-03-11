@@ -229,7 +229,7 @@ public final class LocomotionManager {
     @ObservationIgnored
     private lazy var locationManager: CLLocationManager = {
         let manager = CLLocationManager()
-        manager.distanceFilter = 2
+        manager.distanceFilter = 3
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = false
