@@ -125,7 +125,7 @@ public final class LocomotionManager {
 
     internal func add(location: CLLocation) async {
         if RecordingState.sleepStates.contains(recordingState) {
-            DebugLogger.logger.info("Ignoring location during sleep")
+            print("Ignoring location during sleep")
             return
         }
 
