@@ -19,15 +19,15 @@ public final class TimelineRecorder {
     // MARK: -
 
     public func startRecording() {
-        LocomotionManager.highlander.startRecording()
+        loco.startRecording()
     }
 
     public func stopRecording() {
-        LocomotionManager.highlander.stopRecording()
+        loco.stopRecording()
     }
 
     public var isRecording: Bool {
-        return LocomotionManager.highlander.recordingState != .off
+        return loco.recordingState != .off
     }
 
     public private(set) var mostRecentSample: SampleBase?
