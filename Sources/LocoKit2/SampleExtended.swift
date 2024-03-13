@@ -11,7 +11,6 @@ import GRDB
 struct SampleExtended: Codable, FetchableRecord, PersistableRecord {
     var sampleId: String
     var stepHz: Double?
-    var courseVariance: Double?
     var xyAcceleration: Double?
     var zAcceleration: Double?
 

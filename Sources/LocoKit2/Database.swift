@@ -104,7 +104,6 @@ public class Database {
                 table.column("sampleId", .text).primaryKey()
                     .references("SampleBase", onDelete: .cascade, onUpdate: .cascade, deferred: true)
                 table.column("stepHz", .double)
-                table.column("courseVariance", .double)
                 table.column("xyAcceleration", .double)
                 table.column("zAcceleration", .double)
             }
