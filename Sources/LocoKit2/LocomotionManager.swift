@@ -23,8 +23,9 @@ public final class LocomotionManager {
     public internal(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
 
     public private(set) var rawLocations: [CLLocation] = []
-    public private(set) var oldKLocations: [CLLocation] = []
-    public private(set) var newKLocations: [CLLocation] = []
+    public private(set) var filteredLocations: [CLLocation] = [] 
+    public private(set) var oldKalmanLocations: [CLLocation] = []
+    
     public private(set) var currentMovingState: MovingStateDetails?
     public private(set) var lastKnownMovingState: MovingStateDetails?
     public private(set) var sleepDetectorState: SleepDetectorState?
@@ -122,19 +123,12 @@ public final class LocomotionManager {
 
     // MARK: - Incoming locations handling
 
-    internal func add(location: CLLocation) {
+    internal func add(location: CLLocation) async {
         if RecordingState.sleepStates.contains(recordingState) {
             DebugLogger.logger.info("Ignoring location during sleep")
             return
         }
 
-        Task {
-            await reallyAdd(location: location)
-            await updateTheRecordingState()
-        }
-    }
-    
-    private func reallyAdd(location: CLLocation) async {
         await newKalman.add(location: location)
         oldKalman.add(location: location)
         
@@ -149,14 +143,16 @@ public final class LocomotionManager {
 
         await MainActor.run {
             rawLocations.append(location)
-            newKLocations.append(kalmanLocation)
+            filteredLocations.append(kalmanLocation)
             if let coord = oldKalman.coordinate {
-                oldKLocations.append(CLLocation(latitude: coord.latitude, longitude: coord.longitude))
+                oldKalmanLocations.append(CLLocation(latitude: coord.latitude, longitude: coord.longitude))
             }
             currentMovingState = currentState
             lastKnownMovingState = lastKnownState
             sleepDetectorState = sleepState
         }
+
+        await updateTheRecordingState()
     }
 
     private func updateTheRecordingState() async {
@@ -319,8 +315,10 @@ public final class LocomotionManager {
         }
 
         func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-            for location in locations {
-                parent.add(location: location)
+            Task {
+                for location in locations {
+                    await parent.add(location: location)
+                }
             }
         }
 
