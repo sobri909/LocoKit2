@@ -1,5 +1,5 @@
 //
-//  LocomotionSampleBase.swift
+//  SampleBase.swift
 //
 //
 //  Created by Matt Greenfield on 11/3/24.
@@ -9,7 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct LocomotionSampleBase: Identifiable, Codable, FetchableRecord, PersistableRecord {
+public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRecord {
 
     public var id: String = UUID().uuidString
     public var date: Date
@@ -23,7 +23,7 @@ public struct LocomotionSampleBase: Identifiable, Codable, FetchableRecord, Pers
     public var confirmedType: String?
 
     static let location = hasOne(SampleLocation.self).forKey("location")
-    static let extended = hasOne(LocomotionSampleExtended.self).forKey("extended")
+    static let extended = hasOne(SampleExtended.self).forKey("extended")
 
     // MARK: -
 

@@ -76,7 +76,7 @@ public class Database {
 
     private func addMigrations() {
         migrator.registerMigration("Initial") { db in
-            try db.create(table: "LocomotionSampleBase") { table in
+            try db.create(table: "SampleBase") { table in
                 table.column("id", .text).primaryKey()
                 table.column("date", .datetime).notNull().indexed()
                 table.column("source", .text).notNull().indexed()
@@ -89,7 +89,7 @@ public class Database {
 
             try db.create(table: "SampleLocation") { table in
                 table.column("sampleId", .text).primaryKey()
-                    .references("LocomotionSampleBase", onDelete: .cascade, onUpdate: .cascade, deferred: true)
+                    .references("SampleBase", onDelete: .cascade, onUpdate: .cascade, deferred: true)
                 table.column("timestamp", .datetime).notNull() // hmm. duplicates base.date. not happy
                 table.column("latitude", .double).notNull()
                 table.column("longitude", .double).notNull()
@@ -100,9 +100,9 @@ public class Database {
                 table.column("course", .double).notNull()
             }
 
-            try db.create(table: "LocomotionSampleExtended") { table in
+            try db.create(table: "SampleExtended") { table in
                 table.column("sampleId", .text).primaryKey()
-                    .references("LocomotionSampleBase", onDelete: .cascade, onUpdate: .cascade, deferred: true)
+                    .references("SampleBase", onDelete: .cascade, onUpdate: .cascade, deferred: true)
                 table.column("stepHz", .double)
                 table.column("courseVariance", .double)
                 table.column("xyAcceleration", .double)

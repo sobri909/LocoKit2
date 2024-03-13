@@ -20,9 +20,9 @@ public struct SampleLocation: Codable, FetchableRecord, PersistableRecord {
     let speed: CLLocationSpeed
     let course: CLLocationDirection
 
-    static let base = belongsTo(LocomotionSampleBase.self, key: "sampleId")
+    static let base = belongsTo(SampleBase.self, key: "sampleId")
 
-    init(from location: CLLocation, sampleId: String) {
+    init(sampleId: String, location: CLLocation) {
         self.sampleId = sampleId
         self.timestamp = location.timestamp
         self.latitude = location.coordinate.latitude
