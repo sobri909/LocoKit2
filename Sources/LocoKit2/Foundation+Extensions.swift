@@ -1,7 +1,4 @@
 //
-//  File.swift
-//  
-//
 //  Created by Matt Greenfield on 10/3/24.
 //
 
@@ -51,5 +48,15 @@ extension TimeInterval {
 
     var unit: Measurement<UnitDuration> {
         return Measurement(value: self, unit: UnitDuration.seconds)
+    }
+}
+
+func withContinousObservation<T>(of value: @escaping @autoclosure () -> T, execute: @escaping (T) -> Void) {
+    withObservationTracking {
+        execute(value())
+    } onChange: {
+        Task { @MainActor in
+            withContinousObservation(of: value(), execute: execute)
+        }
     }
 }

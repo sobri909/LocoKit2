@@ -1,7 +1,4 @@
 //
-//  Extensions.swift
-//
-//
 //  Created by Matt Greenfield on 27/2/24.
 //
 
@@ -16,6 +13,46 @@ extension Radians {
 
 extension CLLocationDegrees {
     var radians: Radians { self * .pi / 180.0 }
+}
+
+extension CLLocation {
+    public convenience init(from codable: CodableLocation) {
+        self.init(
+            coordinate: CLLocationCoordinate2D(latitude: codable.latitude, longitude: codable.longitude),
+            altitude: codable.altitude,
+            horizontalAccuracy: codable.horizontalAccuracy,
+            verticalAccuracy: codable.verticalAccuracy,
+            course: codable.course, 
+            speed: codable.speed,
+            timestamp: codable.timestamp
+        )
+    }
+
+    public var codable: CodableLocation {
+        return CodableLocation(self)
+    }
+}
+
+public struct CodableLocation: Codable {
+    let latitude: CLLocationDegrees
+    let longitude: CLLocationDegrees
+    let altitude: CLLocationDistance
+    let horizontalAccuracy: CLLocationAccuracy
+    let verticalAccuracy: CLLocationAccuracy
+    let speed: CLLocationSpeed
+    let course: CLLocationDirection
+    let timestamp: Date
+
+    init(_ location: CLLocation) {
+        self.latitude = location.coordinate.latitude
+        self.longitude = location.coordinate.longitude
+        self.altitude = location.altitude
+        self.horizontalAccuracy = location.horizontalAccuracy
+        self.verticalAccuracy = location.verticalAccuracy
+        self.speed = location.speed
+        self.course = location.course
+        self.timestamp = location.timestamp
+    }
 }
 
 public extension Array where Element: CLLocation {
