@@ -29,6 +29,12 @@ public class DebugLogger: LoggingFormatAndPipe.Pipe {
     private var fibn = 1
 
     private init() {
+        do {
+            try FileManager.default.createDirectory(at: Self.logsDir, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            os_log("Couldn't create logs dir", type: .error)
+        }
+
         let filename = ISO8601DateFormatter.string(
             from: .now, timeZone: TimeZone.current,
             formatOptions: [.withFullDate, .withTime, .withColonSeparatorInTime, .withSpaceBetweenDateAndTime]
