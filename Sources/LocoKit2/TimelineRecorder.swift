@@ -30,7 +30,7 @@ public final class TimelineRecorder {
         return LocomotionManager.highlander.recordingState != .off
     }
 
-    public private(set) var mostRecentSample: LocomotionSampleBase?
+    public private(set) var mostRecentSample: SampleBase?
 
     // MARK: -
 
@@ -48,9 +48,9 @@ public final class TimelineRecorder {
     func nothing() async {
         do {
             let samples = try await Database.pool.read {
-                let request = LocomotionSampleBase
-                    .including(optional: LocomotionSampleBase.location)
-                    .including(optional: LocomotionSampleBase.extended)
+                let request = SampleBase
+                    .including(optional: SampleBase.location)
+                    .including(optional: SampleBase.extended)
                 return try LocomotionSample.fetchAll($0, request)
             }
 
@@ -77,15 +77,19 @@ public final class TimelineRecorder {
         guard let location = loco.filteredLocations.last else { return }
         guard let movingState = loco.currentMovingState else { return }
 
-        let sampleBase = LocomotionSampleBase(date: location.timestamp, movingState: movingState.movingState, recordingState: loco.recordingState)
-        let sampleLocation = SampleLocation(from: location, sampleId: sampleBase.id)
+        let sampleBase = SampleBase(date: location.timestamp, movingState: movingState.movingState, recordingState: loco.recordingState)
+        let sampleLocation = SampleLocation(sampleId: sampleBase.id, location: location)
+        let sampleExtended = SampleExtended(sampleId: sampleBase.id, stepHz: 1)
 
         do {
             try await Database.pool.write {
                 try sampleBase.save($0)
                 try sampleLocation.save($0)
+                try sampleExtended.save($0)
             }
-            
+
+            mostRecentSample = sampleBase
+
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
