@@ -37,7 +37,7 @@ public final class LocomotionManager {
         backgroundSession = CLBackgroundActivitySession()
 
         Task {
-            await stationaryBrain.unfreeze()
+            await stationaryDetector.unfreeze()
             await sleepModeDetector.unfreeze()
 
             await MainActor.run { recordingState = .recording }
@@ -74,8 +74,8 @@ public final class LocomotionManager {
     // MARK: - Private
 
     private var backgroundSession: CLBackgroundActivitySession?
-    private let stationaryBrain = StationaryStateDetector()
     private let kalmanFilter = KalmanFilter()
+    private let stationaryDetector = StationaryStateDetector()
     private let sleepModeDetector = SleepModeDetector()
     private var fallbackUpdateTimer: Timer?
     private var wakeupTimer: Timer?
@@ -102,7 +102,7 @@ public final class LocomotionManager {
         restartTheWakeupTimer()
 
         Task {
-            await stationaryBrain.freeze()
+            await stationaryDetector.freeze()
             await sleepModeDetector.freeze()
         }
     }
@@ -130,10 +130,9 @@ public final class LocomotionManager {
         await kalmanFilter.add(location: location)
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
         
-        
-        await stationaryBrain.add(location: kalmanLocation)
-        let currentState = await stationaryBrain.currentState
-        let lastKnownState = await stationaryBrain.lastKnownState
+        await stationaryDetector.add(location: kalmanLocation)
+        let currentState = await stationaryDetector.currentState
+        let lastKnownState = await stationaryDetector.lastKnownState
 
         await sleepModeDetector.add(location: kalmanLocation)
         let sleepState = await sleepModeDetector.state
