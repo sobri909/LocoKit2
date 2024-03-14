@@ -24,8 +24,7 @@ public final class LocomotionManager {
 
     public private(set) var rawLocations: [CLLocation] = []
     public private(set) var filteredLocations: [CLLocation] = [] 
-    public private(set) var oldKalmanLocations: [CLLocation] = []
-    
+
     public private(set) var currentMovingState: MovingStateDetails?
     public private(set) var lastKnownMovingState: MovingStateDetails?
     public private(set) var sleepDetectorState: SleepDetectorState?
@@ -75,9 +74,8 @@ public final class LocomotionManager {
     // MARK: - Private
 
     private var backgroundSession: CLBackgroundActivitySession?
-    private let newKalman = KalmanFilter()
-    private let oldKalman = KalmanCoordinates(qMetresPerSecond: 4)
     private let stationaryBrain = StationaryStateDetector()
+    private let kalmanFilter = KalmanFilter()
     private let sleepModeDetector = SleepModeDetector()
     private var fallbackUpdateTimer: Timer?
     private var wakeupTimer: Timer?
@@ -129,10 +127,9 @@ public final class LocomotionManager {
             return
         }
 
-        await newKalman.add(location: location)
-        oldKalman.add(location: location)
+        await kalmanFilter.add(location: location)
+        let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
         
-        let kalmanLocation = await newKalman.currentEstimatedLocation()
         
         await stationaryBrain.add(location: kalmanLocation)
         let currentState = await stationaryBrain.currentState
@@ -144,9 +141,6 @@ public final class LocomotionManager {
         await MainActor.run {
             rawLocations.append(location)
             filteredLocations.append(kalmanLocation)
-            if let coord = oldKalman.coordinate {
-                oldKalmanLocations.append(CLLocation(latitude: coord.latitude, longitude: coord.longitude))
-            }
             currentMovingState = currentState
             lastKnownMovingState = lastKnownState
             sleepDetectorState = sleepState
