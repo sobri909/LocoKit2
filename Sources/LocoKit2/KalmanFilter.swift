@@ -119,7 +119,14 @@ internal actor KalmanFilter {
         let metersPerDegreeLongitude = 111_319.9 * cos(stateVector[0, 0].radians)
         let accuracyLongitudeMeters = sqrt(varianceLongitude) * metersPerDegreeLongitude
 
-        return (accuracyLatitudeMeters + accuracyLongitudeMeters) / 2
+        // Calculate the combined horizontal accuracy as a radius
+        let horizontalAccuracyMeters = sqrt(
+            accuracyLatitudeMeters * accuracyLatitudeMeters +
+            accuracyLongitudeMeters * accuracyLongitudeMeters
+        )
+
+        // Apply a scaling factor to estimate the likely radius of the true location
+        return horizontalAccuracyMeters * 2.0
     }
 
     func currentEstimatedCourse() -> CLLocationDegrees {
