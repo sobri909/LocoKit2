@@ -109,7 +109,7 @@ actor SleepModeDetector {
 
         // early exit and simple maths if n = 1
         if sample.count == 1 {
-            state.geofenceRadius = min(max(pow(averageAccuracy, 3), minGeofenceRadius), maxGeofenceRadius)
+            state.geofenceRadius = min(max(pow(averageAccuracy, 2), minGeofenceRadius), maxGeofenceRadius)
             return
         }
 
