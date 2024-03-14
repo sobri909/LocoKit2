@@ -37,17 +37,17 @@ public final class LocomotionManager {
 
         backgroundSession = CLBackgroundActivitySession()
 
-        locationManager.startUpdatingLocation()
-        locationManager.startMonitoringSignificantLocationChanges() 
-        sleepLocationManager.stopUpdatingLocation()
-
-        recordingState = .recording
-
-        restartTheFallbackTimer()
-
         Task {
             await stationaryBrain.unfreeze()
             await sleepModeDetector.unfreeze()
+
+            await MainActor.run { recordingState = .recording }
+
+            locationManager.startUpdatingLocation()
+            locationManager.startMonitoringSignificantLocationChanges()
+            sleepLocationManager.stopUpdatingLocation()
+
+            restartTheFallbackTimer()
         }
     }
 
