@@ -12,8 +12,8 @@ actor SleepModeDetector {
 
     // MARK: - Config
 
-    private let sleepModeDelay: TimeInterval = 120.0 
     private let minGeofenceRadius: CLLocationDistance = 15.0
+    public static let sleepModeDelay: TimeInterval = 120.0
     private let maxGeofenceRadius: CLLocationDistance = 100.0
 
     // MARK: - Public
@@ -56,7 +56,7 @@ actor SleepModeDetector {
         guard let newest = sample.last else { return }
 
         // age out samples older than sleepModeDelay
-        while sample.count > 1, let oldest = sample.first, oldest.timestamp.age > sleepModeDelay {
+        while sample.count > 1, let oldest = sample.first, oldest.timestamp.age > Self.sleepModeDelay {
             sample.removeFirst()
         }
 

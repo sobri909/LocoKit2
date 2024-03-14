@@ -156,7 +156,7 @@ public final class LocomotionManager {
                 sleepDetectorState = sleepState
             }
 
-            if let sleepState = sleepDetectorState, sleepState.durationWithinGeofence >= 120 {
+            if let sleepState = sleepDetectorState, sleepState.durationWithinGeofence >= SleepModeDetector.sleepModeDelay {
                 startSleeping()
             } else {
                 restartTheFallbackTimer()
