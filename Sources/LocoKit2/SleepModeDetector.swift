@@ -12,8 +12,8 @@ actor SleepModeDetector {
 
     // MARK: - Config
 
-    private let minGeofenceRadius: CLLocationDistance = 15.0
     public static let sleepModeDelay: TimeInterval = 120.0
+    private let minGeofenceRadius: CLLocationDistance = 20.0
     private let maxGeofenceRadius: CLLocationDistance = 100.0
 
     // MARK: - Public
@@ -109,7 +109,7 @@ actor SleepModeDetector {
 
         // early exit and simple maths if n = 1
         if sample.count == 1 {
-            state.geofenceRadius = min(max(averageAccuracy * 2, minGeofenceRadius), maxGeofenceRadius)
+            state.geofenceRadius = min(max(pow(averageAccuracy, 3), minGeofenceRadius), maxGeofenceRadius)
             return
         }
 
