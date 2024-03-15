@@ -58,13 +58,13 @@ public final class TimelineRecorder {
 
         let sampleBase = SampleBase(date: location.timestamp, movingState: movingState.movingState, recordingState: loco.recordingState)
         let sampleLocation = SampleLocation(sampleId: sampleBase.id, location: location)
-        let sampleExtended = SampleExtended(sampleId: sampleBase.id, stepHz: 1)
+//        let sampleExtended = SampleExtended(sampleId: sampleBase.id, stepHz: 1)
 
         do {
             try await Database.pool.write {
                 try sampleBase.save($0)
                 try sampleLocation.save($0)
-                try sampleExtended.save($0)
+//                try sampleExtended.save($0)
             }
 
             mostRecentSample = sampleBase
