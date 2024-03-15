@@ -36,11 +36,11 @@ public struct SampleLocation: Codable, FetchableRecord, PersistableRecord {
 
     // MARK: -
 
-    var coordinate: CLLocationCoordinate2D {
+    public var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
-    var clLocation: CLLocation {
+    public var clLocation: CLLocation {
         return CLLocation(
             coordinate: coordinate, altitude: altitude,
             horizontalAccuracy: horizontalAccuracy,

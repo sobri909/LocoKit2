@@ -22,8 +22,8 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
     public var classifiedType: String?
     public var confirmedType: String?
 
-    static let location = hasOne(SampleLocation.self).forKey("location")
-    static let extended = hasOne(SampleExtended.self).forKey("extended")
+    public static let location = hasOne(SampleLocation.self).forKey("location")
+    public static let extended = hasOne(SampleExtended.self).forKey("extended")
 
     // MARK: -
 

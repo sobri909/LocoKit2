@@ -8,11 +8,11 @@
 import Foundation
 import GRDB
 
-struct SampleExtended: Codable, FetchableRecord, PersistableRecord {
-    var sampleId: String
-    var stepHz: Double?
-    var xyAcceleration: Double?
-    var zAcceleration: Double?
+public struct SampleExtended: Codable, FetchableRecord, PersistableRecord {
+    public var sampleId: String
+    public var stepHz: Double?
+    public var xyAcceleration: Double?
+    public var zAcceleration: Double?
 
-    static let base = belongsTo(SampleBase.self, key: "sampleId")
+    public static let base = belongsTo(SampleBase.self, key: "sampleId")
 }

@@ -9,12 +9,12 @@ import Foundation
 import CoreLocation
 import GRDB
 
-struct LocomotionSample: Identifiable, Decodable, FetchableRecord {
-    var base: SampleBase
-    var location: SampleLocation?
-    var extended: SampleExtended?
+public struct LocomotionSample: Identifiable, Decodable, FetchableRecord {
+    public var base: SampleBase
+    public var location: SampleLocation?
+    public var extended: SampleExtended?
 
-    var id: String { base.id }
-    var clLocation: CLLocation? { location?.clLocation }
+    public var id: String { base.id }
+    public var clLocation: CLLocation? { location?.clLocation }
 }
 
