@@ -113,25 +113,17 @@ actor SleepModeDetector {
 
         guard let center = sample.weightedCenter() else { return }
 
+        // updated weighted centre
         state.geofenceCenter = center
 
-        // Calculate the average horizontal accuracy from the sample buffer
+        // average horizontalAccuracy
         let averageAccuracy = sample.reduce(0.0) { $0 + $1.horizontalAccuracy } / Double(sample.count)
 
-        // early exit and simple maths if n = 1
-        guard sample.count > 1 else {
-            state.geofenceRadius = min(max(pow(averageAccuracy, 2), minGeofenceRadius), maxGeofenceRadius)
-            return
+        if sample.count == 1 {
+            state.geofenceRadius = min(max(averageAccuracy * 2, minGeofenceRadius), maxGeofenceRadius)
+        } else {
+            state.geofenceRadius = min(max(averageAccuracy, minGeofenceRadius), maxGeofenceRadius)
         }
-
-        // mean distance from the weighted center
-        let centerLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
-        let totalDistance = sample.reduce(0.0) { $0 + $1.distance(from: centerLocation) }
-        let meanDistance = totalDistance / Double(sample.count)
-
-        // Clamp the geofence radius within the specified range
-        state.geofenceRadius = min(max(averageAccuracy, minGeofenceRadius), maxGeofenceRadius)
-//        state.geofenceRadius = min(max(averageAccuracy + meanDistance, minGeofenceRadius), maxGeofenceRadius)
     }
 
     private func isWithinGeofence(_ location: CLLocation) -> Bool {
