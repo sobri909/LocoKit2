@@ -45,27 +45,6 @@ public final class TimelineRecorder {
         }
     }
 
-    func nothing() async {
-        do {
-            let samples = try await Database.pool.read {
-                let request = SampleBase
-                    .including(optional: SampleBase.location)
-                    .including(optional: SampleBase.extended)
-                return try LocomotionSample.fetchAll($0, request)
-            }
-
-            print("samples: \(samples.count)")
-
-            if let last = samples.last {
-                print("latest.movingSate: \(last.base.movingState.stringValue)")
-                print("latest.coordinate: \(last.location?.coordinate)")
-            }
-
-        } catch {
-            print("\(error)")
-        }
-    }
-
     // MARK: -
 
     private func recordSample() async {
@@ -93,8 +72,6 @@ public final class TimelineRecorder {
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
-
-        await nothing()
     }
 
 }
