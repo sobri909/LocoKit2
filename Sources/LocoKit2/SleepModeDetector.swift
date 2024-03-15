@@ -131,7 +131,8 @@ actor SleepModeDetector {
 
 }
 
-public struct SleepDetectorState {
+@Observable
+public class SleepDetectorState {
     public var isFrozen: Bool = false
     public var geofenceCenter: CLLocationCoordinate2D? = nil
     public var lastGeofenceEnterTime: Date? = nil
