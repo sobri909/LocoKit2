@@ -36,18 +36,15 @@ public final class LocomotionManager {
 
         backgroundSession = CLBackgroundActivitySession()
 
-        Task {
-            await stationaryDetector.unfreeze()
-            await sleepModeDetector.unfreeze()
+        recordingState = .recording
 
-            await MainActor.run { recordingState = .recording }
+        locationManager.startUpdatingLocation()
+        locationManager.startMonitoringSignificantLocationChanges()
+        sleepLocationManager.stopUpdatingLocation()
 
-            locationManager.startUpdatingLocation()
-            locationManager.startMonitoringSignificantLocationChanges()
-            sleepLocationManager.stopUpdatingLocation()
+        restartTheFallbackTimer()
 
-            restartTheFallbackTimer()
-        }
+        Task { await stationaryDetector.unfreeze() }
     }
 
     public func stopRecording() {
@@ -101,10 +98,7 @@ public final class LocomotionManager {
 
         restartTheWakeupTimer()
 
-        Task {
-            await stationaryDetector.freeze()
-            await sleepModeDetector.freeze()
-        }
+        Task { await stationaryDetector.freeze() }
     }
 
     private func startWakeup() {
@@ -149,28 +143,22 @@ public final class LocomotionManager {
     }
 
     private func updateTheRecordingState() async {
+        let sleepState = await sleepModeDetector.state
+        await MainActor.run { sleepDetectorState = sleepState }
+
         switch recordingState {
         case .recording:
-            let sleepState = await sleepModeDetector.state
-            Task { @MainActor in
-                sleepDetectorState = sleepState
-            }
-
-            if let sleepState = sleepDetectorState, sleepState.durationWithinGeofence >= SleepModeDetector.sleepModeDelay {
+            if sleepState.shouldBeSleeping {
                 startSleeping()
             } else {
                 restartTheFallbackTimer()
             }   
 
         case .wakeup:
-            if let sleepState = sleepDetectorState {
-                if sleepState.isLocationWithinGeofence {
-                    startSleeping()
-                } else {
-                    startRecording()
-                }
+            if sleepState.shouldBeSleeping {
+                startSleeping()
             } else {
-                restartTheFallbackTimer()
+                startRecording()
             }
 
         case .sleeping, .deepSleeping:

@@ -22,27 +22,10 @@ actor SleepModeDetector {
 
     func add(location: CLLocation) {
         if state.isFrozen {
-            // if frozen, don't update the geofence, only check if the location is within the geofence
-            if let center = state.geofenceCenter {
-                state.isLocationWithinGeofence = isWithinGeofence(location, center: center)
-            }
-            return
+            updateTheFrozenState(with: location)
+        } else {
+            updateTheUnfrozenState(with: location)
         }
-
-        sample.append(location)
-        sample.sort { $0.timestamp < $1.timestamp }
-
-        updateTheState()
-    }
-
-    func freeze() {
-        state.isFrozen = true
-    }
-
-    func unfreeze() {
-        state.lastGeofenceEnterTime = nil
-        state.isFrozen = false
-        updateTheState()
     }
 
     // MARK: - Private
@@ -50,14 +33,51 @@ actor SleepModeDetector {
     private var sample: [CLLocation] = []
     private var updateTask: Task<(), Never>?
 
-    private func updateTheState() {
+    private func freeze() {
+        state.isFrozen = true
+    }
+
+    private func unfreeze() {
+        state.lastGeofenceEnterTime = nil
+        state.shouldBeSleeping = false
+        state.isFrozen = false
+    }
+
+    private func updateTheFrozenState(with location: CLLocation) {
+        guard state.isFrozen else { return }
+
+        state.isLocationWithinGeofence = isWithinGeofence(location)
+
+        if !state.isLocationWithinGeofence {
+            unfreeze()
+        }
+    }
+
+    private func updateTheUnfrozenState(with location: CLLocation? = nil) {
         if state.isFrozen { return }
+
+        // add the new location
+        if let location {
+            sample.append(location)
+            sample.sort { $0.timestamp < $1.timestamp }
+        }
 
         guard let newest = sample.last else { return }
 
         // age out samples older than sleepModeDelay
         while sample.count > 1, let oldest = sample.first, oldest.timestamp.age > Self.sleepModeDelay {
             sample.removeFirst()
+        }
+
+        // location updates might stall, but need to keep state current
+        defer {
+            updateTask?.cancel()
+            updateTask = Task {
+                try? await Task.sleep(for: .seconds(6))
+                if !Task.isCancelled {
+                    updateTheUnfrozenState()
+                }
+            }
         }
 
         // debug stats
@@ -69,31 +89,22 @@ actor SleepModeDetector {
         // keep the fence current
         updateGeofence()
 
-        // Check if the location is within the geofence
-        if let center = state.geofenceCenter {
-            state.isLocationWithinGeofence = isWithinGeofence(newest, center: center)
+        state.isLocationWithinGeofence = isWithinGeofence(newest)
 
-            if state.isLocationWithinGeofence {
-                // record time of entry into the geofence
-                if state.lastGeofenceEnterTime == nil {
-                    state.lastGeofenceEnterTime = newest.timestamp
-                }
-            } else {
-                // location has slipped out of the geofence
-                state.lastGeofenceEnterTime = nil
+        // make sure lastGeofenceEnterTime is correct
+        if state.isLocationWithinGeofence {
+            if state.lastGeofenceEnterTime == nil {
+                state.lastGeofenceEnterTime = newest.timestamp
             }
         } else {
-            state.isLocationWithinGeofence = false
             state.lastGeofenceEnterTime = nil
         }
 
-        // location updates might stall, but need to keep state current
-        updateTask?.cancel()
-        updateTask = Task {
-            try? await Task.sleep(for: .seconds(6))
-            if !Task.isCancelled {
-                updateTheState()
-            }
+        state.shouldBeSleeping = state.durationWithinGeofence >= Self.sleepModeDelay
+
+        // ensure correct frozen state
+        if state.shouldBeSleeping {
+            freeze()
         }
     }
 
@@ -108,40 +119,43 @@ actor SleepModeDetector {
         let averageAccuracy = sample.reduce(0.0) { $0 + $1.horizontalAccuracy } / Double(sample.count)
 
         // early exit and simple maths if n = 1
-        if sample.count == 1 {
+        guard sample.count > 1 else {
             state.geofenceRadius = min(max(pow(averageAccuracy, 2), minGeofenceRadius), maxGeofenceRadius)
             return
         }
 
-        // Create a single CLLocation instance for the center
+        // mean distance from the weighted center
         let centerLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
-
-        // Calculate the mean distance from the weighted center
         let totalDistance = sample.reduce(0.0) { $0 + $1.distance(from: centerLocation) }
         let meanDistance = totalDistance / Double(sample.count)
 
         // Clamp the geofence radius within the specified range
-        state.geofenceRadius = min(max(averageAccuracy + meanDistance, minGeofenceRadius), maxGeofenceRadius)
+        state.geofenceRadius = min(max(averageAccuracy, minGeofenceRadius), maxGeofenceRadius)
+//        state.geofenceRadius = min(max(averageAccuracy + meanDistance, minGeofenceRadius), maxGeofenceRadius)
     }
 
-    private func isWithinGeofence(_ location: CLLocation, center: CLLocationCoordinate2D) -> Bool {
+    private func isWithinGeofence(_ location: CLLocation) -> Bool {
+        guard let center = state.geofenceCenter else { return false }
         let distance = location.distance(from: CLLocation(latitude: center.latitude, longitude: center.longitude))
         return distance <= state.geofenceRadius
     }
 
 }
 
-@Observable
-public class SleepDetectorState {
+public struct SleepDetectorState {
     public var isFrozen: Bool = false
     public var geofenceCenter: CLLocationCoordinate2D? = nil
+    public var geofenceRadius: CLLocationDistance = 50.0
     public var lastGeofenceEnterTime: Date? = nil
     public var isLocationWithinGeofence: Bool = false
-    public var geofenceRadius: CLLocationDistance = 50.0
+    public var shouldBeSleeping: Bool = false
+
+    // debug bits
     public var sampleDuration: TimeInterval = 0
     public var n: Int = 0
 
     public var durationWithinGeofence: TimeInterval {
-        lastGeofenceEnterTime?.age ?? 0
+        if !isLocationWithinGeofence { return 0 }
+        return lastGeofenceEnterTime?.age ?? 0
     }
 }
