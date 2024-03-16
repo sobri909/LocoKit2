@@ -76,20 +76,23 @@ public class Database {
 
     private func addMigrations() {
         migrator.registerMigration("Initial") { db in
+
+            // MARK: - LocomotionSample
+
             try db.create(table: "SampleBase") { table in
                 table.column("id", .text).primaryKey()
                 table.column("date", .datetime).notNull().indexed()
-                table.column("source", .text).notNull().indexed()
+                table.column("source", .text).notNull()
                 table.column("secondsFromGMT", .integer).notNull()
                 table.column("movingState", .integer).notNull()
                 table.column("recordingState", .integer).notNull()
-                table.column("classifiedType", .text)
-                table.column("confirmedType", .text)
+                table.column("classifiedActivityType", .text)
+                table.column("confirmedActivityType", .text)
             }
 
             try db.create(table: "SampleLocation") { table in
                 table.column("sampleId", .text).primaryKey()
-                    .references("SampleBase", onDelete: .cascade, onUpdate: .cascade, deferred: true)
+                    .references("SampleBase", onDelete: .cascade, deferred: true)
                 table.column("timestamp", .datetime).notNull() // hmm. duplicates base.date. not happy
                 table.column("latitude", .double).notNull()
                 table.column("longitude", .double).notNull()
@@ -102,7 +105,7 @@ public class Database {
 
             try db.create(table: "SampleExtended") { table in
                 table.column("sampleId", .text).primaryKey()
-                    .references("SampleBase", onDelete: .cascade, onUpdate: .cascade, deferred: true)
+                    .references("SampleBase", onDelete: .cascade, deferred: true)
                 table.column("stepHz", .double)
                 table.column("xyAcceleration", .double)
                 table.column("zAcceleration", .double)
