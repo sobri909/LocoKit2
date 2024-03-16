@@ -16,7 +16,7 @@ public final class LocomotionManager {
 
     // MARK: - Public
     
-    public var sleepCycleDuration: TimeInterval = 20
+    public var sleepCycleDuration: TimeInterval = 30
     public var fallbackUpdateDuration: TimeInterval = 6
 
     public private(set) var recordingState: RecordingState = .off
