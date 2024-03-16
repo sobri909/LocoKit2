@@ -19,8 +19,8 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
     public let recordingState: RecordingState
 
     // strings for now, until classifier stuff is ported over
-    public var classifiedType: String?
-    public var confirmedType: String?
+    public var classifiedActivityType: String?
+    public var confirmedActivityType: String?
 
     public static let location = hasOne(SampleLocation.self).forKey("location")
     public static let extended = hasOne(SampleExtended.self).forKey("extended")
@@ -44,8 +44,8 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
         self.source = try container.decode(String.self, forKey: .source)
         self.movingState = try container.decode(MovingState.self, forKey: .movingState)
         self.recordingState = try container.decode(RecordingState.self, forKey: .recordingState)
-        self.classifiedType = try? container.decode(String.self, forKey: .classifiedType)
-        self.confirmedType = try? container.decode(String.self, forKey: .confirmedType)
+        self.classifiedActivityType = try? container.decode(String.self, forKey: .classifiedActivityType)
+        self.confirmedActivityType = try? container.decode(String.self, forKey: .confirmedActivityType)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -56,8 +56,8 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
         try container.encode(source, forKey: .source)
         try container.encode(movingState, forKey: .movingState)
         try container.encode(recordingState, forKey: .recordingState)
-        try container.encode(classifiedType, forKey: .classifiedType)
-        try container.encode(confirmedType, forKey: .confirmedType)
+        try container.encode(classifiedActivityType, forKey: .classifiedActivityType)
+        try container.encode(confirmedActivityType, forKey: .confirmedActivityType)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -67,8 +67,8 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
         case source
         case movingState
         case recordingState
-        case classifiedType
-        case confirmedType
+        case classifiedActivityType
+        case confirmedActivityType
     }
 
     // MARK: - PersistableRecord
@@ -80,8 +80,8 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
         container["secondsFromGMT"] = secondsFromGMT
         container["movingState"] = movingState.rawValue
         container["recordingState"] = recordingState.rawValue
-        container["classifiedType"] = classifiedType
-        container["confirmedType"] = confirmedType
+        container["classifiedActivityType"] = classifiedActivityType
+        container["confirmedActivityType"] = confirmedActivityType
     }
 
 }
