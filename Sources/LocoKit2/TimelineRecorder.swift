@@ -14,8 +14,6 @@ public final class TimelineRecorder {
 
     public static let highlander = TimelineRecorder()
 
-    public var sampleFrequency: TimeInterval = 6
-
     // MARK: -
 
     public func startRecording() {
@@ -49,9 +47,6 @@ public final class TimelineRecorder {
 
     private func recordSample() async {
         guard isRecording else { return }
-
-        // don't record too soon
-        if let lastRecorded = mostRecentSample?.date, lastRecorded.age < sampleFrequency { return }
 
         guard let location = loco.filteredLocations.last else { return }
         guard let movingState = loco.currentMovingState else { return }
