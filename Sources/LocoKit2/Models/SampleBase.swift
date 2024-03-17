@@ -9,7 +9,8 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRecord {
+@Observable
+public class SampleBase: Record, Identifiable, Codable {
 
     public var id: String = UUID().uuidString
     public var date: Date
@@ -17,6 +18,7 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
     public var source: String = "LocoKit"
     public let movingState: MovingState
     public let recordingState: RecordingState
+    public var timelineItemId: String?
 
     // strings for now, until classifier stuff is ported over
     public var classifiedActivityType: String?
@@ -25,6 +27,8 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
     public static let location = hasOne(SampleLocation.self).forKey("location")
     public static let extended = hasOne(SampleExtended.self).forKey("extended")
 
+    public override class var databaseTableName: String { return "SampleBase" }
+
     // MARK: -
 
     public init(date: Date, secondsFromGMT: Int = TimeZone.current.secondsFromGMT(), movingState: MovingState, recordingState: RecordingState) {
@@ -32,48 +36,25 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
         self.secondsFromGMT = secondsFromGMT
         self.movingState = movingState
         self.recordingState = recordingState
+        super.init()
     }
 
-    // MARK: - Codable
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try container.decode(String.self, forKey: .id)
-        self.date = try container.decode(Date.self, forKey: .date)
-        self.secondsFromGMT = try container.decode(Int.self, forKey: .secondsFromGMT)
-        self.source = try container.decode(String.self, forKey: .source)
-        self.movingState = try container.decode(MovingState.self, forKey: .movingState)
-        self.recordingState = try container.decode(RecordingState.self, forKey: .recordingState)
-        self.classifiedActivityType = try? container.decode(String.self, forKey: .classifiedActivityType)
-        self.confirmedActivityType = try? container.decode(String.self, forKey: .confirmedActivityType)
+    required init(row: Row) throws {
+        id = row["id"]
+        date = row["date"]
+        secondsFromGMT = row["secondsFromGMT"]
+        source = row["source"]
+        movingState = MovingState(rawValue: row["movingState"])!
+        recordingState = RecordingState(rawValue: row["recordingState"])!
+        classifiedActivityType = row["classifiedActivityType"]
+        confirmedActivityType = row["confirmedActivityType"]
+        timelineItemId = row["timelineItemId"]
+        try super.init(row: row)
     }
 
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(date, forKey: .date)
-        try container.encode(secondsFromGMT, forKey: .secondsFromGMT)
-        try container.encode(source, forKey: .source)
-        try container.encode(movingState, forKey: .movingState)
-        try container.encode(recordingState, forKey: .recordingState)
-        try container.encode(classifiedActivityType, forKey: .classifiedActivityType)
-        try container.encode(confirmedActivityType, forKey: .confirmedActivityType)
-    }
+    // MARK: - Record
 
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case date
-        case secondsFromGMT
-        case source
-        case movingState
-        case recordingState
-        case classifiedActivityType
-        case confirmedActivityType
-    }
-
-    // MARK: - PersistableRecord
-
-    public func encode(to container: inout PersistenceContainer) {
+    public override func encode(to container: inout PersistenceContainer) {
         container["id"] = id
         container["source"] = source
         container["date"] = date
@@ -82,6 +63,7 @@ public struct SampleBase: Identifiable, Codable, FetchableRecord, PersistableRec
         container["recordingState"] = recordingState.rawValue
         container["classifiedActivityType"] = classifiedActivityType
         container["confirmedActivityType"] = confirmedActivityType
+        container["timelineItemId"] = timelineItemId
     }
 
 }

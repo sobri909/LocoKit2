@@ -9,7 +9,7 @@ import Foundation
 import GRDB
 
 public struct SampleExtended: Codable, FetchableRecord, PersistableRecord {
-    public var sampleId: String
+    public let sampleId: String
     public var stepHz: Double?
     public var xyAcceleration: Double?
     public var zAcceleration: Double?

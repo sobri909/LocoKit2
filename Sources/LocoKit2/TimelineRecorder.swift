@@ -14,7 +14,7 @@ public final class TimelineRecorder {
 
     public static let highlander = TimelineRecorder()
 
-    // MARK: -
+    // MARK: - Public
 
     public func startRecording() {
         loco.startRecording()
@@ -28,9 +28,10 @@ public final class TimelineRecorder {
         return loco.recordingState != .off
     }
 
-    public private(set) var mostRecentSample: SampleBase?
+    // TODO: bootstrap this on startup
+    public private(set) var currentItem: TimelineItemBase?
 
-    // MARK: -
+    // MARK: - Private
 
     private var loco = LocomotionManager.highlander
 
@@ -62,11 +63,61 @@ public final class TimelineRecorder {
 //                try sampleExtended.save($0)
             }
 
-            mostRecentSample = sampleBase
+            await process(sampleBase)
 
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
+    }
+
+    private func process(_ sample: SampleBase) async {
+
+        /** first timeline item **/
+        guard let workingItem = currentItem else {
+            currentItem = await createTimelineItem(from: sample)
+            return
+        }
+
+        let previouslyMoving = !workingItem.isVisit
+        let currentlyMoving = sample.movingState != .stationary
+
+        /** stationary -> moving || moving -> stationary **/
+        if currentlyMoving != previouslyMoving {
+            currentItem = await createTimelineItem(from: sample)
+            return
+        }
+
+        /** stationary -> stationary || moving -> moving **/
+        sample.timelineItemId = workingItem.id
+
+        do {
+            try await Database.pool.write {
+                try sample.save($0)
+            }
+        } catch {
+            DebugLogger.logger.error(error, subsystem: .database)
+        }
+    }
+
+    private func createTimelineItem(from sample: SampleBase) async -> TimelineItemBase {
+        let newItem = TimelineItemBase(from: sample)
+
+        // add the sample
+        sample.timelineItemId = newItem.id
+
+        // keep the list linked
+        newItem.previousItemId = currentItem?.id
+
+        do {
+            try await Database.pool.write {
+                try newItem.save($0)
+                try sample.save($0)
+            }
+        } catch {
+            DebugLogger.logger.error(error, subsystem: .database)
+        }
+
+        return newItem
     }
 
 }
