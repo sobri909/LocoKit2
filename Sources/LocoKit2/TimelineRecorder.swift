@@ -29,7 +29,12 @@ public final class TimelineRecorder {
     }
 
     // TODO: bootstrap this on startup
-    public private(set) var currentItem: TimelineItemBase?
+    public private(set) var currentItemId: String?
+
+    public func currentItem() -> TimelineItemBase? {
+        guard let currentItemId else { return nil }
+        return try? Database.pool.read { try TimelineItemBase.fetchOne($0, id: currentItemId) }
+    }
 
     // MARK: - Private
 
@@ -52,29 +57,31 @@ public final class TimelineRecorder {
         guard let location = loco.filteredLocations.last else { return }
         guard let movingState = loco.currentMovingState else { return }
 
-        let sampleBase = SampleBase(date: location.timestamp, movingState: movingState.movingState, recordingState: loco.recordingState)
-        let sampleLocation = SampleLocation(sampleId: sampleBase.id, location: location)
-//        let sampleExtended = SampleExtended(sampleId: sampleBase.id, stepHz: 1)
+        let sample = LocomotionSample(
+            date: location.timestamp, 
+            movingState: movingState.movingState,
+            recordingState: loco.recordingState,
+            location: location
+        )
 
         do {
             try await Database.pool.write {
-                try sampleBase.save($0)
-                try sampleLocation.save($0)
-//                try sampleExtended.save($0)
+                try sample.save($0)
             }
 
-            await process(sampleBase)
+            await process(sample)
 
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
     }
 
-    private func process(_ sample: SampleBase) async {
+    private func process(_ sample: LocomotionSample) async {
 
         /** first timeline item **/
-        guard let workingItem = currentItem else {
-            currentItem = await createTimelineItem(from: sample)
+        guard let workingItem = currentItem() else {
+            let newItem = await createTimelineItem(from: sample)
+            currentItemId = newItem.id
             return
         }
 
@@ -83,12 +90,15 @@ public final class TimelineRecorder {
 
         /** stationary -> moving || moving -> stationary **/
         if currentlyMoving != previouslyMoving {
-            currentItem = await createTimelineItem(from: sample)
+            let newItem = await createTimelineItem(from: sample, previousItemId: workingItem.id)
+            currentItemId = newItem.id
             return
         }
 
         /** stationary -> stationary || moving -> moving **/
         sample.timelineItemId = workingItem.id
+
+        print("added sample to currentItem")
 
         do {
             try await Database.pool.write {
@@ -99,20 +109,23 @@ public final class TimelineRecorder {
         }
     }
 
-    private func createTimelineItem(from sample: SampleBase) async -> TimelineItemBase {
+    private func createTimelineItem(from sample: LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
         let newItem = TimelineItemBase(from: sample)
 
-        // add the sample
+        // assign the sample
         sample.timelineItemId = newItem.id
 
         // keep the list linked
-        newItem.previousItemId = currentItem?.id
+        newItem.previousItemId = previousItemId
 
         do {
             try await Database.pool.write {
                 try newItem.save($0)
                 try sample.save($0)
             }
+
+            print("createTimelineItem() isVisit: \(newItem.isVisit)")
+
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }

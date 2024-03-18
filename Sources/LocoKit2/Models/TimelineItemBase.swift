@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreLocation
 import GRDB
 
 @Observable
@@ -18,12 +19,22 @@ public class TimelineItemBase: Record, Identifiable, Codable {
     public var source: String = "LocoKit"
     public var deleted = false
 
+    // extended
+    public var stepCount: Int?
+    public var floorsAscended: Int?
+    public var floorsDescended: Int?
+    public var averageAltitude: CLLocationDistance?
+    public var activeEnergyBurned: Double?
+    public var averageHeartRate: Double?
+    public var maxHeartRate: Double?
+
     var dateRange: DateInterval {
         return DateInterval(start: startDate, end: endDate)
     }
 
     public var previousItemId: String? {
         didSet {
+            // TODO: move these to SQL constraints?
             if previousItemId == id { fatalError("Can't link to self") }
             if previousItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
@@ -33,6 +44,7 @@ public class TimelineItemBase: Record, Identifiable, Codable {
 
     public var nextItemId: String? {
         didSet {
+            // TODO: move these to SQL constraints?
             if nextItemId == id { fatalError("Can't link to self") }
             if nextItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
@@ -40,11 +52,15 @@ public class TimelineItemBase: Record, Identifiable, Codable {
         }
     }
 
+    public static let visit = hasOne(TimelineItemVisit.self).forKey("visit")
+    public static let trip = hasOne(TimelineItemTrip.self).forKey("trip")
+    public static let samples = hasMany(LocomotionSample.self).forKey("samples")
+
     public override class var databaseTableName: String { return "TimelineItemBase" }
 
-    // MARK: - 
+    // MARK: - Init
 
-    init(from sample: SampleBase) {
+    init(from sample: LocomotionSample) {
         isVisit = sample.movingState == .stationary
         startDate = sample.date
         endDate = sample.date
@@ -58,6 +74,18 @@ public class TimelineItemBase: Record, Identifiable, Codable {
         startDate = row["startDate"]
         endDate = row["endDate"]
         deleted = row["deleted"]
+
+        previousItemId = row["previousItemId"]
+        nextItemId = row["nextItemId"]
+
+        stepCount = row["stepCount"]
+        floorsAscended = row["floorsAscended"]
+        floorsDescended = row["floorsDescended"]
+        averageAltitude = row["averageAltitude"]
+        activeEnergyBurned = row["activeEnergyBurned"]
+        averageHeartRate = row["averageHeartRate"]
+        maxHeartRate = row["maxHeartRate"]
+
         try super.init(row: row)
     }
 
@@ -70,6 +98,17 @@ public class TimelineItemBase: Record, Identifiable, Codable {
         container["startDate"] = startDate
         container["endDate"] = endDate
         container["deleted"] = deleted
+
+        container["previousItemId"] = previousItemId
+        container["nextItemId"] = nextItemId
+
+        container["stepCount"] = stepCount
+        container["floorsAscended"] = floorsAscended
+        container["floorsDescended"] = floorsDescended
+        container["averageAltitude"] = averageAltitude
+        container["activeEnergyBurned"] = activeEnergyBurned
+        container["averageHeartRate"] = averageHeartRate
+        container["maxHeartRate"] = maxHeartRate
     }
 
 }

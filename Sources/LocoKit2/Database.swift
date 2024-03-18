@@ -30,7 +30,12 @@ public class Database {
 
     // MARK: - Migrations
 
-    private var migrator = DatabaseMigrator()
+    private lazy var migrator = {
+        var migrator = DatabaseMigrator()
+        // TODO: remove this after schema is stable!
+        migrator.eraseDatabaseOnSchemaChange = true
+        return migrator
+    }()
 
     public func doMigrations() {
         addMigrations()
@@ -103,11 +108,6 @@ public class Database {
                 table.column("nextItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
                     .check(sql: "nextItemId != id AND (nextItemId IS NULL OR deleted = 0)")
-            }
-
-            try db.create(table: "TimelineItemExtended") { table in
-                table.column("itemId", .text).primaryKey()
-                    .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
                 table.column("stepCount", .integer)
                 table.column("floorsAscended", .integer)
@@ -144,46 +144,36 @@ public class Database {
 
             // MARK: - LocomotionSample
 
-            try db.create(table: "SampleBase") { table in
+            try db.create(table: "LocomotionSample") { table in
                 table.column("id", .text).primaryKey()
                 table.column("date", .datetime).notNull().indexed()
                 table.column("source", .text).notNull()
                 table.column("secondsFromGMT", .integer).notNull()
                 table.column("movingState", .integer).notNull()
                 table.column("recordingState", .integer).notNull()
-                table.column("classifiedActivityType", .text)
-                table.column("confirmedActivityType", .text)
 
                 table.column("timelineItemId", .text)
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
-            }
 
-            try db.create(table: "SampleLocation") { table in
-                table.column("sampleId", .text).primaryKey()
-                    .references("SampleBase", onDelete: .cascade, deferred: true)
+                // CLLocation
+                table.column("latitude", .double)
+                table.column("longitude", .double)
+                table.column("altitude", .double)
+                table.column("horizontalAccuracy", .double)
+                table.column("verticalAccuracy", .double)
+                table.column("speed", .double)
+                table.column("course", .double)
+                
+                table.column("classifiedActivityType", .text)
+                table.column("confirmedActivityType", .text)
 
-                table.column("timestamp", .datetime).notNull() // hmm. duplicates base.date. not happy
-                table.column("latitude", .double).notNull()
-                table.column("longitude", .double).notNull()
-                table.column("altitude", .double).notNull()
-                table.column("horizontalAccuracy", .double).notNull()
-                table.column("verticalAccuracy", .double).notNull()
-                table.column("speed", .double).notNull()
-                table.column("course", .double).notNull()
-            }
-
-            try db.create(table: "SampleExtended") { table in
-                table.column("sampleId", .text).primaryKey()
-                    .references("SampleBase", onDelete: .cascade, deferred: true)
-
+                // motion sensor data
                 table.column("stepHz", .double)
                 table.column("xyAcceleration", .double)
                 table.column("zAcceleration", .double)
             }
 
-            // TODO: if all LocomotionSampleExtended values are nil, delete the row?
-
-            // TODO: r-tree index for SampleLocation
+            // TODO: r-tree index for LocomotionSample
 
             let trigger1 = """
                 CREATE TRIGGER SampleBase_INSERT_TimelineItem_DatesOnAssign
