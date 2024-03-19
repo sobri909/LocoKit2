@@ -139,4 +139,82 @@ public class LocomotionSample: Record, Identifiable, Codable {
         container["zAcceleration"] = zAcceleration
     }
 
+    // MARK: - Codable
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case date
+        case secondsFromGMT
+        case source
+        case movingState
+        case recordingState
+        
+        case timelineItemId
+
+        case latitude 
+        case longitude
+        case  altitude
+        case horizontalAccuracy
+        case verticalAccuracy
+        case speed
+        case course
+
+        case classifiedActivityType 
+        case confirmedActivityType
+        
+        case stepHz
+        case xyAcceleration
+        case zAcceleration
+    }
+
+    required public init(from decoder: any Decoder) throws {
+        let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
+        
+        self.id = try container.decode(String.self, forKey: CodingKeys.id)
+        self.date = try container.decode(Date.self, forKey: CodingKeys.date)
+        self.secondsFromGMT = try container.decode(Int.self, forKey: CodingKeys.secondsFromGMT)
+        self.source = try container.decode(String.self, forKey: CodingKeys.source)
+        self.movingState = try container.decode(MovingState.self, forKey: CodingKeys.movingState)
+        self.recordingState = try container.decode(RecordingState.self, forKey: CodingKeys.recordingState)
+        self.timelineItemId = try container.decodeIfPresent(String.self, forKey: CodingKeys.timelineItemId)
+        self.latitude = try container.decodeIfPresent(CLLocationDegrees.self, forKey: CodingKeys.latitude)
+        self.longitude = try container.decodeIfPresent(CLLocationDegrees.self, forKey: CodingKeys.longitude)
+        self.altitude = try container.decodeIfPresent(CLLocationDistance.self, forKey: CodingKeys.altitude)
+        self.horizontalAccuracy = try container.decodeIfPresent(CLLocationAccuracy.self, forKey: CodingKeys.horizontalAccuracy)
+        self.verticalAccuracy = try container.decodeIfPresent(CLLocationAccuracy.self, forKey: CodingKeys.verticalAccuracy)
+        self.speed = try container.decodeIfPresent(CLLocationSpeed.self, forKey: CodingKeys.speed)
+        self.course = try container.decodeIfPresent(CLLocationDirection.self, forKey: CodingKeys.course)
+        self.classifiedActivityType = try container.decodeIfPresent(String.self, forKey: CodingKeys.classifiedActivityType)
+        self.confirmedActivityType = try container.decodeIfPresent(String.self, forKey: CodingKeys.confirmedActivityType)
+        self.stepHz = try container.decodeIfPresent(Double.self, forKey: CodingKeys.stepHz)
+        self.xyAcceleration = try container.decodeIfPresent(Double.self, forKey: CodingKeys.xyAcceleration)
+        self.zAcceleration = try container.decodeIfPresent(Double.self, forKey: CodingKeys.zAcceleration)
+
+        super.init()
+    }
+    
+    public func encode(to encoder: any Encoder) throws {
+        var container: KeyedEncodingContainer<CodingKeys> = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(self.id, forKey: CodingKeys.id)
+        try container.encode(self.date, forKey: CodingKeys.date)
+        try container.encode(self.secondsFromGMT, forKey: CodingKeys.secondsFromGMT)
+        try container.encode(self.source, forKey: CodingKeys.source)
+        try container.encode(self.movingState, forKey: CodingKeys.movingState)
+        try container.encode(self.recordingState, forKey: CodingKeys.recordingState)
+        try container.encodeIfPresent(self.timelineItemId, forKey: CodingKeys.timelineItemId)
+        try container.encodeIfPresent(self.latitude, forKey: CodingKeys.latitude)
+        try container.encodeIfPresent(self.longitude, forKey: CodingKeys.longitude)
+        try container.encodeIfPresent(self.altitude, forKey: CodingKeys.altitude)
+        try container.encodeIfPresent(self.horizontalAccuracy, forKey: CodingKeys.horizontalAccuracy)
+        try container.encodeIfPresent(self.verticalAccuracy, forKey: CodingKeys.verticalAccuracy)
+        try container.encodeIfPresent(self.speed, forKey: CodingKeys.speed)
+        try container.encodeIfPresent(self.course, forKey: CodingKeys.course)
+        try container.encodeIfPresent(self.classifiedActivityType, forKey: CodingKeys.classifiedActivityType)
+        try container.encodeIfPresent(self.confirmedActivityType, forKey: CodingKeys.confirmedActivityType)
+        try container.encodeIfPresent(self.stepHz, forKey: CodingKeys.stepHz)
+        try container.encodeIfPresent(self.xyAcceleration, forKey: CodingKeys.xyAcceleration)
+        try container.encodeIfPresent(self.zAcceleration, forKey: CodingKeys.zAcceleration)
+    }
+
 }
