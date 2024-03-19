@@ -103,6 +103,10 @@ public class LocomotionSample: Record, Identifiable, Codable {
 
         classifiedActivityType = row["classifiedActivityType"]
         confirmedActivityType = row["confirmedActivityType"]
+        
+        stepHz = row["stepHz"]
+        xyAcceleration = row["xyAcceleration"]
+        zAcceleration = row["zAcceleration"]
 
         try super.init(row: row)
     }
@@ -129,6 +133,10 @@ public class LocomotionSample: Record, Identifiable, Codable {
 
         container["classifiedActivityType"] = classifiedActivityType
         container["confirmedActivityType"] = confirmedActivityType
+        
+        container["stepHz"] = stepHz
+        container["xyAcceleration"] = xyAcceleration
+        container["zAcceleration"] = zAcceleration
     }
 
 }
