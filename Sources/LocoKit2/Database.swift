@@ -175,65 +175,70 @@ public class Database {
 
             // TODO: r-tree index for LocomotionSample
 
-            let trigger1 = """
-                CREATE TRIGGER SampleBase_INSERT_TimelineItem_DatesOnAssign
-                AFTER INSERT ON SampleBase
+            // MARK: - Triggers
+
+            // update startDate and endDate on sample insert
+            try db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_INSERT_TimelineItem_DateRangeOnAssign
+                AFTER INSERT ON LocomotionSample
                 WHEN NEW.timelineItemId IS NOT NULL
                 BEGIN
                     UPDATE TimelineItemBase
                     SET startDate = (
                         SELECT MIN(date)
-                        FROM SampleBase
+                        FROM LocomotionSample
                         WHERE timelineItemId = NEW.timelineItemId
                     ),
                     endDate = (
                         SELECT MAX(date)
-                        FROM SampleBase
+                        FROM LocomotionSample
                         WHERE timelineItemId = NEW.timelineItemId
                     )
                     WHERE id = NEW.timelineItemId;
                 END;
-                """
+                """)
 
-            let trigger2 = """
-                CREATE TRIGGER SampleBase_UPDATE_TimelineItem_DatesOnAssign
-                AFTER UPDATE OF timelineItemId ON SampleBase
-                WHEN OLD.timelineItemId IS NULL OR OLD.timelineItemId != NEW.timelineItemId
+            // update startDate and endDate on sample assign
+            try db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_UPDATE_TimelineItem_DateRangeOnAssign
+                AFTER UPDATE OF timelineItemId ON LocomotionSample
+                WHEN NEW.timelineItemId IS NOT NULL AND (OLD.timelineItemId IS NULL OR OLD.timelineItemId != NEW.timelineItemId)
                 BEGIN
                     UPDATE TimelineItemBase
                     SET startDate = (
                         SELECT MIN(date)
-                        FROM SampleBase
+                        FROM LocomotionSample
                         WHERE timelineItemId = NEW.timelineItemId
                     ),
                     endDate = (
                         SELECT MAX(date)
-                        FROM SampleBase
+                        FROM LocomotionSample
                         WHERE timelineItemId = NEW.timelineItemId
                     )
                     WHERE id = NEW.timelineItemId;
                 END;
-                """
+                """)
 
-            let trigger3 = """
-                CREATE TRIGGER SampleBase_UPDATE_TimelineItem_DatesOnUnassign
-                AFTER UPDATE OF timelineItemId ON SampleBase
-                WHEN OLD.timelineItemId IS NOT NULL AND NEW.timelineItemId IS NULL
+            // update startDate and endDate on sample unassign
+            try db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_UPDATE_TimelineItem_DateRangeOnUnassign
+                AFTER UPDATE OF timelineItemId ON LocomotionSample
+                WHEN OLD.timelineItemId IS NOT NULL AND (NEW.timelineItemId IS NULL OR OLD.timelineItemId != NEW.timelineItemId)
                 BEGIN
                     UPDATE TimelineItemBase
                     SET startDate = (
                         SELECT MIN(date)
-                        FROM SampleBase
+                        FROM LocomotionSample
                         WHERE timelineItemId = OLD.timelineItemId
                     ),
                     endDate = (
                         SELECT MAX(date)
-                        FROM SampleBase
+                        FROM LocomotionSample
                         WHERE timelineItemId = OLD.timelineItemId
                     )
                     WHERE id = OLD.timelineItemId;
                 END;
-                """
+                """)
         }
     }
 
