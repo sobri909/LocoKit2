@@ -102,7 +102,7 @@ public final class TimelineRecorder {
 
         do {
             try await Database.pool.write {
-                try sample.save($0)
+                _ = try sample.updateChanges($0)
             }
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
