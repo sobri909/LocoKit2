@@ -121,7 +121,7 @@ public final class TimelineRecorder {
         do {
             try await Database.pool.write {
                 try newItem.save($0)
-                try sample.save($0)
+                _ = try sample.updateChanges($0)
             }
 
             print("createTimelineItem() isVisit: \(newItem.isVisit)")
