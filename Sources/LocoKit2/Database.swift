@@ -152,7 +152,7 @@ public class Database {
                 table.column("movingState", .integer).notNull()
                 table.column("recordingState", .integer).notNull()
 
-                table.column("timelineItemId", .text)
+                table.column("timelineItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
 
                 // CLLocation
