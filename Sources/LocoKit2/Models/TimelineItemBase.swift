@@ -28,7 +28,7 @@ public class TimelineItemBase: Record, Identifiable, Codable {
     public var averageHeartRate: Double?
     public var maxHeartRate: Double?
 
-    var dateRange: DateInterval {
+    public var dateRange: DateInterval {
         return DateInterval(start: startDate, end: endDate)
     }
 
