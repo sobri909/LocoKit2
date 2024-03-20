@@ -67,6 +67,8 @@ public class TimelineItemBase: Record, Identifiable, Codable {
         super.init()
     }
     
+    // MARK: - Record
+
     required init(row: Row) throws {
         id = row["id"]
         source = row["source"]
@@ -88,8 +90,6 @@ public class TimelineItemBase: Record, Identifiable, Codable {
 
         try super.init(row: row)
     }
-
-    // MARK: - Record
 
     public override func encode(to container: inout PersistenceContainer) {
         container["id"] = id

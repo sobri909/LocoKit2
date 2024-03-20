@@ -122,10 +122,11 @@ public class Database {
                 table.column("itemId", .text).primaryKey()
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
-                table.column("radiusMean", .double).notNull()
-                table.column("radiusSD", .double).notNull()
+                table.column("isStale", .boolean).notNull()
                 table.column("latitude", .double).notNull()
                 table.column("longitude", .double).notNull()
+                table.column("radiusMean", .double).notNull()
+                table.column("radiusSD", .double).notNull()
 
                 table.column("placeId", .text).indexed()
                     .references("Place", onDelete: .setNull, deferred: true)

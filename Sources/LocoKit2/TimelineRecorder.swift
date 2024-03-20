@@ -28,12 +28,17 @@ public final class TimelineRecorder {
         return loco.recordingState != .off
     }
 
-    // TODO: bootstrap this on startup
     public private(set) var currentItemId: String?
 
-    public func currentItem() -> TimelineItemBase? {
+    public func currentItem() -> TimelineItem? {
         guard let currentItemId else { return nil }
-        return try? Database.pool.read { try TimelineItemBase.fetchOne($0, id: currentItemId) }
+        return try? Database.pool.read {
+            let request = TimelineItemBase
+                .including(optional: TimelineItemBase.visit)
+                .including(optional: TimelineItemBase.trip)
+                .filter(Column("id") == currentItemId)
+            return try TimelineItem.fetchOne($0, request)
+        }
     }
 
     // MARK: - Private
@@ -44,6 +49,14 @@ public final class TimelineRecorder {
     private var observers: Set<AnyCancellable> = []
 
     private init() {
+        self.currentItemId = try? Database.pool.read {
+            try TimelineItemBase
+                .filter(Column("deleted") == false)
+                .order(Column("endDate").desc)
+                .selectPrimaryKey()
+                .fetchOne($0)
+        }
+
         withContinousObservation(of: LocomotionManager.highlander.filteredLocations) { _ in
             Task { await self.recordSample() }
         }
@@ -80,18 +93,18 @@ public final class TimelineRecorder {
 
         /** first timeline item **/
         guard let workingItem = currentItem() else {
-            let newItem = await createTimelineItem(from: sample)
-            currentItemId = newItem.id
+            let newItemBase = await createTimelineItem(from: sample)
+            currentItemId = newItemBase.id
             return
         }
 
-        let previouslyMoving = !workingItem.isVisit
+        let previouslyMoving = !workingItem.base.isVisit
         let currentlyMoving = sample.movingState != .stationary
 
         /** stationary -> moving || moving -> stationary **/
         if currentlyMoving != previouslyMoving {
-            let newItem = await createTimelineItem(from: sample, previousItemId: workingItem.id)
-            currentItemId = newItem.id
+            let newItemBase = await createTimelineItem(from: sample, previousItemId: workingItem.id)
+            currentItemId = newItemBase.id
             return
         }
 
@@ -100,9 +113,13 @@ public final class TimelineRecorder {
 
         print("added sample to currentItem")
 
+        // visit coordinate and radius need recalc
+        workingItem.visit?.isStale = true
+
         do {
             try await Database.pool.write {
                 _ = try sample.updateChanges($0)
+                _ = try workingItem.visit?.updateChanges($0)
             }
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
@@ -118,9 +135,17 @@ public final class TimelineRecorder {
         // keep the list linked
         newItem.previousItemId = previousItemId
 
+        let newVisit: TimelineItemVisit?
+        if newItem.isVisit {
+            newVisit = TimelineItemVisit(itemId: newItem.id, samples: [sample])
+        } else {
+            newVisit = nil
+        }
+
         do {
             try await Database.pool.write {
                 try newItem.save($0)
+                try newVisit?.save($0)
                 _ = try sample.updateChanges($0)
             }
 
