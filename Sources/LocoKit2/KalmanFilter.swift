@@ -230,14 +230,3 @@ internal actor KalmanFilter {
 
 }
 
-extension CLLocation {
-    var invalidVelocity: Bool {
-        course < 0 || speed < 0 || courseAccuracy < 0 || speedAccuracy < 0
-    }
-}
-
-extension CLLocationCoordinate2D {
-    var isUsable: Bool { !isNullIsland && isValid }
-    var isNullIsland: Bool { latitude == 0 && longitude == 0 }
-    var isValid: Bool { CLLocationCoordinate2DIsValid(self) }
-}

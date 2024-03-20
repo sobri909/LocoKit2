@@ -15,8 +15,8 @@ extension CLLocationDegrees {
     var radians: Radians { self * .pi / 180.0 }
 }
 
-extension CLLocation {
-    public convenience init(from codable: CodableLocation) {
+public extension CLLocation {
+    convenience init(from codable: CodableLocation) {
         self.init(
             coordinate: CLLocationCoordinate2D(latitude: codable.latitude, longitude: codable.longitude),
             altitude: codable.altitude,
@@ -28,9 +28,19 @@ extension CLLocation {
         )
     }
 
-    public var codable: CodableLocation {
+    var codable: CodableLocation {
         return CodableLocation(self)
     }
+
+    var invalidVelocity: Bool {
+        course < 0 || speed < 0 || courseAccuracy < 0 || speedAccuracy < 0
+    }
+}
+
+public extension CLLocationCoordinate2D {
+    var isUsable: Bool { !isNullIsland && isValid }
+    var isNullIsland: Bool { latitude == 0 && longitude == 0 }
+    var isValid: Bool { CLLocationCoordinate2DIsValid(self) }
 }
 
 public struct CodableLocation: Codable {
@@ -56,16 +66,24 @@ public struct CodableLocation: Codable {
 }
 
 public extension Array where Element: CLLocation {
+
     func weightedCenter() -> CLLocationCoordinate2D? {
-        if self.isEmpty { return nil }
-        if self.count == 1 { return first?.coordinate }
+        let usableLocations = self.compactMap { $0.coordinate.isUsable ? $0 : nil }
+
+        if usableLocations.isEmpty {
+            return nil
+        }
+        
+        if usableLocations.count == 1 {
+            return usableLocations.first?.coordinate
+        }
 
         var sumX: Double = 0
         var sumY: Double = 0
         var sumZ: Double = 0
         var totalWeight: Double = 0
 
-        for location in self {
+        for location in usableLocations {
             let latitude = location.coordinate.latitude.radians
             let longitude = location.coordinate.longitude.radians
             let weight = 1 / (location.horizontalAccuracy * location.horizontalAccuracy)
@@ -90,4 +108,23 @@ public extension Array where Element: CLLocation {
 
         return CLLocationCoordinate2D(latitude: averageLatitude, longitude: averageLongitude)
     }
+
+    func radius(from center: CLLocation) -> Radius {
+        let usableLocations = self.compactMap { $0.coordinate.isUsable ? $0 : nil }
+
+        if usableLocations.isEmpty {
+            return .zero
+        }
+        
+        if usableLocations.count == 1 {
+            if let accuracy = usableLocations.first?.horizontalAccuracy, accuracy >= 0 {
+                return Radius(mean: accuracy, sd: 0)
+            }
+            return .zero
+        }
+
+        let distances = usableLocations.map { $0.distance(from: center) }
+        return Radius(mean: distances.mean, sd: distances.standardDeviation)
+    }
+
 }

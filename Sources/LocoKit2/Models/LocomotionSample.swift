@@ -218,3 +218,11 @@ public class LocomotionSample: Record, Identifiable, Codable {
     }
 
 }
+
+// MARK: - Arrays
+
+public extension Array where Element: LocomotionSample {
+    func radius(from center: CLLocation) -> Radius {
+        return compactMap { $0.location }.radius(from: center)
+    }
+}

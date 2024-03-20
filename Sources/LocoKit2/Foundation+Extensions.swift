@@ -93,3 +93,17 @@ extension Calendar {
 extension DateInterval {
     var range: ClosedRange<Date> { start...end }
 }
+
+extension Array where Element: BinaryFloatingPoint {
+    var mean: Element {
+        guard !isEmpty else { return 0 }
+        return reduce(0, +) / Element(count)
+    }
+
+    var standardDeviation: Element {
+        guard count > 1 else { return 0 }
+        let mean = self.mean
+        let sumOfSquaredDifferences = reduce(0) { $0 + (($1 - mean) * ($1 - mean)) }
+        return sqrt(sumOfSquaredDifferences / Element(count - 1))
+    }
+}
