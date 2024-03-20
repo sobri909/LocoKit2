@@ -68,7 +68,7 @@ public final class TimelineRecorder {
         guard isRecording else { return }
 
         guard let location = loco.filteredLocations.last else { return }
-        guard let movingState = loco.currentMovingState else { return }
+        guard let movingState = loco.movingStateDetails else { return }
 
         let sample = LocomotionSample(
             date: location.timestamp, 

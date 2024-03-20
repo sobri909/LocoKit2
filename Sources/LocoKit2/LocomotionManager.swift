@@ -25,8 +25,7 @@ public final class LocomotionManager {
     public private(set) var rawLocations: [CLLocation] = []
     public private(set) var filteredLocations: [CLLocation] = [] 
 
-    public private(set) var currentMovingState: MovingStateDetails?
-    public private(set) var lastKnownMovingState: MovingStateDetails?
+    public private(set) var movingStateDetails: MovingStateDetails?
     public private(set) var sleepDetectorState: SleepDetectorState?
 
     // MARK: -
@@ -125,8 +124,7 @@ public final class LocomotionManager {
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
         
         await stationaryDetector.add(location: kalmanLocation)
-        let currentState = await stationaryDetector.currentState
-        let lastKnownState = await stationaryDetector.lastKnownState
+        let movingState = await stationaryDetector.currentState
 
         await sleepModeDetector.add(location: kalmanLocation)
         let sleepState = await sleepModeDetector.state
@@ -134,8 +132,7 @@ public final class LocomotionManager {
         await MainActor.run {
             rawLocations.append(location)
             filteredLocations.append(kalmanLocation)
-            currentMovingState = currentState
-            lastKnownMovingState = lastKnownState
+            movingStateDetails = movingState
             sleepDetectorState = sleepState
         }
 
