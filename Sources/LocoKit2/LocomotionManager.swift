@@ -140,8 +140,12 @@ public final class LocomotionManager {
     }
 
     private func updateTheRecordingState() async {
+        let movingState = await stationaryDetector.currentState
         let sleepState = await sleepModeDetector.state
-        await MainActor.run { sleepDetectorState = sleepState }
+        await MainActor.run {
+            movingStateDetails = movingState
+            sleepDetectorState = sleepState
+        }
 
         switch recordingState {
         case .recording:
