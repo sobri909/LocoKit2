@@ -38,14 +38,13 @@ public class TimelineItemVisit: Record, Codable {
     // MARK: -
 
     public func update(from samples: [LocomotionSample]) {
-        let usableLocations = samples.compactMap { $0.location?.coordinate.isUsable == true ? $0.location : nil }
+        let usableLocations = samples.compactMap { $0.location }.usableLocations()
 
         guard let coordinate = usableLocations.weightedCenter() else {
             return
         }
 
         self.isStale = false
-        
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
@@ -53,13 +52,12 @@ public class TimelineItemVisit: Record, Codable {
         let radius = usableLocations.radius(from: center)
         self.radiusMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
         self.radiusSD = min(radius.sd, Self.maxRadius)
-
     }
 
     // MARK: - Init
 
     init?(itemId: String, samples: [LocomotionSample]) {
-        let usableLocations = samples.compactMap { $0.location?.coordinate.isUsable == true ? $0.location : nil }
+        let usableLocations = samples.compactMap { $0.location }.usableLocations()
 
         guard let coordinate = usableLocations.weightedCenter() else {
             return nil
@@ -67,7 +65,6 @@ public class TimelineItemVisit: Record, Codable {
 
         self.itemId = itemId
         self.isStale = false
-
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 

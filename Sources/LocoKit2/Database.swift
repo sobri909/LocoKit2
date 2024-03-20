@@ -138,6 +138,7 @@ public class Database {
                 table.column("itemId", .text).primaryKey()
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
+                table.column("isStale", .boolean).notNull()
                 table.column("distance", .double).notNull()
                 table.column("classifiedActivityType", .text)
                 table.column("confirmedActivityType", .text)

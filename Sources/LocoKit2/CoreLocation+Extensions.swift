@@ -67,8 +67,33 @@ public struct CodableLocation: Codable {
 
 public extension Array where Element: CLLocation {
 
+    func usableLocations() -> [CLLocation] {
+        return compactMap { $0.coordinate.isUsable ? $0 : nil }
+    }
+
+    func distance() -> CLLocationDistance? {
+        let usableLocations = self.usableLocations()
+
+        if usableLocations.isEmpty {
+            return nil
+        }
+
+        if usableLocations.count == 1 {
+            return 0
+        }
+
+        var totalDistance: CLLocationDistance = 0
+        for index in 1..<usableLocations.count {
+            let previous = usableLocations[index - 1]
+            let current = usableLocations[index]
+            totalDistance += current.distance(from: previous)
+        }
+
+        return totalDistance
+    }
+
     func weightedCenter() -> CLLocationCoordinate2D? {
-        let usableLocations = self.compactMap { $0.coordinate.isUsable ? $0 : nil }
+        let usableLocations = self.usableLocations()
 
         if usableLocations.isEmpty {
             return nil
@@ -110,7 +135,7 @@ public extension Array where Element: CLLocation {
     }
 
     func radius(from center: CLLocation) -> Radius {
-        let usableLocations = self.compactMap { $0.coordinate.isUsable ? $0 : nil }
+        let usableLocations = self.usableLocations()
 
         if usableLocations.isEmpty {
             return .zero

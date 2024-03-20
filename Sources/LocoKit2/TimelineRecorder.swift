@@ -98,7 +98,7 @@ public final class TimelineRecorder {
             return
         }
 
-        let previouslyMoving = !workingItem.base.isVisit
+        let previouslyMoving = !workingItem.isVisit
         let currentlyMoving = sample.movingState != .stationary
 
         /** stationary -> moving || moving -> stationary **/
@@ -111,15 +111,17 @@ public final class TimelineRecorder {
         /** stationary -> stationary || moving -> moving **/
         sample.timelineItemId = workingItem.id
 
-        print("added sample to currentItem")
+        print("added sample to currentItem (isVisit: \(workingItem.isVisit))")
 
-        // visit coordinate and radius need recalc
+        // computed values need recalc
         workingItem.visit?.isStale = true
+        workingItem.trip?.isStale = true
 
         do {
             try await Database.pool.write {
                 _ = try sample.updateChanges($0)
                 _ = try workingItem.visit?.updateChanges($0)
+                _ = try workingItem.trip?.updateChanges($0)
             }
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
@@ -136,9 +138,13 @@ public final class TimelineRecorder {
         newItem.previousItemId = previousItemId
 
         let newVisit: TimelineItemVisit?
+        let newTrip: TimelineItemTrip?
+        
         if newItem.isVisit {
             newVisit = TimelineItemVisit(itemId: newItem.id, samples: [sample])
+            newTrip = nil
         } else {
+            newTrip = TimelineItemTrip(itemId: newItem.id, samples: [sample])
             newVisit = nil
         }
 
@@ -146,6 +152,7 @@ public final class TimelineRecorder {
             try await Database.pool.write {
                 try newItem.save($0)
                 try newVisit?.save($0)
+                try newTrip?.save($0)
                 _ = try sample.updateChanges($0)
             }
 

@@ -16,6 +16,7 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
     public let samples: [LocomotionSample]?
 
     public var id: String { base.id }
+    public var isVisit: Bool { base.isVisit }
 
     public func updateVisit() async {
         guard let samples, let visit, visit.isStale else { return }
@@ -26,6 +27,21 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
         do {
             try await Database.pool.write {
                 _ = try visit.updateChanges($0)
+            }
+        } catch {
+            DebugLogger.logger.error(error, subsystem: .database)
+        }
+    }
+
+    public func updateTrip() async {
+        guard let samples, let trip, trip.isStale else { return }
+
+        print("updateTrip() itemId: \(id)")
+
+        trip.update(from: samples)
+        do {
+            try await Database.pool.write {
+                _ = try trip.updateChanges($0)
             }
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
@@ -45,10 +61,7 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
     // MARK: - Codable
 
     enum CodingKeys: CodingKey {
-        case base
-        case visit
-        case trip
-        case samples
+        case base, visit, trip, samples
     }
     
     public required init(from decoder: any Decoder) throws {
@@ -58,6 +71,9 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
         self.trip = try container.decodeIfPresent(TimelineItemTrip.self, forKey: CodingKeys.trip)
         self.samples = try container.decodeIfPresent([LocomotionSample].self, forKey: CodingKeys.samples)
 
-        Task { await updateVisit() }
+        Task {
+            await updateVisit()
+            await updateTrip()
+        }
     }
 }
