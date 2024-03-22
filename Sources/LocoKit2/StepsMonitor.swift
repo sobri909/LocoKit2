@@ -25,7 +25,6 @@ public actor StepsMonitor {
             }
 
             if let pedometerData {
-                print("CMPedometerHandler pedometerData: \(pedometerData)")
                 Task { await self.add(pedometerData) }
             }
         }
@@ -40,7 +39,7 @@ public actor StepsMonitor {
             return nil
         }
 
-        if latestData.endDate.age > Self.maxDataAge {
+        guard latestData.endDate.age <= Self.maxDataAge else {
             return nil
         }
 
