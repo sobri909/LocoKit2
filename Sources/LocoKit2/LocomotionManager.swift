@@ -39,6 +39,8 @@ public final class LocomotionManager {
         locationManager.startMonitoringSignificantLocationChanges()
         sleepLocationManager.stopUpdatingLocation()
 
+        Task { await stepsSampler.startMonitoring() }
+
         restartTheFallbackTimer()
     }
 
@@ -48,6 +50,8 @@ public final class LocomotionManager {
         locationManager.stopUpdatingLocation()
         locationManager.stopMonitoringSignificantLocationChanges()
         sleepLocationManager.stopUpdatingLocation()
+
+        Task { await stepsSampler.stopMonitoring() }
 
         backgroundSession?.invalidate()
         backgroundSession = nil
@@ -66,13 +70,17 @@ public final class LocomotionManager {
     public func createASample() async -> LocomotionSample {
         let location = await kalmanFilter.currentEstimatedLocation()
         let movingState = await stationaryDetector.currentState()
+        let stepHz = await stepsSampler.currentStepHz()
 
-        return LocomotionSample(
+        let sample = LocomotionSample(
             date: location.timestamp,
             movingState: movingState.movingState,
             recordingState: recordingState,
             location: location
         )
+        sample.stepHz = stepHz
+
+        return sample
     }
 
     public func sleepDetectorState() async ->  SleepDetectorState? {
@@ -85,11 +93,12 @@ public final class LocomotionManager {
 
     // MARK: - Private
 
-    private var backgroundSession: CLBackgroundActivitySession?
     private let kalmanFilter = KalmanFilter()
     private let stationaryDetector = StationaryStateDetector()
     private let sleepModeDetector = SleepModeDetector()
-    private let stepsSampler = StepsSampler()
+    private let stepsSampler = StepsMonitor()
+
+    private var backgroundSession: CLBackgroundActivitySession?
     private var fallbackUpdateTimer: Timer?
     private var wakeupTimer: Timer?
 
@@ -109,6 +118,8 @@ public final class LocomotionManager {
         sleepLocationManager.startUpdatingLocation()
         sleepLocationManager.startMonitoringSignificantLocationChanges()
         locationManager.stopUpdatingLocation()
+
+        Task { await stepsSampler.stopMonitoring() }
 
         recordingState = .sleeping
 
