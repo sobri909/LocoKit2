@@ -22,11 +22,9 @@ public final class LocomotionManager {
     public private(set) var recordingState: RecordingState = .off
     public internal(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
 
-    public private(set) var rawLocations: [CLLocation] = []
-    public private(set) var filteredLocations: [CLLocation] = [] 
-
-    public private(set) var movingStateDetails: MovingStateDetails?
-    public private(set) var sleepDetectorState: SleepDetectorState?
+    public private(set) var lastUpdated: Date?
+    public private(set) var lastRawLocation: CLLocation?
+    public private(set) var lastFilteredLocation: CLLocation?
 
     // MARK: -
     
@@ -42,8 +40,6 @@ public final class LocomotionManager {
         sleepLocationManager.stopUpdatingLocation()
 
         restartTheFallbackTimer()
-
-        Task { await stationaryDetector.unfreeze() }
     }
 
     public func stopRecording() {
@@ -67,12 +63,33 @@ public final class LocomotionManager {
         locationManager.requestAlwaysAuthorization()
     }
 
+    public func createASample() async -> LocomotionSample {
+        let location = await kalmanFilter.currentEstimatedLocation()
+        let movingState = await stationaryDetector.currentState()
+
+        return LocomotionSample(
+            date: location.timestamp,
+            movingState: movingState.movingState,
+            recordingState: recordingState,
+            location: location
+        )
+    }
+
+    public func sleepDetectorState() async ->  SleepDetectorState? {
+        return await sleepModeDetector.state
+    }
+
+    public func movingStateDetails() async -> MovingStateDetails {
+        return await stationaryDetector.currentState()
+    }
+
     // MARK: - Private
 
     private var backgroundSession: CLBackgroundActivitySession?
     private let kalmanFilter = KalmanFilter()
     private let stationaryDetector = StationaryStateDetector()
     private let sleepModeDetector = SleepModeDetector()
+    private let stepsSampler = StepsSampler()
     private var fallbackUpdateTimer: Timer?
     private var wakeupTimer: Timer?
 
@@ -96,8 +113,6 @@ public final class LocomotionManager {
         recordingState = .sleeping
 
         restartTheWakeupTimer()
-
-        Task { await stationaryDetector.freeze() }
     }
 
     private func startWakeup() {
@@ -122,30 +137,19 @@ public final class LocomotionManager {
 
         await kalmanFilter.add(location: location)
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
-        
+
         await stationaryDetector.add(location: kalmanLocation)
-        let movingState = await stationaryDetector.currentState
-
         await sleepModeDetector.add(location: kalmanLocation)
-        let sleepState = await sleepModeDetector.state
-
-        await MainActor.run {
-            rawLocations.append(location)
-            filteredLocations.append(kalmanLocation)
-            movingStateDetails = movingState
-            sleepDetectorState = sleepState
-        }
 
         await updateTheRecordingState()
+
+        lastFilteredLocation = kalmanLocation
+        lastRawLocation = location
+        lastUpdated = .now
     }
 
     private func updateTheRecordingState() async {
-        let movingState = await stationaryDetector.currentState
         let sleepState = await sleepModeDetector.state
-        await MainActor.run {
-            movingStateDetails = movingState
-            sleepDetectorState = sleepState
-        }
 
         switch recordingState {
         case .recording:

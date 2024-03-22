@@ -41,6 +41,8 @@ public final class TimelineRecorder {
         }
     }
 
+    public private(set) var latestSample: LocomotionSample?
+
     // MARK: - Private
 
     private var loco = LocomotionManager.highlander
@@ -57,7 +59,7 @@ public final class TimelineRecorder {
                 .fetchOne($0)
         }
 
-        withContinousObservation(of: LocomotionManager.highlander.filteredLocations) { _ in
+        withContinousObservation(of: LocomotionManager.highlander.lastUpdated) { _ in
             Task { await self.recordSample() }
         }
     }
@@ -67,26 +69,20 @@ public final class TimelineRecorder {
     private func recordSample() async {
         guard isRecording else { return }
 
-        guard let location = loco.filteredLocations.last else { return }
-        guard let movingState = loco.movingStateDetails else { return }
-
-        let sample = LocomotionSample(
-            date: location.timestamp, 
-            movingState: movingState.movingState,
-            recordingState: loco.recordingState,
-            location: location
-        )
+        let sample = await loco.createASample()
 
         do {
             try await Database.pool.write {
                 try sample.save($0)
             }
-
+            
             await process(sample)
 
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
+
+        latestSample = sample
     }
 
     private func process(_ sample: LocomotionSample) async {
