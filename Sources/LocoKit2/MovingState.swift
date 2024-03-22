@@ -26,14 +26,13 @@ public struct MovingStateDetails {
     public let movingState: MovingState
     public let n: Int
     public let timestamp: Date
-    public let duration: TimeInterval
     public let meanAccuracy: CLLocationAccuracy?
     public let meanSpeed: CLLocationSpeed?
     public let sdSpeed: CLLocationSpeed?
 
     internal init(
         _ movingState: MovingState,
-        n: Int, timestamp: Date, duration: TimeInterval,
+        n: Int, timestamp: Date,
         meanAccuracy: CLLocationAccuracy? = nil,
         meanSpeed: CLLocationSpeed? = nil,
         sdSpeed: CLLocationSpeed? = nil
@@ -41,7 +40,6 @@ public struct MovingStateDetails {
         self.movingState = movingState
         self.n = n
         self.timestamp = timestamp
-        self.duration = duration
         self.meanAccuracy = meanAccuracy
         self.meanSpeed = meanSpeed
         self.sdSpeed = sdSpeed

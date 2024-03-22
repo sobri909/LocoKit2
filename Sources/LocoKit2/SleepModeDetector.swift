@@ -82,9 +82,6 @@ actor SleepModeDetector {
 
         // debug stats
         state.n = sample.count
-        if let oldest = sample.first {
-            state.sampleDuration = newest.timestamp.timeIntervalSince(oldest.timestamp)
-        }
 
         // keep the fence current
         updateGeofence()
@@ -141,9 +138,6 @@ public struct SleepDetectorState {
     public var lastGeofenceEnterTime: Date? = nil
     public var isLocationWithinGeofence: Bool = false
     public var shouldBeSleeping: Bool = false
-
-    // debug bits
-    public var sampleDuration: TimeInterval = 0
     public var n: Int = 0
 
     public var durationWithinGeofence: TimeInterval {

@@ -24,7 +24,7 @@ actor StationaryStateDetector {
 
     func currentState() -> MovingStateDetails {
         guard let newest = sample.last else {
-            return MovingStateDetails(.uncertain, n: 0, timestamp: .now, duration: 0)
+            return MovingStateDetails(.uncertain, n: 0, timestamp: .now)
         }
 
         // Remove samples outside the target time window
@@ -37,16 +37,16 @@ actor StationaryStateDetector {
         guard n > 1 else {
             let result: MovingState = (newest.speed < meanSpeedThreshold + sdSpeedThreshold) ? .stationary : .moving
             return MovingStateDetails(
-                result, n: 1, timestamp: newest.timestamp, duration: 0,
-                meanAccuracy: newest.horizontalAccuracy, meanSpeed: newest.speed
+                result, n: 1, timestamp: newest.timestamp,
+                meanAccuracy: newest.horizontalAccuracy, 
+                meanSpeed: newest.speed
             )
         }
 
-        let duration = newest.timestamp.timeIntervalSince(sample.first!.timestamp)
         let meanAccuracy = sample.map { $0.horizontalAccuracy }.reduce(0, +) / Double(sample.count)
 
         guard meanAccuracy <= accuracyThreshold else {
-            return MovingStateDetails(.uncertain, n: n, timestamp: newest.timestamp, duration: duration, meanAccuracy: meanAccuracy)
+            return MovingStateDetails(.uncertain, n: n, timestamp: newest.timestamp, meanAccuracy: meanAccuracy)
         }
 
         // Calculate weighted statistics based on the samples in the buffer
@@ -65,7 +65,6 @@ actor StationaryStateDetector {
         return MovingStateDetails(
             result, n: n,
             timestamp: newest.timestamp,
-            duration: duration,
             meanAccuracy: meanAccuracy,
             meanSpeed: weightedMeanSpeed,
             sdSpeed: weightedStdDev
