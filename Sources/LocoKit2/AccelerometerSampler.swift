@@ -39,8 +39,6 @@ public class AccelerometerSampler {
             return sample
         }
 
-        print("sample.count: \(sampleCopy.count)")
-
         if sampleCopy.isEmpty { return nil }
 
         let accelerations = sampleCopy.map { $0.userAccelerationInReferenceFrame }
