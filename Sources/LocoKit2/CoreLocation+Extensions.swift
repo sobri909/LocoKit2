@@ -149,7 +149,7 @@ public extension Array where Element: CLLocation {
         }
 
         let distances = usableLocations.map { $0.distance(from: center) }
-        return Radius(mean: distances.mean, sd: distances.standardDeviation)
+        return Radius(mean: distances.mean(), sd: distances.standardDeviation())
     }
 
 }
