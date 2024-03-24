@@ -4,6 +4,8 @@
 
 import Foundation
 import CoreLocation
+import CoreMotion
+import simd
 
 typealias Radians = Double
 
@@ -152,4 +154,20 @@ public extension Array where Element: CLLocation {
         return Radius(mean: distances.mean(), sd: distances.standardDeviation())
     }
 
+}
+
+// MARK: - Core Motion
+
+// source: http://stackoverflow.com/a/8006783/790036
+extension CMDeviceMotion {
+    var userAccelerationInReferenceFrame: CMAcceleration {
+        let acc = simd_double3(userAcceleration.x, userAcceleration.y, userAcceleration.z)
+        let rot = simd_double3x3(
+            simd_double3(attitude.rotationMatrix.m11, attitude.rotationMatrix.m21, attitude.rotationMatrix.m31),
+            simd_double3(attitude.rotationMatrix.m12, attitude.rotationMatrix.m22, attitude.rotationMatrix.m32),
+            simd_double3(attitude.rotationMatrix.m13, attitude.rotationMatrix.m23, attitude.rotationMatrix.m33)
+        )
+        let result = rot * acc
+        return CMAcceleration(x: result.x, y: result.y, z: result.z)
+    }
 }

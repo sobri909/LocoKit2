@@ -39,6 +39,7 @@ public final class LocomotionManager {
         locationManager.startMonitoringSignificantLocationChanges()
         sleepLocationManager.stopUpdatingLocation()
 
+        accelerometerSampler.startMonitoring()
         Task { await stepsSampler.startMonitoring() }
 
         restartTheFallbackTimer()
@@ -51,6 +52,7 @@ public final class LocomotionManager {
         locationManager.stopMonitoringSignificantLocationChanges()
         sleepLocationManager.stopUpdatingLocation()
 
+        accelerometerSampler.stopMonitoring()
         Task { await stepsSampler.stopMonitoring() }
 
         backgroundSession?.invalidate()
@@ -80,6 +82,11 @@ public final class LocomotionManager {
         )
         sample.stepHz = stepHz
 
+        if let wiggles = accelerometerSampler.currentAccelerationData() {
+            sample.xyAcceleration = wiggles.xyMean + (wiggles.xySD * 3)
+            sample.zAcceleration = wiggles.zMean + (wiggles.zSD * 3)
+        }
+
         return sample
     }
 
@@ -96,6 +103,7 @@ public final class LocomotionManager {
     private let kalmanFilter = KalmanFilter()
     private let stationaryDetector = StationaryStateDetector()
     private let sleepModeDetector = SleepModeDetector()
+    private let accelerometerSampler = AccelerometerSampler()
     private let stepsSampler = StepsMonitor()
 
     private var backgroundSession: CLBackgroundActivitySession?
@@ -119,6 +127,7 @@ public final class LocomotionManager {
         sleepLocationManager.startMonitoringSignificantLocationChanges()
         locationManager.stopUpdatingLocation()
 
+        accelerometerSampler.stopMonitoring()
         Task { await stepsSampler.stopMonitoring() }
 
         recordingState = .sleeping
