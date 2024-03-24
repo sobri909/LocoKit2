@@ -95,15 +95,22 @@ extension DateInterval {
 }
 
 extension Array where Element: BinaryFloatingPoint {
-    var mean: Element {
+    func mean() -> Element {
         guard !isEmpty else { return 0 }
         return reduce(0, +) / Element(count)
     }
 
-    var standardDeviation: Element {
+    func standardDeviation() -> Element {
         guard count > 1 else { return 0 }
-        let mean = self.mean
+        return meanAndStandardDeviation().standardDeviation
+    }
+
+    func meanAndStandardDeviation() -> (mean: Element, standardDeviation: Element) {
+        guard !isEmpty else { return (0, 0) }
+        let mean = self.mean()
+        guard count > 1 else { return (mean, 0) }
         let sumOfSquaredDifferences = reduce(0) { $0 + (($1 - mean) * ($1 - mean)) }
-        return sqrt(sumOfSquaredDifferences / Element(count - 1))
+        let standardDeviation = sqrt(sumOfSquaredDifferences / Element(count - 1))
+        return (mean, standardDeviation)
     }
 }
