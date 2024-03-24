@@ -85,7 +85,7 @@ public class Database {
             // MARK: - Place
 
             try db.create(table: "Place") { table in
-                table.column("id", .text).primaryKey()
+                table.primaryKey("id", .text)
                 table.column("name", .text).indexed()
             }
 
@@ -94,7 +94,7 @@ public class Database {
             // MARK: - TimelineItem
 
             try db.create(table: "TimelineItemBase") { table in
-                table.column("id", .text).primaryKey()
+                table.primaryKey("id", .text)
                 table.column("isVisit", .boolean).notNull()
                 table.column("startDate", .datetime).indexed()
                 table.column("endDate", .datetime).indexed()
@@ -119,7 +119,7 @@ public class Database {
             }
 
             try db.create(table: "TimelineItemVisit") { table in
-                table.column("itemId", .text).primaryKey()
+                table.primaryKey("itemId", .text)
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
                 table.column("isStale", .boolean).notNull()
@@ -135,7 +135,7 @@ public class Database {
             }
 
             try db.create(table: "TimelineItemTrip") { table in
-                table.column("itemId", .text).primaryKey()
+                table.primaryKey("itemId", .text)
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
                 table.column("isStale", .boolean).notNull()
@@ -147,7 +147,7 @@ public class Database {
             // MARK: - LocomotionSample
 
             try db.create(table: "LocomotionSample") { table in
-                table.column("id", .text).primaryKey()
+                table.primaryKey("id", .text)
                 table.column("date", .datetime).notNull().indexed()
                 table.column("source", .text).notNull()
                 table.column("secondsFromGMT", .integer).notNull()
@@ -165,14 +165,14 @@ public class Database {
                 table.column("verticalAccuracy", .double)
                 table.column("speed", .double)
                 table.column("course", .double)
-                
-                table.column("classifiedActivityType", .text)
-                table.column("confirmedActivityType", .text)
 
                 // motion sensor data
                 table.column("stepHz", .double)
                 table.column("xyAcceleration", .double)
                 table.column("zAcceleration", .double)
+                
+                table.column("classifiedActivityType", .text)
+                table.column("confirmedActivityType", .text)
             }
 
             // TODO: r-tree index for LocomotionSample
