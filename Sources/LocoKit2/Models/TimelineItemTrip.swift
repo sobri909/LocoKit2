@@ -24,7 +24,6 @@ public class TimelineItemTrip: Record, Codable {
     public func update(from samples: [LocomotionSample]) {
         self.isStale = false
         self.distance = samples.compactMap { $0.location }.usableLocations().distance() ?? 0
-        print("update() distance: \(distance)")
     }
 
     // MARK: - Init
@@ -34,7 +33,6 @@ public class TimelineItemTrip: Record, Codable {
         self.isStale = false
         self.distance = samples.compactMap { $0.location }.usableLocations().distance() ?? 0
         super.init()
-        print("init() distance: \(distance)")
     }
 
     // MARK: - Record
