@@ -86,10 +86,18 @@ public class Database {
 
             try db.create(table: "Place") { table in
                 table.primaryKey("id", .text)
-                table.column("name", .text).indexed()
+                table.column("rtreeId", .integer).indexed()
+                table.column("isStale", .boolean).notNull()
+                table.column("latitude", .double).notNull()
+                table.column("longitude", .double).notNull()
+                table.column("radiusMean", .double).notNull()
+                table.column("radiusSD", .double).notNull()
             }
 
-            // TODO: r-tree index for Place
+            try db.create(
+                virtualTable: "PlaceRTree",
+                using: "rtree(id, latMin, latMax, lonMin, lonMax)"
+            )
 
             // MARK: - TimelineItem
 
