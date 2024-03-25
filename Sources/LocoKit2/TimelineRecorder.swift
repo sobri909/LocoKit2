@@ -59,8 +59,48 @@ public final class TimelineRecorder {
                 .fetchOne($0)
         }
 
-        withContinousObservation(of: LocomotionManager.highlander.lastUpdated) { _ in
+        withContinousObservation(of: self.loco.lastUpdated) { _ in
             Task { await self.recordSample() }
+        }
+
+        withContinousObservation(of: self.loco.recordingState) { _ in
+            self.recordingStateChanged()
+        }
+    }
+
+    // MARK: -
+
+    private func recordingStateChanged() {
+        switch loco.recordingState {
+        case .sleeping, .recording:
+            updateSleepCycleDuration()
+            break
+        default:
+            break
+        }
+    }
+
+    private func updateSleepCycleDuration() {
+        defer {
+            print("updateSleepCycleDuration() loco.sleepCycleDuration: \(loco.sleepCycleDuration)")
+        }
+
+        // ensure sleep cycles are short for when sleeping next starts
+        if loco.recordingState == .recording {
+            loco.sleepCycleDuration = 6
+            return
+        }
+
+        guard let currentItem = currentItem() else { return }
+
+        let visitMinutes = currentItem.base.dateRange.duration / 60
+
+        if visitMinutes < 2 {
+            loco.sleepCycleDuration = 6
+        } else if visitMinutes <= 60 {
+            loco.sleepCycleDuration = 6 + ((visitMinutes - 2) / 58 * (60 - 6))
+        } else {
+            loco.sleepCycleDuration = 60
         }
     }
 
@@ -76,7 +116,7 @@ public final class TimelineRecorder {
                 try sample.save($0)
             }
             
-            await process(sample)
+            await processSample(sample)
 
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
@@ -85,7 +125,7 @@ public final class TimelineRecorder {
         latestSample = sample
     }
 
-    private func process(_ sample: LocomotionSample) async {
+    private func processSample(_ sample: LocomotionSample) async {
 
         /** first timeline item **/
         guard let workingItem = currentItem() else {
