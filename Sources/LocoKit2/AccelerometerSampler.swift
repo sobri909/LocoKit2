@@ -27,7 +27,7 @@ public class AccelerometerSampler {
     }
 
     public func stopMonitoring() {
-        motionManager.stopAccelerometerUpdates()
+        motionManager.stopDeviceMotionUpdates()
         lock.withLock {
             sample = []
         }
