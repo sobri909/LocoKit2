@@ -68,9 +68,26 @@ public final class TimelineRecorder {
         }
     }
 
+    private var previousRecordingState: RecordingState?
+    private var recordingEnded: Date?
+
     // MARK: -
 
     private func recordingStateChanged() {
+        // we're only here for changes
+        if loco.recordingState == previousRecordingState {
+            return
+        }
+
+        // keep track of sleep start
+        if loco.recordingState == .recording {
+            recordingEnded = nil
+        } else if previousRecordingState == .recording {
+            recordingEnded = .now
+        }
+
+        previousRecordingState = loco.recordingState
+
         switch loco.recordingState {
         case .sleeping, .recording:
             updateSleepCycleDuration()
@@ -81,24 +98,23 @@ public final class TimelineRecorder {
     }
 
     private func updateSleepCycleDuration() {
-        defer {
-            print("updateSleepCycleDuration() loco.sleepCycleDuration: \(loco.sleepCycleDuration)")
-        }
-
         // ensure sleep cycles are short for when sleeping next starts
         if loco.recordingState == .recording {
             loco.sleepCycleDuration = 6
             return
         }
 
-        guard let currentItem = currentItem() else { return }
-
-        let visitMinutes = currentItem.base.dateRange.duration / 60
-
-        if visitMinutes < 2 {
+        guard let sleepDuration = recordingEnded?.age else {
             loco.sleepCycleDuration = 6
-        } else if visitMinutes <= 60 {
-            loco.sleepCycleDuration = 6 + ((visitMinutes - 2) / 58 * (60 - 6))
+            return
+        }
+
+        let sleepMinutes = sleepDuration / 60
+
+        if sleepMinutes < 2 {
+            loco.sleepCycleDuration = 6
+        } else if sleepMinutes <= 60 {
+            loco.sleepCycleDuration = 6 + ((sleepMinutes - 2) / 58 * (60 - 6))
         } else {
             loco.sleepCycleDuration = 60
         }
@@ -147,8 +163,6 @@ public final class TimelineRecorder {
         /** stationary -> stationary || moving -> moving **/
         sample.timelineItemId = workingItem.id
 
-        print("added sample to currentItem (isVisit: \(workingItem.isVisit))")
-
         // computed values need recalc
         workingItem.visit?.isStale = true
         workingItem.trip?.isStale = true
@@ -191,8 +205,6 @@ public final class TimelineRecorder {
                 try newTrip?.save($0)
                 _ = try sample.updateChanges($0)
             }
-
-            print("createTimelineItem() isVisit: \(newItem.isVisit)")
 
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
