@@ -16,6 +16,12 @@ public enum RecordingState: Int, Codable {
     case standby = 5
 
     public static let sleepStates = [sleeping, deepSleeping]
+    public static let activeRecorderStates = [recording, wakeup, sleeping, deepSleeping]
+
+    // MARK: -
+
+    public var isSleeping: Bool { return Self.sleepStates.contains(self) }
+    public var isCurrentRecorder: Bool { return Self.activeRecorderStates.contains(self) }
 
     public var stringValue: String {
         switch self {

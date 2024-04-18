@@ -17,6 +17,7 @@ public final class LocomotionManager {
     // MARK: - Public
     
     public var sleepCycleDuration: TimeInterval = 30
+    public var standbyCycleDuration: TimeInterval = 60 * 2
     public var fallbackUpdateDuration: TimeInterval = 6
 
     public private(set) var recordingState: RecordingState = .off
@@ -39,8 +40,7 @@ public final class LocomotionManager {
         locationManager.startMonitoringSignificantLocationChanges()
         sleepLocationManager.stopUpdatingLocation()
 
-        accelerometerSampler.startMonitoring()
-        Task { await stepsSampler.startMonitoring() }
+        startCoreMotion()
 
         restartTheFallbackTimer()
     }
@@ -52,17 +52,34 @@ public final class LocomotionManager {
         locationManager.stopMonitoringSignificantLocationChanges()
         sleepLocationManager.stopUpdatingLocation()
 
-        accelerometerSampler.stopMonitoring()
-        Task { await stepsSampler.stopMonitoring() }
-
-        backgroundSession?.invalidate()
-        backgroundSession = nil
+        stopCoreMotion()
 
         stopTheFallbackTimer()
         stopTheWakeupTimer()
 
+        backgroundSession?.invalidate()
+        backgroundSession = nil
+
         recordingState = .off
     }
+
+    public func startStandby() {
+        sleepLocationManager.startUpdatingLocation()
+        sleepLocationManager.startMonitoringSignificantLocationChanges()
+        locationManager.stopUpdatingLocation()
+
+        stopCoreMotion()
+
+        // no fallback updates while in standby
+        stopTheFallbackTimer()
+
+        // reset the standby timer
+        restartTheStandbyTimer()
+
+        recordingState = .standby
+    }
+
+    // MARK: -
 
     public func requestAuthorization() {
         DebugLogger.logger.info("LocomotionManager.requestAuthorization()")
@@ -109,6 +126,7 @@ public final class LocomotionManager {
     private var backgroundSession: CLBackgroundActivitySession?
     private var fallbackUpdateTimer: Timer?
     private var wakeupTimer: Timer?
+    private var standbyTimer: Timer?
 
     // MARK: -
 
@@ -123,12 +141,11 @@ public final class LocomotionManager {
             DebugLogger.logger.info("LocomotionManager.startSleeping()")
         }
 
+        stopCoreMotion()
+
         sleepLocationManager.startUpdatingLocation()
         sleepLocationManager.startMonitoringSignificantLocationChanges()
         locationManager.stopUpdatingLocation()
-
-        accelerometerSampler.stopMonitoring()
-        Task { await stepsSampler.stopMonitoring() }
 
         recordingState = .sleeping
 
@@ -147,10 +164,22 @@ public final class LocomotionManager {
         recordingState = .wakeup
     }
 
+    // MARK: -
+
+    private func startCoreMotion() {
+        accelerometerSampler.startMonitoring()
+        Task { await stepsSampler.startMonitoring() }
+    }
+
+    private func stopCoreMotion() {
+        accelerometerSampler.stopMonitoring()
+        Task { await stepsSampler.stopMonitoring() }
+    }
+
     // MARK: - Incoming locations handling
 
     internal func add(location: CLLocation) async {
-        if RecordingState.sleepStates.contains(recordingState) {
+        if recordingState.isSleeping {
             print("Ignoring location during sleep")
             return
         }
@@ -163,9 +192,11 @@ public final class LocomotionManager {
 
         await updateTheRecordingState()
 
-        lastFilteredLocation = kalmanLocation
-        lastRawLocation = location
-        lastUpdated = .now
+        await MainActor.run {
+            lastFilteredLocation = kalmanLocation
+            lastRawLocation = location
+            lastUpdated = .now
+        }
     }
 
     private func updateTheRecordingState() async {
@@ -216,6 +247,15 @@ public final class LocomotionManager {
         }
     }
 
+    private func restartTheStandbyTimer() {
+        Task { @MainActor in
+            standbyTimer?.invalidate()
+            standbyTimer = Timer.scheduledTimer(withTimeInterval: standbyCycleDuration, repeats: false) { [weak self] _ in
+                self?.startWakeup()
+            }
+        }
+    }
+
     private func stopTheFallbackTimer() {
         fallbackUpdateTimer?.invalidate()
         fallbackUpdateTimer = nil
@@ -224,6 +264,11 @@ public final class LocomotionManager {
     private func stopTheWakeupTimer() {
         wakeupTimer?.invalidate()
         wakeupTimer = nil
+    }
+
+    private func stopTheStandbyTimer() {
+        standbyTimer?.invalidate()
+        standbyTimer = nil
     }
 
     // MARK: - Location Managers
