@@ -12,7 +12,8 @@ import GRDB
 @Observable
 public class LegacySample: Record, Identifiable, Codable {
     
-    public var id: String = UUID().uuidString
+    public var id: String { sampleId }
+    public var sampleId: String = UUID().uuidString
     public var date: Date
     public var secondsFromGMT: Int?
     public var source: String = "LocoKit"
@@ -81,12 +82,13 @@ public class LegacySample: Record, Identifiable, Codable {
     }
 
     required init(row: Row) throws {
-        id = row["id"]
+        sampleId = row["sampleId"]
         date = row["date"]
         secondsFromGMT = row["secondsFromGMT"]
         source = row["source"]
         movingState = row["movingState"]
         recordingState = row["recordingState"]
+        deleted = row["deleted"]
 
         timelineItemId = row["timelineItemId"]
 
@@ -108,12 +110,14 @@ public class LegacySample: Record, Identifiable, Codable {
     // MARK: - Record
 
     public override func encode(to container: inout PersistenceContainer) {
-        container["id"] = id
+        container["sampleId"] = sampleId
         container["date"] = date
         container["secondsFromGMT"] = secondsFromGMT
         container["source"] = source
         container["movingState"] = movingState
         container["recordingState"] = recordingState
+        container["deleted"] = deleted
+        container["lastSaved"] = Date()
 
         container["timelineItemId"] = timelineItemId
 

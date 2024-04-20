@@ -10,7 +10,7 @@ import Logging
 import LoggingFormatAndPipe
 
 public enum Subsystem: String {
-    case misc, database
+    case misc, database, appgroup
 }
 
 @Observable

@@ -16,6 +16,8 @@ public final class TimelineRecorder {
 
     // MARK: - Public
 
+    public var legacyDbMode = false
+
     public func startRecording() {
         loco.startRecording()
     }
@@ -27,6 +29,8 @@ public final class TimelineRecorder {
     public var isRecording: Bool {
         return loco.recordingState != .off
     }
+
+    // MARK: -
 
     public private(set) var currentItemId: String?
 
@@ -43,28 +47,56 @@ public final class TimelineRecorder {
 
     public private(set) var latestSample: LocomotionSample?
 
+    // MARK: -
+
+    public private(set) var currentLegacyItemId: String?
+
+    public func currentLegacyItem() -> LegacyItem? {
+        guard let currentLegacyItemId else { return nil }
+        return try? Database.legacyPool?.read { try LegacyItem.fetchOne($0, id: currentLegacyItemId) }
+    }
+
+    public private(set) var latestLegacySample: LegacySample?
+
     // MARK: - Private
 
     private var loco = LocomotionManager.highlander
 
-    @ObservationIgnored
-    private var observers: Set<AnyCancellable> = []
-
     private init() {
-        self.currentItemId = try? Database.pool.read {
+        updateCurrentItemId()
+
+        withContinousObservation(of: self.loco.lastUpdated) { _ in
+            Task {
+                if self.legacyDbMode {
+                    await self.recordLegacySample()
+                } else {
+                    await self.recordSample()
+                }
+            }
+        }
+
+        withContinousObservation(of: self.loco.recordingState) { _ in
+            self.recordingStateChanged()
+        }
+    }
+
+    public func updateCurrentItemId() {
+        currentItemId = try? Database.pool.read {
             try TimelineItemBase
                 .filter(Column("deleted") == false)
                 .order(Column("endDate").desc)
                 .selectPrimaryKey()
                 .fetchOne($0)
         }
+    }
 
-        withContinousObservation(of: self.loco.lastUpdated) { _ in
-            Task { await self.recordSample() }
-        }
-
-        withContinousObservation(of: self.loco.recordingState) { _ in
-            self.recordingStateChanged()
+    public func updateCurrentLegacyItemId() {
+        currentLegacyItemId = try? Database.legacyPool?.read {
+            try LegacyItem
+                .filter(Column("deleted") == false)
+                .order(Column("endDate").desc)
+                .selectPrimaryKey()
+                .fetchOne($0)
         }
     }
 
@@ -138,7 +170,9 @@ public final class TimelineRecorder {
             DebugLogger.logger.error(error, subsystem: .database)
         }
 
-        latestSample = sample
+        await MainActor.run {
+            latestSample = sample
+        }
     }
 
     private func processSample(_ sample: LocomotionSample) async {
@@ -203,6 +237,82 @@ public final class TimelineRecorder {
                 try newItem.save($0)
                 try newVisit?.save($0)
                 try newTrip?.save($0)
+                _ = try sample.updateChanges($0)
+            }
+
+        } catch {
+            DebugLogger.logger.error(error, subsystem: .database)
+        }
+
+        return newItem
+    }
+
+    // MARK: - Legacy db recording
+
+    private func recordLegacySample() async {
+        guard isRecording else { return }
+
+        let sample = await loco.createALegacySample()
+
+        do {
+            try await Database.legacyPool?.write {
+                try sample.save($0)
+            }
+
+            await processLegacySample(sample)
+
+        } catch {
+            DebugLogger.logger.error(error, subsystem: .database)
+        }
+
+        await MainActor.run {
+            latestLegacySample = sample
+        }
+    }
+
+    private func processLegacySample(_ sample: LegacySample) async {
+
+        /** first timeline item **/
+        guard let workingItem = currentLegacyItem() else {
+            let newItem = await createLegacyTimelineItem(from: sample)
+            currentLegacyItemId = newItem.id
+            return
+        }
+
+        let previouslyMoving = !workingItem.isVisit
+        let currentlyMoving = sample.movingState != "stationary"
+
+        /** stationary -> moving || moving -> stationary **/
+        if currentlyMoving != previouslyMoving {
+            let newItem = await createLegacyTimelineItem(from: sample, previousItemId: workingItem.id)
+            currentLegacyItemId = newItem.id
+            return
+        }
+
+        /** stationary -> stationary || moving -> moving **/
+        sample.timelineItemId = workingItem.id
+
+        do {
+            try await Database.legacyPool?.write {
+                _ = try sample.updateChanges($0)
+            }
+        } catch {
+            DebugLogger.logger.error(error, subsystem: .database)
+        }
+    }
+
+    private func createLegacyTimelineItem(from sample: LegacySample, previousItemId: String? = nil) async -> LegacyItem {
+        let newItem = LegacyItem(from: sample)
+
+        // assign the sample
+        sample.timelineItemId = newItem.id
+
+        // keep the list linked
+        newItem.previousItemId = previousItemId
+
+        do {
+            try await Database.legacyPool?.write {
+                try newItem.save($0)
                 _ = try sample.updateChanges($0)
             }
 

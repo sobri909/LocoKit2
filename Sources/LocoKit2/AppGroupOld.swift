@@ -119,16 +119,6 @@ public class AppGroupOld {
         let messageInfo = AppGroup.MessageInfo(date: Date(), message: .modifiedObjects, appName: thisApp, modifiedObjectIds: objectIds)
         send(message: .modifiedObjects, messageInfo: messageInfo)
     }
-    
-    // MARK: - Shared settings
-    
-    public func get(setting key: String) -> Any? {
-        return groupDefaults?.value(forKey: "sharedSetting." + key) as Any?
-    }
-    
-    public func set(setting key: String, value: Any?) {
-        groupDefaults?.set(value, forKey: "sharedSetting." + key)
-    }
 
     // MARK: - Private
 
@@ -165,11 +155,11 @@ public class AppGroupOld {
         DebugLogger.logger.debug("RECEIVED: .updatedState, from: \(by.rawValue)")
 
         guard let currentRecorder else {
-            DebugLogger.logger.error("No AppGroup.currentRecorder!", subsystem: .appgroup)
+            DebugLogger.logger.error("No AppGroupOld.currentRecorder!", subsystem: .appgroup)
             return
         }
         guard let currentItemId = currentRecorder.currentItemId else {
-            DebugLogger.logger.error("No AppGroup.currentItemId!", subsystem: .appgroup)
+            DebugLogger.logger.error("No AppGroupOld.currentItemId!", subsystem: .appgroup)
             return
         }
 

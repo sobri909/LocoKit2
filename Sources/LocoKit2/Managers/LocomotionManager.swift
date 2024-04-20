@@ -20,7 +20,11 @@ public final class LocomotionManager {
     public var standbyCycleDuration: TimeInterval = 60 * 2
     public var fallbackUpdateDuration: TimeInterval = 6
 
-    public private(set) var recordingState: RecordingState = .off
+    public var appGroup: AppGroupOld?
+
+    public private(set) var recordingState: RecordingState = .off {
+        didSet { appGroup?.save() }
+    }
     public internal(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
 
     public private(set) var lastUpdated: Date?
@@ -107,6 +111,27 @@ public final class LocomotionManager {
         return sample
     }
 
+    public func createALegacySample() async -> LegacySample {
+        let location = await kalmanFilter.currentEstimatedLocation()
+        let movingState = await stationaryDetector.currentState()
+        let stepHz = await stepsSampler.currentStepHz()
+
+        let sample = LegacySample(
+            date: location.timestamp,
+            movingState: movingState.movingState,
+            recordingState: recordingState,
+            location: location
+        )
+        sample.stepHz = stepHz
+
+        if let wiggles = accelerometerSampler.currentAccelerationData() {
+            sample.xyAcceleration = wiggles.xyMean + (wiggles.xySD * 3)
+            sample.zAcceleration = wiggles.zMean + (wiggles.zSD * 3)
+        }
+
+        return sample
+    }
+
     public func sleepDetectorState() async ->  SleepDetectorState? {
         return await sleepModeDetector.state
     }
@@ -158,10 +183,28 @@ public final class LocomotionManager {
 
         locationManager.startUpdatingLocation()
 
+        // if in standby, do standby specific checks then exit early
+        if recordingState == .standby {
+            if let appGroup, appGroup.shouldBeTheRecorder {
+                becomeTheActiveRecorder()
+            } else {
+                startStandby()
+            }
+            return
+        }
+
         // need to be able to detect nolos
         restartTheFallbackTimer()
 
         recordingState = .wakeup
+    }
+
+    public func becomeTheActiveRecorder() {
+        guard let appGroup else { return }
+        if appGroup.isAnActiveRecorder { return }
+        startRecording()
+        NotificationCenter.default.post(Notification(name: .tookOverRecording, object: self, userInfo: nil))
+        appGroup.becameCurrentRecorder()
     }
 
     // MARK: -

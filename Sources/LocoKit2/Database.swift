@@ -12,13 +12,25 @@ public class Database {
 
     public static let highlander = Database()
 
+    public var appGroup: AppGroupOld? {
+        didSet {
+            if let appGroupLegacyDbUrl {
+                legacyPool = try? DatabasePool(path: appGroupLegacyDbUrl.path, configuration: config)
+            }
+        }
+    }
+
     // MARK: - Pool
 
     public static var pool: DatabasePool { return highlander.pool }
+    
+    public static var legacyPool: DatabasePool? { return highlander.legacyPool }
 
     public private(set) lazy var pool: DatabasePool = {
         return try! DatabasePool(path: appContainerDbUrl.path, configuration: config)
     }()
+
+    public private(set) var legacyPool: DatabasePool?
 
     private lazy var config: Configuration = {
         var config = Configuration()
@@ -262,8 +274,23 @@ public class Database {
         return try! FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     }()
 
+    var appGroupDbDir: URL? {
+        guard let suiteName = appGroup?.suiteName else { return nil }
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suiteName)
+    }
+
+    // MARK: -
+
     private lazy var appContainerDbUrl: URL = {
         return appContainerDbDir.appendingPathComponent("LocoKit2.sqlite")
     }()
+
+    private var appGroupDbUrl: URL? {
+        return appGroupDbDir?.appendingPathComponent("LocoKit2.sqlite")
+    }
+
+    private var appGroupLegacyDbUrl: URL? {
+        return appGroupDbDir?.appendingPathComponent("LocoKit.sqlite")
+    }
 
 }

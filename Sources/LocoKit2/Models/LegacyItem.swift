@@ -11,7 +11,8 @@ import GRDB
 @Observable
 public class LegacyItem: Record, Identifiable, Codable {
 
-    public var id: String = UUID().uuidString
+    public var id: String { itemId }
+    public var itemId: String = UUID().uuidString
     public let isVisit: Bool
     public let startDate: Date
     public let endDate: Date
@@ -24,7 +25,7 @@ public class LegacyItem: Record, Identifiable, Codable {
 
     public var previousItemId: String? {
         didSet {
-            if previousItemId == id { fatalError("Can't link to self") }
+            if previousItemId == itemId { fatalError("Can't link to self") }
             if previousItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
@@ -33,7 +34,7 @@ public class LegacyItem: Record, Identifiable, Codable {
 
     public var nextItemId: String? {
         didSet {
-            if nextItemId == id { fatalError("Can't link to self") }
+            if nextItemId == itemId { fatalError("Can't link to self") }
             if nextItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
@@ -54,7 +55,7 @@ public class LegacyItem: Record, Identifiable, Codable {
     // MARK: - Record
 
     required init(row: Row) throws {
-        id = row["id"]
+        itemId = row["itemId"]
         source = row["source"]
         isVisit = row["isVisit"]
         startDate = row["startDate"]
@@ -68,12 +69,13 @@ public class LegacyItem: Record, Identifiable, Codable {
     }
 
     public override func encode(to container: inout PersistenceContainer) {
-        container["id"] = id
+        container["itemId"] = itemId
         container["source"] = source
         container["isVisit"] = isVisit
         container["startDate"] = startDate
         container["endDate"] = endDate
         container["deleted"] = deleted
+        container["lastSaved"] = Date()
 
         container["previousItemId"] = previousItemId
         container["nextItemId"] = nextItemId

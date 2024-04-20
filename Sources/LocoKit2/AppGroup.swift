@@ -177,11 +177,11 @@ public class AppGroup {
         DebugLogger.logger.debug("RECEIVED: .updatedState, from: \(by.rawValue)")
 
         guard let currentRecorder else {
-            DebugLogger.logger.error("No AppGroup.currentRecorder!", subsystem: .appgroup)
+            DebugLogger.logger.error("No AppGroup.currentRecorder", subsystem: .appgroup)
             return
         }
         guard let currentItemId = currentRecorder.currentItemId else {
-            DebugLogger.logger.error("No AppGroup.currentItemId!", subsystem: .appgroup)
+            DebugLogger.logger.error("No AppGroup.currentItemId", subsystem: .appgroup)
             return
         }
 
