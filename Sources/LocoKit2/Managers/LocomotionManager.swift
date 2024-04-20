@@ -320,9 +320,9 @@ public final class LocomotionManager {
     private lazy var locationManager: CLLocationManager = {
         let manager = CLLocationManager()
         manager.distanceFilter = 3
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
         manager.pausesLocationUpdatesAutomatically = false
-        manager.showsBackgroundLocationIndicator = false
+        manager.showsBackgroundLocationIndicator = true
         manager.allowsBackgroundLocationUpdates = true
         manager.delegate = self.locationDelegate
         return manager
