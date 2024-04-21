@@ -8,8 +8,6 @@ import Foundation
 import UIKit
 
 public extension NSNotification.Name {
-    static let concededRecording = Notification.Name("concededRecording")
-    static let tookOverRecording = Notification.Name("tookOverRecording")
     static let timelineObjectsExternallyModified = Notification.Name("timelineObjectsExternallyModified")
 }
 
@@ -22,7 +20,6 @@ public class AppGroup {
 
     public let thisApp: AppName
     public let suiteName: String
-    public var timelineRecorder: TimelineRecorder?
 
     public private(set) var apps: [AppName: AppState] = [:]
     public private(set) var applicationState: UIApplication.State = .background
@@ -36,6 +33,7 @@ public class AppGroup {
     private lazy var talker: AppGroupTalk = { AppGroupTalk(messagePrefix: suiteName, appName: thisApp) }()
 
     private let loco = LocomotionManager.highlander
+    private let timeline = TimelineRecorder.highlander
 
     // MARK: - Public methods
 
@@ -123,7 +121,7 @@ public class AppGroup {
         return AppState(
             appName: thisApp,
             recordingState: loco.recordingState,
-            currentItemId: timelineRecorder?.currentItemId
+            currentItemId: timeline.currentItemId
         )
     }
 
@@ -187,14 +185,16 @@ public class AppGroup {
 
         if !isAnActiveRecorder, currentAppState.currentItemId != currentItemId {
             DebugLogger.logger.debug("Local currentItemId is stale (mine: \(self.currentAppState.currentItemId ?? "nil"), theirs: \(currentItemId))")
-            timelineRecorder?.updateCurrentItemId()
+            timeline.updateCurrentItemId()
         }
     }
 
     private func recordingWasTakenOver(by: AppName, messageInfo: MessageInfo) {
         if LocomotionManager.highlander.recordingState.isCurrentRecorder {
-//            LocomotionManager.highlander.startStandby()
-            NotificationCenter.default.post(Notification(name: .concededRecording, object: self, userInfo: nil))
+            LocomotionManager.highlander.startStandby()
+            
+            let appName = LocomotionManager.highlander.appGroup?.currentRecorder?.appName.rawValue ?? "UNKNOWN"
+            DebugLogger.logger.info("concededRecording to \(appName)", subsystem: .misc)
         }
     }
 

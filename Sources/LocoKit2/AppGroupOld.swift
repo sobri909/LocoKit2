@@ -18,7 +18,7 @@ public class AppGroupOld {
 
     public let thisApp: AppGroup.AppName
     public let suiteName: String
-    public var timelineRecorder: TimelineRecorder?
+    public let timelineRecorder = TimelineRecorder.highlander
 
     public private(set) var apps: [AppGroup.AppName: AppState] = [:]
     public private(set) var applicationState: UIApplication.State = .background
@@ -101,16 +101,19 @@ public class AppGroupOld {
     }
 
     var currentAppState: AppGroupOld.AppState {
-        if let currentItemId = timelineRecorder?.currentItemId {
+        guard let recordingState = RecordingStateOld(intValue: LocomotionManager.highlander.recordingState.rawValue) else {
+            fatalError()
+        }
+        if let currentItemId = timelineRecorder.currentLegacyItemId {
             return AppGroupOld.AppState(
                 appName: thisApp,
-                recordingState: LocomotionManager.highlander.recordingState,
+                recordingState: recordingState,
                 currentItemId: UUID(uuidString: currentItemId),
                 deepSleepingUntil: nil)
         } else {
             return AppGroupOld.AppState(
                 appName: thisApp,
-                recordingState: LocomotionManager.highlander.recordingState,
+                recordingState: recordingState,
                 deepSleepingUntil: nil)
         }
     }
@@ -165,14 +168,16 @@ public class AppGroupOld {
 
         if !isAnActiveRecorder, currentAppState.currentItemId != currentItemId {
             DebugLogger.logger.debug("Local currentItemId is stale (mine: \(self.currentAppState.currentItemId?.uuidString ?? "nil"), theirs: \(currentItemId.uuidString))")
-            timelineRecorder?.updateCurrentItemId()
+            timelineRecorder.updateCurrentItemId()
         }
     }
 
     private func recordingWasTakenOver(by: AppGroup.AppName, messageInfo: AppGroup.MessageInfo) {
         if LocomotionManager.highlander.recordingState.isCurrentRecorder {
             LocomotionManager.highlander.startStandby()
-            NotificationCenter.default.post(Notification(name: .concededRecording, object: self, userInfo: nil))
+
+            let appName = LocomotionManager.highlander.appGroup?.currentRecorder?.appName.rawValue ?? "UNKNOWN"
+            DebugLogger.logger.info("concededRecording to \(appName)", subsystem: .misc)
         }
     }
 
@@ -188,7 +193,7 @@ public class AppGroupOld {
 
     public struct AppState: Codable {
         public let appName: AppGroup.AppName
-        public let recordingState: RecordingState
+        public let recordingState: RecordingStateOld
         public var currentItemId: UUID?
         public var currentItemTitle: String?
         public var deepSleepingUntil: Date?

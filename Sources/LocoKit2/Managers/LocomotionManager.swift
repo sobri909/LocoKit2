@@ -203,7 +203,7 @@ public final class LocomotionManager {
         guard let appGroup else { return }
         if appGroup.isAnActiveRecorder { return }
         startRecording()
-        NotificationCenter.default.post(Notification(name: .tookOverRecording, object: self, userInfo: nil))
+        DebugLogger.logger.info("tookOverRecording", subsystem: .misc)
         appGroup.becameCurrentRecorder()
     }
 
@@ -247,8 +247,12 @@ public final class LocomotionManager {
 
         switch recordingState {
         case .recording:
-            if sleepState.shouldBeSleeping {
+            if let appGroup, !appGroup.shouldBeTheRecorder {
+                startStandby()
+
+            } else if sleepState.shouldBeSleeping {
                 startSleeping()
+
             } else {
                 restartTheFallbackTimer()
             }   
@@ -261,7 +265,9 @@ public final class LocomotionManager {
             }
 
         case .sleeping, .deepSleeping:
-            break
+            if let appGroup, appGroup.isAnActiveRecorder, !appGroup.shouldBeTheRecorder {
+                startStandby()
+            }
 
         case .standby, .off:
             break

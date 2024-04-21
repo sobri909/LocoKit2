@@ -63,7 +63,11 @@ public final class TimelineRecorder {
     private var loco = LocomotionManager.highlander
 
     private init() {
-        updateCurrentItemId()
+        if self.legacyDbMode {
+            updateCurrentItemId()
+        } else {
+            updateCurrentLegacyItemId()
+        }
 
         withContinousObservation(of: self.loco.lastUpdated) { _ in
             Task {

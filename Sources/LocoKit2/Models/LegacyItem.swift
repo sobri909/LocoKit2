@@ -14,12 +14,13 @@ public class LegacyItem: Record, Identifiable, Codable {
     public var id: String { itemId }
     public var itemId: String = UUID().uuidString
     public let isVisit: Bool
-    public let startDate: Date
-    public let endDate: Date
+    public let startDate: Date?
+    public let endDate: Date?
     public var source: String = "LocoKit"
     public var deleted = false
 
-    public var dateRange: DateInterval {
+    public var dateRange: DateInterval? {
+        guard let startDate, let endDate else { return nil }
         return DateInterval(start: startDate, end: endDate)
     }
 
