@@ -222,10 +222,8 @@ public final class LocomotionManager {
     // MARK: - Incoming locations handling
 
     internal func add(location: CLLocation) async {
-        if recordingState.isSleeping {
-            print("Ignoring location during sleep")
-            return
-        }
+        // only accept locations when recording is supposed to be happening
+        guard recordingState == .recording || recordingState == .wakeup else { return }
 
         await kalmanFilter.add(location: location)
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
