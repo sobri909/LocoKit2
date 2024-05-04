@@ -8,6 +8,7 @@
 import Foundation
 import Observation
 import CoreLocation
+import CoreMotion
 
 @Observable
 public final class LocomotionManager {
@@ -25,14 +26,17 @@ public final class LocomotionManager {
     public private(set) var recordingState: RecordingState = .off {
         didSet { appGroup?.save() }
     }
-    public internal(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    public internal(set) var locationAuthorizationStatus: CLAuthorizationStatus = .notDetermined
+    public internal(set) var motionAuthorizationStatus: CMAuthorizationStatus = {
+        CMMotionActivityManager.authorizationStatus()
+    }()
 
     public private(set) var lastUpdated: Date?
     public private(set) var lastRawLocation: CLLocation?
     public private(set) var lastFilteredLocation: CLLocation?
 
-    // MARK: -
-    
+    // MARK: - Recording states
+
     public func startRecording() {
         DebugLogger.logger.info("LocomotionManager.startRecording()")
 
@@ -83,12 +87,28 @@ public final class LocomotionManager {
         recordingState = .standby
     }
 
-    // MARK: -
+    // MARK: - Authorisation
 
-    public func requestAuthorization() {
-        DebugLogger.logger.info("LocomotionManager.requestAuthorization()")
+    public func requestLocationAuthorization() {
+        DebugLogger.logger.info("LocomotionManager.requestLocationAuthorization()")
         locationManager.requestAlwaysAuthorization()
     }
+
+    public func requestMotionAuthorization() async {
+        DebugLogger.logger.info("LocomotionManager.requestMotionAuthorization()")
+        await withCheckedContinuation { continuation in
+            motionAuthPedometer.queryPedometerData(from: .now - .hours(1), to: .now) { data, error in
+                if let error { DebugLogger.logger.error(error, subsystem: .misc) }
+                self.motionAuthorizationStatus = CMMotionActivityManager.authorizationStatus()
+                self.motionAuthPedometer.stopUpdates()
+                continuation.resume()
+            }
+        }
+    }
+
+    private let motionAuthPedometer = CMPedometer()
+
+    // MARK: - Recorded data
 
     public func createASample() async -> LocomotionSample {
         let location = await kalmanFilter.currentEstimatedLocation()
@@ -430,7 +450,7 @@ public final class LocomotionManager {
         }
 
         func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-            parent.authorizationStatus = manager.authorizationStatus
+            parent.locationAuthorizationStatus = manager.authorizationStatus
         }
 
         func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
