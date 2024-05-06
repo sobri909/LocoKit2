@@ -57,6 +57,8 @@ internal actor KalmanFilter {
         [0, 0, 0, 1]
     ])
 
+    private let altitudeKalman = AltitudeKalmanFilter(qMetresPerSecond: 3)
+
     // MARK: -
 
     func add(location: CLLocation) {
@@ -87,14 +89,16 @@ internal actor KalmanFilter {
             lastTimestamp = location.timestamp
             updateMeasurementNoise(with: location)
         }
+
+        altitudeKalman.add(location: location)
     }
 
     func currentEstimatedLocation() -> CLLocation {
         return CLLocation(
             coordinate: currentEstimatedCoordinate(),
-            altitude: 0,
+            altitude: altitudeKalman.altitude ?? -1,
             horizontalAccuracy: currentEstimatedHorizontalAccuracy(),
-            verticalAccuracy: -1,
+            verticalAccuracy: altitudeKalman.unfilteredLocation?.verticalAccuracy ?? -1,
             course: currentEstimatedCourse(),
             speed: currentEstimatedSpeed(),
             timestamp: lastTimestamp ?? .now
