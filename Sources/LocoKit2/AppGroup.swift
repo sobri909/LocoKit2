@@ -209,12 +209,13 @@ public class AppGroup {
     // MARK: - Interfaces
 
     public enum AppName: String, CaseIterable, Codable {
-        case arcV3, arcMini, arcRecorder
+        case arcV3, arcMini, arcRecorder, arcEditor
         public var sortIndex: Int {
             switch self {
             case .arcV3: return 0
             case .arcMini: return 1
             case .arcRecorder: return 2
+            case .arcEditor: return 3
             }
         }
     }
