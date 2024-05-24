@@ -7,16 +7,32 @@
 
 import Foundation
 import CoreLocation
+import Combine
 import GRDB
 
+@Observable
 public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
     public let base: TimelineItemBase
     public var visit: TimelineItemVisit?
     public let trip: TimelineItemTrip?
-    public let samples: [LocomotionSample]?
+    public var samples: [LocomotionSample]?
 
     public var id: String { base.id }
     public var isVisit: Bool { base.isVisit }
+
+    public func updateSamples(_ samples: [LocomotionSample]) {
+        print("[\(id)] updateSamples() count: \(samples.count)")
+
+        self.samples = samples
+
+        visit?.isStale = true
+        trip?.isStale = true
+        
+        Task {
+            await updateVisit()
+            await updateTrip()
+        }
+    }
 
     public func updateVisit() async {
         guard let samples, let visit, visit.isStale else { return }

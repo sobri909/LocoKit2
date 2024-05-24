@@ -56,6 +56,10 @@ public class TimelineItemBase: Record, Identifiable, Codable {
     public static let trip = hasOne(TimelineItemTrip.self).forKey("trip")
     public static let samples = hasMany(LocomotionSample.self).forKey("samples")
 
+    public var samples: QueryInterfaceRequest<LocomotionSample> {
+        request(for: TimelineItemBase.samples)
+    }
+
     public override class var databaseTableName: String { return "TimelineItemBase" }
 
     // MARK: - Init
