@@ -21,7 +21,8 @@ public final class LocomotionManager {
     public var standbyCycleDuration: TimeInterval = 60 * 2
     public var fallbackUpdateDuration: TimeInterval = 6
 
-    public var appGroup: AppGroupOld?
+    public var appGroup: AppGroup?
+    public var appGroupOld: AppGroupOld?
 
     public private(set) var recordingState: RecordingState = .off {
         didSet { appGroup?.save() }

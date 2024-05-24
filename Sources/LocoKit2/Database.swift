@@ -12,7 +12,9 @@ public class Database {
 
     public static let highlander = Database()
 
-    public var appGroup: AppGroupOld? {
+    public var appGroup: AppGroup? 
+
+    public var appGroupOld: AppGroupOld? {
         didSet {
             if let appGroupLegacyDbUrl {
                 legacyPool = try? DatabasePool(path: appGroupLegacyDbUrl.path, configuration: config)
@@ -27,7 +29,8 @@ public class Database {
     public static var legacyPool: DatabasePool? { return highlander.legacyPool }
 
     public private(set) lazy var pool: DatabasePool = {
-        return try! DatabasePool(path: appContainerDbUrl.path, configuration: config)
+        let dbUrl = appGroupDbUrl ?? appContainerDbUrl
+        return try! DatabasePool(path: dbUrl.path, configuration: config)
     }()
 
     public private(set) var legacyPool: DatabasePool?
@@ -275,7 +278,8 @@ public class Database {
     }()
 
     var appGroupDbDir: URL? {
-        guard let suiteName = appGroup?.suiteName else { return nil }
+        let suiteName = appGroup?.suiteName ?? appGroupOld?.suiteName
+        guard let suiteName else { return nil }
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suiteName)
     }
 
