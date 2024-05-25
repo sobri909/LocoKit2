@@ -201,15 +201,9 @@ public final class TimelineRecorder {
         /** stationary -> stationary || moving -> moving **/
         sample.timelineItemId = workingItem.id
 
-        // computed values need recalc
-        workingItem.visit?.isStale = true
-        workingItem.trip?.isStale = true
-
         do {
             try await Database.pool.write {
                 _ = try sample.updateChanges($0)
-                _ = try workingItem.visit?.updateChanges($0)
-                _ = try workingItem.trip?.updateChanges($0)
             }
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)

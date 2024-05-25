@@ -18,9 +18,6 @@ public class TimelineSegment {
     @ObservationIgnored
     private var itemsObserver: AnyCancellable?
 
-    @ObservationIgnored
-    private var samplesObservers: [String: AnyCancellable] = [:]
-
     public init(dateRange: DateInterval) {
         self.dateRange = dateRange
 
@@ -40,30 +37,32 @@ public class TimelineSegment {
                     DebugLogger.logger.error(error, subsystem: .database)
                 }
             } receiveValue: { [weak self] (items: [TimelineItem]) in
-                self?.updateItems(from: items)
+                if let self {
+                    Task { await self.updateItems(from: items) }
+                }
             }
     }
 
-    private func updateItems(from items: [TimelineItem]) {
-        self.timelineItems = items
+    private func updateItems(from updatedItems: [TimelineItem]) async {
+        for incomingItem in updatedItems {
+            if incomingItem.samplesChanged {
+                await incomingItem.fetchSamples()
 
-        for item in items {
-            if samplesObservers[item.id] != nil { continue }
+            } else {
+                // copy over existing samples if available
+                let localItem = timelineItems.first { $0.id == incomingItem.id }
+                if let localItem, let samples = localItem.samples {
+                    incomingItem.samples = samples
 
             print("updateItems() adding samples observer: \(item.id)")
 
-            samplesObservers[item.id] = ValueObservation
-                .trackingConstantRegion(item.base.samples.fetchAll)
-                .publisher(in: Database.pool)
-                .sink { completion in
-                    if case .failure(let error) = completion {
-                        DebugLogger.logger.error(error, subsystem: .database)
-                    }
-                } receiveValue: { samples in
-                    item.updateSamples(samples)
+                } else { // need to fetch samples
+                    await incomingItem.fetchSamples()
                 }
+            }
         }
 
+        self.timelineItems = updatedItems
     }
 
 }

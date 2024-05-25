@@ -16,7 +16,6 @@ public class TimelineItemVisit: Record, Codable {
     public static var maxRadius: CLLocationDistance = 150
 
     public let itemId: String
-    public var isStale = false
     public var latitude: CLLocationDegrees
     public var longitude: CLLocationDegrees
     public var radiusMean: CLLocationDistance
@@ -44,7 +43,6 @@ public class TimelineItemVisit: Record, Codable {
             return
         }
 
-        self.isStale = false
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
@@ -64,7 +62,6 @@ public class TimelineItemVisit: Record, Codable {
         }
 
         self.itemId = itemId
-        self.isStale = false
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
@@ -80,7 +77,6 @@ public class TimelineItemVisit: Record, Codable {
 
     required init(row: Row) throws {
         itemId = row["itemId"]
-        isStale = row["isStale"]
         latitude = row["latitude"]
         longitude = row["longitude"]
         radiusMean = row["radiusMean"]
@@ -92,7 +88,6 @@ public class TimelineItemVisit: Record, Codable {
 
     public override func encode(to container: inout PersistenceContainer) {
         container["itemId"] = itemId
-        container["isStale"] = isStale
         container["latitude"] = latitude
         container["longitude"] = longitude
         container["radiusMean"] = radiusMean

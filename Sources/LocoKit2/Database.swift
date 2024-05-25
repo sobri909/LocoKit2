@@ -123,6 +123,7 @@ public class Database {
                 table.column("endDate", .datetime).indexed()
                 table.column("source", .text).notNull()
                 table.column("deleted", .boolean).notNull()
+                table.column("samplesChanged", .boolean).notNull()
 
                 table.column("previousItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
@@ -145,7 +146,6 @@ public class Database {
                 table.primaryKey("itemId", .text)
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
-                table.column("isStale", .boolean).notNull()
                 table.column("latitude", .double).notNull()
                 table.column("longitude", .double).notNull()
                 table.column("radiusMean", .double).notNull()
@@ -161,7 +161,6 @@ public class Database {
                 table.primaryKey("itemId", .text)
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
-                table.column("isStale", .boolean).notNull()
                 table.column("distance", .double).notNull()
                 table.column("classifiedActivityType", .text)
                 table.column("confirmedActivityType", .text)
@@ -218,7 +217,8 @@ public class Database {
                         SELECT MAX(date)
                         FROM LocomotionSample
                         WHERE timelineItemId = NEW.timelineItemId
-                    )
+                    ),
+                    samplesChanged = 1
                     WHERE id = NEW.timelineItemId;
                 END;
                 """)
@@ -239,7 +239,8 @@ public class Database {
                         SELECT MAX(date)
                         FROM LocomotionSample
                         WHERE timelineItemId = NEW.timelineItemId
-                    )
+                    ),
+                    samplesChanged = 1
                     WHERE id = NEW.timelineItemId;
                 END;
                 """)
@@ -260,7 +261,8 @@ public class Database {
                         SELECT MAX(date)
                         FROM LocomotionSample
                         WHERE timelineItemId = OLD.timelineItemId
-                    )
+                    ),
+                    samplesChanged = 1
                     WHERE id = OLD.timelineItemId;
                 END;
                 """)

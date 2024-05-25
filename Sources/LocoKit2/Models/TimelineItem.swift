@@ -19,46 +19,42 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
 
     public var id: String { base.id }
     public var isVisit: Bool { base.isVisit }
+    public var samplesChanged: Bool { base.samplesChanged }
 
-    public func updateSamples(_ samples: [LocomotionSample]) {
-        print("[\(id)] updateSamples() count: \(samples.count)")
+    public func fetchSamples() async {
+        guard samplesChanged || samples == nil else { return }
 
-        self.samples = samples
-
-        visit?.isStale = true
-        trip?.isStale = true
-        
-        Task {
-            await updateVisit()
-            await updateTrip()
-        }
-    }
-
-    public func updateVisit() async {
-        guard let samples, let visit, visit.isStale else { return }
-
-        print("updateVisit() itemId: \(id)")
-
-        visit.update(from: samples)
         do {
-            try await Database.pool.write {
-                _ = try visit.updateChanges($0)
+            let fetchedSamples = try await Database.pool.read {
+                try self.base.samples.order(Column("date").asc).fetchAll($0)
             }
+
+
+            self.samples = fetchedSamples
+
+            if samplesChanged {
+                await updateFrom(samples: fetchedSamples)
+            }
+
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
     }
 
-    public func updateTrip() async {
-        guard let samples, let trip, trip.isStale else { return }
+    private func updateFrom(samples updatedSamples: [LocomotionSample]) async {
+        guard samplesChanged else { return }
 
-        print("updateTrip() itemId: \(id)")
+        visit?.update(from: updatedSamples)
+        trip?.update(from: updatedSamples)
+        base.samplesChanged = false
 
-        trip.update(from: samples)
         do {
             try await Database.pool.write {
-                _ = try trip.updateChanges($0)
+                _ = try self.visit?.updateChanges($0)
+                _ = try self.trip?.updateChanges($0)
+                _ = try self.base.updateChanges($0)
             }
+            
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
@@ -87,9 +83,8 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
         self.trip = try container.decodeIfPresent(TimelineItemTrip.self, forKey: CodingKeys.trip)
         self.samples = try container.decodeIfPresent([LocomotionSample].self, forKey: CodingKeys.samples)
 
-        Task {
-            await updateVisit()
-            await updateTrip()
+        if samplesChanged, let samples {
+            Task { await updateFrom(samples: samples) }
         }
     }
 }

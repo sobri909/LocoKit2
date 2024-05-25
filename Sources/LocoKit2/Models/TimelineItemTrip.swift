@@ -12,7 +12,6 @@ import GRDB
 @Observable
 public class TimelineItemTrip: Record, Codable {
     public let itemId: String
-    public var isStale = false
     public var distance: CLLocationDistance
     public var classifiedActivityType: String?
     public var confirmedActivityType: String?
@@ -22,7 +21,6 @@ public class TimelineItemTrip: Record, Codable {
     // MARK: -
     
     public func update(from samples: [LocomotionSample]) {
-        self.isStale = false
         self.distance = samples.compactMap { $0.location }.usableLocations().distance() ?? 0
     }
 
@@ -30,7 +28,6 @@ public class TimelineItemTrip: Record, Codable {
 
     init?(itemId: String, samples: [LocomotionSample]) {
         self.itemId = itemId
-        self.isStale = false
         self.distance = samples.compactMap { $0.location }.usableLocations().distance() ?? 0
         super.init()
     }
@@ -39,7 +36,6 @@ public class TimelineItemTrip: Record, Codable {
 
     required init(row: Row) throws {
         itemId = row["itemId"]
-        isStale = row["isStale"]
         distance = row["distance"]
         classifiedActivityType = row["classifiedActivityType"]
         confirmedActivityType = row["confirmedActivityType"]
@@ -48,7 +44,6 @@ public class TimelineItemTrip: Record, Codable {
 
     public override func encode(to container: inout PersistenceContainer) {
         container["itemId"] = itemId
-        container["isStale"] = isStale
         container["distance"] = distance
         container["classifiedActivityType"] = classifiedActivityType
         container["confirmedActivityType"] = confirmedActivityType

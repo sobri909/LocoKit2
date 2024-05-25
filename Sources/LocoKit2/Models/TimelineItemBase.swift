@@ -17,6 +17,7 @@ public class TimelineItemBase: Record, Identifiable, Codable {
     public let startDate: Date
     public let endDate: Date
     public var source: String = "LocoKit"
+    public var samplesChanged = false
     public var deleted = false
 
     // extended
@@ -79,6 +80,7 @@ public class TimelineItemBase: Record, Identifiable, Codable {
         isVisit = row["isVisit"]
         startDate = row["startDate"]
         endDate = row["endDate"]
+        samplesChanged = row["samplesChanged"]
         deleted = row["deleted"]
 
         previousItemId = row["previousItemId"]
@@ -101,6 +103,7 @@ public class TimelineItemBase: Record, Identifiable, Codable {
         container["isVisit"] = isVisit
         container["startDate"] = startDate
         container["endDate"] = endDate
+        container["samplesChanged"] = samplesChanged
         container["deleted"] = deleted
 
         container["previousItemId"] = previousItemId
