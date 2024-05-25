@@ -54,8 +54,6 @@ public class TimelineSegment {
                 if let localItem, let samples = localItem.samples {
                     incomingItem.samples = samples
 
-            print("updateItems() adding samples observer: \(item.id)")
-
                 } else { // need to fetch samples
                     await incomingItem.fetchSamples()
                 }
