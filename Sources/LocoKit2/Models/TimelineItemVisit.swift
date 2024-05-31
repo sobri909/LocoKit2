@@ -9,8 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-@Observable
-public class TimelineItemVisit: Record, Codable {
+public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable {
 
     public static var minRadius: CLLocationDistance = 10
     public static var maxRadius: CLLocationDistance = 150
@@ -24,6 +23,8 @@ public class TimelineItemVisit: Record, Codable {
     public var placeId: String?
     public var confirmedPlace = false
 
+    public var id: String { itemId }
+
     public var center: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
@@ -32,15 +33,15 @@ public class TimelineItemVisit: Record, Codable {
         Radius(mean: radiusMean, sd: radiusSD)
     }
 
-    public override class var databaseTableName: String { return "TimelineItemVisit" }
-
     // MARK: -
 
-    public func update(from samples: [LocomotionSample]) {
+    public mutating func update(from samples: [LocomotionSample]) -> Bool {
+        let oldSelf = self
+
         let usableLocations = samples.compactMap { $0.location }.usableLocations()
 
         guard let coordinate = usableLocations.weightedCenter() else {
-            return
+            return false
         }
 
         self.latitude = coordinate.latitude
@@ -50,6 +51,8 @@ public class TimelineItemVisit: Record, Codable {
         let radius = usableLocations.radius(from: center)
         self.radiusMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
         self.radiusSD = min(radius.sd, Self.maxRadius)
+
+        return !self.databaseEquals(oldSelf)
     }
 
     // MARK: - Init
@@ -69,31 +72,6 @@ public class TimelineItemVisit: Record, Codable {
         let radius = usableLocations.radius(from: center)
         self.radiusMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
         self.radiusSD = min(radius.sd, Self.maxRadius)
-
-        super.init()
-    }
-    
-    // MARK: - Record
-
-    required init(row: Row) throws {
-        itemId = row["itemId"]
-        latitude = row["latitude"]
-        longitude = row["longitude"]
-        radiusMean = row["radiusMean"]
-        radiusSD = row["radiusSD"]
-        placeId = row["placeId"]
-        confirmedPlace = row["confirmedPlace"]
-        try super.init(row: row)
-    }
-
-    public override func encode(to container: inout PersistenceContainer) {
-        container["itemId"] = itemId
-        container["latitude"] = latitude
-        container["longitude"] = longitude
-        container["radiusMean"] = radiusMean
-        container["radiusSD"] = radiusSD
-        container["placeId"] = placeId
-        container["confirmedPlace"] = confirmedPlace
     }
 
 }

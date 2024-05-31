@@ -9,8 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-@Observable
-public class TimelineItemBase: Record, Identifiable, Codable {
+public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable {
 
     public var id: String = UUID().uuidString
     public let isVisit: Bool
@@ -61,61 +60,13 @@ public class TimelineItemBase: Record, Identifiable, Codable {
         request(for: TimelineItemBase.samples)
     }
 
-    public override class var databaseTableName: String { return "TimelineItemBase" }
-
     // MARK: - Init
 
-    init(from sample: LocomotionSample) {
+    init(from sample: inout LocomotionSample) {
         isVisit = sample.movingState == .stationary
         startDate = sample.date
         endDate = sample.date
-        super.init()
-    }
-    
-    // MARK: - Record
-
-    required init(row: Row) throws {
-        id = row["id"]
-        source = row["source"]
-        isVisit = row["isVisit"]
-        startDate = row["startDate"]
-        endDate = row["endDate"]
-        samplesChanged = row["samplesChanged"]
-        deleted = row["deleted"]
-
-        previousItemId = row["previousItemId"]
-        nextItemId = row["nextItemId"]
-
-        stepCount = row["stepCount"]
-        floorsAscended = row["floorsAscended"]
-        floorsDescended = row["floorsDescended"]
-        averageAltitude = row["averageAltitude"]
-        activeEnergyBurned = row["activeEnergyBurned"]
-        averageHeartRate = row["averageHeartRate"]
-        maxHeartRate = row["maxHeartRate"]
-
-        try super.init(row: row)
-    }
-
-    public override func encode(to container: inout PersistenceContainer) {
-        container["id"] = id
-        container["source"] = source
-        container["isVisit"] = isVisit
-        container["startDate"] = startDate
-        container["endDate"] = endDate
-        container["samplesChanged"] = samplesChanged
-        container["deleted"] = deleted
-
-        container["previousItemId"] = previousItemId
-        container["nextItemId"] = nextItemId
-
-        container["stepCount"] = stepCount
-        container["floorsAscended"] = floorsAscended
-        container["floorsDescended"] = floorsDescended
-        container["averageAltitude"] = averageAltitude
-        container["activeEnergyBurned"] = activeEnergyBurned
-        container["averageHeartRate"] = averageHeartRate
-        container["maxHeartRate"] = maxHeartRate
+        sample.timelineItemId = id
     }
 
 }

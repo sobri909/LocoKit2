@@ -116,7 +116,7 @@ public final class LocomotionManager {
         let movingState = await stationaryDetector.currentState()
         let stepHz = await stepsSampler.currentStepHz()
 
-        let sample = LocomotionSample(
+        var sample = LocomotionSample(
             date: location.timestamp,
             movingState: movingState.movingState,
             recordingState: recordingState,

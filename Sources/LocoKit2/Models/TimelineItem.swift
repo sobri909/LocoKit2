@@ -10,25 +10,31 @@ import CoreLocation
 import Combine
 import GRDB
 
-@Observable
-public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
-    public let base: TimelineItemBase
+public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
+
+    public var base: TimelineItemBase
     public var visit: TimelineItemVisit?
-    public let trip: TimelineItemTrip?
+    public var trip: TimelineItemTrip?
     public var samples: [LocomotionSample]?
 
     public var id: String { base.id }
     public var isVisit: Bool { base.isVisit }
     public var samplesChanged: Bool { base.samplesChanged }
+    public var debugShortId: String { String(id.split(separator: "-")[0]) }
 
-    public func fetchSamples() async {
-        guard samplesChanged || samples == nil else { return }
+    public mutating func fetchSamples() async {
+        guard samplesChanged || samples == nil else {
+            print("[\(debugShortId)] fetchSamples() skipping; no reason to fetch")
+            return
+        }
 
         do {
+            let samplesRequest = base.samples.order(Column("date").asc)
             let fetchedSamples = try await Database.pool.read {
-                try self.base.samples.order(Column("date").asc).fetchAll($0)
+                try samplesRequest.fetchAll($0)
             }
 
+            print("[\(debugShortId)] fetchSamples() samples: \(fetchedSamples.count)")
 
             self.samples = fetchedSamples
 
@@ -41,18 +47,26 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
         }
     }
 
-    private func updateFrom(samples updatedSamples: [LocomotionSample]) async {
-        guard samplesChanged else { return }
+    private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
+        guard samplesChanged else {
+            print("[\(debugShortId)] fetchSamples() skipping; no reason to update")
+            return
+        }
 
-        visit?.update(from: updatedSamples)
-        trip?.update(from: updatedSamples)
+        print("[\(debugShortId)] updateFrom(samples:) count: \(updatedSamples.count)")
+
+        let visitChanged = visit?.update(from: updatedSamples) ?? false
+        let tripChanged = trip?.update(from: updatedSamples) ?? false
         base.samplesChanged = false
 
+        let baseCopy = base
+        let visitCopy = visit
+        let tripCopy = trip
         do {
             try await Database.pool.write {
-                _ = try self.visit?.updateChanges($0)
-                _ = try self.trip?.updateChanges($0)
-                _ = try self.base.updateChanges($0)
+                if visitChanged { try visitCopy?.save($0) }
+                if tripChanged { try tripCopy?.save($0) }
+                try baseCopy.save($0)
             }
             
         } catch {
@@ -60,31 +74,10 @@ public class TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
         }
     }
 
-    // MARK: - Hashable
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-
-    public static func == (lhs: TimelineItem, rhs: TimelineItem) -> Bool {
-        return lhs.id == rhs.id
-    }
-
     // MARK: - Codable
 
     enum CodingKeys: CodingKey {
         case base, visit, trip, samples
     }
-    
-    public required init(from decoder: any Decoder) throws {
-        let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
-        self.base = try container.decode(TimelineItemBase.self, forKey: CodingKeys.base)
-        self.visit = try container.decodeIfPresent(TimelineItemVisit.self, forKey: CodingKeys.visit)
-        self.trip = try container.decodeIfPresent(TimelineItemTrip.self, forKey: CodingKeys.trip)
-        self.samples = try container.decodeIfPresent([LocomotionSample].self, forKey: CodingKeys.samples)
 
-        if samplesChanged, let samples {
-            Task { await updateFrom(samples: samples) }
-        }
-    }
 }

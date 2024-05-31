@@ -161,29 +161,31 @@ public final class TimelineRecorder {
     private func recordSample() async {
         guard isRecording else { return }
 
-        let sample = await loco.createASample()
+        var sample = await loco.createASample()
 
         do {
+            let sampleCopy = sample
             try await Database.pool.write {
-                try sample.save($0)
+                try sampleCopy.save($0)
             }
             
-            await processSample(sample)
+            await processSample(&sample)
 
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
 
+        let sampleCopy = sample
         await MainActor.run {
-            latestSample = sample
+            latestSample = sampleCopy
         }
     }
 
-    private func processSample(_ sample: LocomotionSample) async {
+    private func processSample(_ sample: inout LocomotionSample) async {
 
         /** first timeline item **/
         guard let workingItem = currentItem() else {
-            let newItemBase = await createTimelineItem(from: sample)
+            let newItemBase = await createTimelineItem(from: &sample)
             currentItemId = newItemBase.id
             return
         }
@@ -193,7 +195,7 @@ public final class TimelineRecorder {
 
         /** stationary -> moving || moving -> stationary **/
         if currentlyMoving != previouslyMoving {
-            let newItemBase = await createTimelineItem(from: sample, previousItemId: workingItem.id)
+            let newItemBase = await createTimelineItem(from: &sample, previousItemId: workingItem.id)
             currentItemId = newItemBase.id
             return
         }
@@ -202,19 +204,17 @@ public final class TimelineRecorder {
         sample.timelineItemId = workingItem.id
 
         do {
+            let sampleCopy = sample
             try await Database.pool.write {
-                _ = try sample.updateChanges($0)
+                try sampleCopy.save($0)
             }
         } catch {
             DebugLogger.logger.error(error, subsystem: .database)
         }
     }
 
-    private func createTimelineItem(from sample: LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
-        let newItem = TimelineItemBase(from: sample)
-
-        // assign the sample
-        sample.timelineItemId = newItem.id
+    private func createTimelineItem(from sample: inout LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
+        var newItem = TimelineItemBase(from: &sample)
 
         // keep the list linked
         newItem.previousItemId = previousItemId
@@ -230,12 +230,14 @@ public final class TimelineRecorder {
             newVisit = nil
         }
 
+        let itemCopy = newItem
+        let sampleCopy = sample
         do {
             try await Database.pool.write {
-                try newItem.save($0)
+                try itemCopy.save($0)
                 try newVisit?.save($0)
                 try newTrip?.save($0)
-                _ = try sample.updateChanges($0)
+                try sampleCopy.save($0)
             }
 
         } catch {

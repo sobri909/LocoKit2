@@ -44,23 +44,27 @@ public class TimelineSegment {
     }
 
     private func updateItems(from updatedItems: [TimelineItem]) async {
-        for incomingItem in updatedItems {
-            if incomingItem.samplesChanged {
-                await incomingItem.fetchSamples()
+        print("updateItems()")
+        var mutableItems = updatedItems
+
+        for index in mutableItems.indices {
+            let itemCopy = mutableItems[index]
+            if itemCopy.samplesChanged {
+                await mutableItems[index].fetchSamples()
 
             } else {
                 // copy over existing samples if available
-                let localItem = timelineItems.first { $0.id == incomingItem.id }
+                let localItem = timelineItems.first { $0.id == itemCopy.id }
                 if let localItem, let samples = localItem.samples {
-                    incomingItem.samples = samples
+                    mutableItems[index].samples = samples
 
                 } else { // need to fetch samples
-                    await incomingItem.fetchSamples()
+                    await mutableItems[index].fetchSamples()
                 }
             }
         }
 
-        self.timelineItems = updatedItems
+        self.timelineItems = mutableItems
     }
 
 }
