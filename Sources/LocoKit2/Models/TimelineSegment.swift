@@ -44,7 +44,6 @@ public class TimelineSegment {
     }
 
     private func updateItems(from updatedItems: [TimelineItem]) async {
-        print("updateItems()")
         var mutableItems = updatedItems
 
         for index in mutableItems.indices {

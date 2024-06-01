@@ -34,8 +34,6 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
                 try samplesRequest.fetchAll($0)
             }
 
-            print("[\(debugShortId)] fetchSamples() samples: \(fetchedSamples.count)")
-
             self.samples = fetchedSamples
 
             if samplesChanged {
@@ -52,8 +50,6 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
             print("[\(debugShortId)] fetchSamples() skipping; no reason to update")
             return
         }
-
-        print("[\(debugShortId)] updateFrom(samples:) count: \(updatedSamples.count)")
 
         let visitChanged = visit?.update(from: updatedSamples) ?? false
         let tripChanged = trip?.update(from: updatedSamples) ?? false
