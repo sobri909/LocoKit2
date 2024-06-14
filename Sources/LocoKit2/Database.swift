@@ -122,6 +122,7 @@ public class Database {
                 table.column("startDate", .datetime).indexed()
                 table.column("endDate", .datetime).indexed()
                 table.column("source", .text).notNull()
+                table.column("sourceVersion", .text).notNull()
                 table.column("deleted", .boolean).notNull()
                 table.column("samplesChanged", .boolean).notNull()
 
@@ -172,6 +173,7 @@ public class Database {
                 table.primaryKey("id", .text)
                 table.column("date", .datetime).notNull().indexed()
                 table.column("source", .text).notNull()
+                table.column("sourceVersion", .text).notNull()
                 table.column("secondsFromGMT", .integer).notNull()
                 table.column("movingState", .integer).notNull()
                 table.column("recordingState", .integer).notNull()

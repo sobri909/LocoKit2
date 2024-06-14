@@ -16,8 +16,10 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
     public let startDate: Date
     public let endDate: Date
     public var source: String = "LocoKit"
-    public var samplesChanged = false
+    public var sourceVersion: String = LocomotionManager.locoKitVersion
     public var deleted = false
+
+    public var samplesChanged = false
 
     // extended
     public var stepCount: Int?

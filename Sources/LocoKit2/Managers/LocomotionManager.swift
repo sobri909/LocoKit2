@@ -15,6 +15,9 @@ public final class LocomotionManager {
 
     public static let highlander = LocomotionManager()
 
+    // this is a dumb place to put this
+    public static let locoKitVersion = "9.0.0"
+
     // MARK: - Public
     
     public var sleepCycleDuration: TimeInterval = 30
