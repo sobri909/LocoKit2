@@ -19,6 +19,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     public var sourceVersion: String = LocomotionManager.locoKitVersion
     public let movingState: MovingState
     public let recordingState: RecordingState
+    public var disabled = false
 
     // foreign key
     public var timelineItemId: String?
@@ -74,6 +75,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         sourceVersion = row["sourceVersion"]
         movingState = MovingState(rawValue: row["movingState"])!
         recordingState = RecordingState(rawValue: row["recordingState"])!
+        disabled = row["disabled"]
 
         timelineItemId = row["timelineItemId"]
         
@@ -114,7 +116,8 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         case sourceVersion
         case movingState
         case recordingState
-        
+        case disabled
+
         case timelineItemId
 
         case latitude 

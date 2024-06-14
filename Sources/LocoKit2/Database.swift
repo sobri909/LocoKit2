@@ -123,6 +123,7 @@ public class Database {
                 table.column("endDate", .datetime).indexed()
                 table.column("source", .text).notNull()
                 table.column("sourceVersion", .text).notNull()
+                table.column("disabled", .boolean).notNull()
                 table.column("deleted", .boolean).notNull()
                 table.column("samplesChanged", .boolean).notNull()
 
@@ -177,6 +178,7 @@ public class Database {
                 table.column("secondsFromGMT", .integer).notNull()
                 table.column("movingState", .integer).notNull()
                 table.column("recordingState", .integer).notNull()
+                table.column("disabled", .boolean).notNull()
 
                 table.column("timelineItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
