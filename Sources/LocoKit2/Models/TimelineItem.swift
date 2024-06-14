@@ -52,7 +52,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
             }
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
     }
 
@@ -101,7 +101,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
             }
             
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
     }
 

@@ -57,7 +57,7 @@ public class Database {
         do {
             try migrator.migrate(pool)
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
     }
 
@@ -65,7 +65,7 @@ public class Database {
         do {
             try migrator.migrate(pool)
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
     }
 
@@ -77,18 +77,18 @@ public class Database {
             return !remaining.isEmpty
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
             return false
         }
     }
 
     public func eraseTheDb() {
-        DebugLogger.logger.info("ERASING THE DATABASE", subsystem: .database)
+        logger.info("ERASING THE DATABASE", subsystem: .database)
         do {
             try Database.pool.erase()
             migrator = DatabaseMigrator()
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
     }
 

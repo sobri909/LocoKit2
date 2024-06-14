@@ -32,7 +32,7 @@ public class TimelineLinkedList {
             }
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
             return nil
         }
     }
@@ -67,7 +67,7 @@ public class TimelineLinkedList {
             return item
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
             return nil
         }
     }

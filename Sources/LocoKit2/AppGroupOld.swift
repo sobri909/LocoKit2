@@ -148,7 +148,7 @@ public class AppGroupOld {
         guard let messageInfo = try? AppGroupOld.decoder.decode(AppGroup.MessageInfo.self, from: data) else { return }
         guard messageInfo.appName != thisApp else { return }
         guard messageInfo.message == message else {
-            DebugLogger.logger.debug("LASTMESSAGE.MESSAGE MISMATCH (expected: \(message.rawValue), got: \(messageInfo.message.rawValue))")
+            logger.debug("LASTMESSAGE.MESSAGE MISMATCH (expected: \(message.rawValue), got: \(messageInfo.message.rawValue))")
             return
         }
 
@@ -165,19 +165,19 @@ public class AppGroupOld {
     }
     
     private func appStateUpdated(by: AppGroup.AppName) {
-        DebugLogger.logger.debug("RECEIVED: .updatedState, from: \(by.rawValue)")
+        logger.debug("RECEIVED: .updatedState, from: \(by.rawValue)")
 
         guard let currentRecorder else {
-            DebugLogger.logger.error("No AppGroupOld.currentRecorder!", subsystem: .appgroup)
+            logger.error("No AppGroupOld.currentRecorder!", subsystem: .appgroup)
             return
         }
         guard let currentItemId = currentRecorder.currentItemId else {
-            DebugLogger.logger.error("No AppGroupOld.currentItemId!", subsystem: .appgroup)
+            logger.error("No AppGroupOld.currentItemId!", subsystem: .appgroup)
             return
         }
 
         if !isAnActiveRecorder, currentAppState.currentItemId != currentItemId {
-            DebugLogger.logger.debug("Local currentItemId is stale (mine: \(self.currentAppState.currentItemId?.uuidString ?? "nil"), theirs: \(currentItemId.uuidString))")
+            logger.debug("Local currentItemId is stale (mine: \(self.currentAppState.currentItemId?.uuidString ?? "nil"), theirs: \(currentItemId.uuidString))")
             timelineRecorder.updateCurrentItemId()
         }
     }
@@ -187,12 +187,12 @@ public class AppGroupOld {
             LocomotionManager.highlander.startStandby()
 
             let appName = LocomotionManager.highlander.appGroup?.currentRecorder?.appName.rawValue ?? "UNKNOWN"
-            DebugLogger.logger.info("concededRecording to \(appName)", subsystem: .misc)
+            logger.info("concededRecording to \(appName)", subsystem: .misc)
         }
     }
 
     private func objectsWereModified(by: AppGroup.AppName, messageInfo: AppGroup.MessageInfo) {
-        DebugLogger.logger.debug("AppGroupOld received modifiedObjectIds: \(messageInfo.modifiedObjectIds?.count ?? 0) by: \(by.rawValue)")
+        logger.debug("AppGroupOld received modifiedObjectIds: \(messageInfo.modifiedObjectIds?.count ?? 0) by: \(by.rawValue)")
         if let objectIds = messageInfo.modifiedObjectIds, !objectIds.isEmpty {
             let note = Notification(name: .timelineObjectsExternallyModified, object: self, userInfo: ["modifiedObjectIds": objectIds])
             NotificationCenter.default.post(note)

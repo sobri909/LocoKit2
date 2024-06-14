@@ -34,7 +34,7 @@ public class TimelineSegment {
             .publisher(in: Database.pool)
             .sink { completion in
                 if case .failure(let error) = completion {
-                    DebugLogger.logger.error(error, subsystem: .database)
+                    logger.error(error, subsystem: .database)
                 }
             } receiveValue: { [weak self] (items: [TimelineItem]) in
                 if let self {

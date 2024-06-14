@@ -42,7 +42,7 @@ public final class LocomotionManager {
     // MARK: - Recording states
 
     public func startRecording() {
-        DebugLogger.logger.info("LocomotionManager.startRecording()")
+        logger.info("LocomotionManager.startRecording()")
 
         backgroundSession = CLBackgroundActivitySession()
 
@@ -58,7 +58,7 @@ public final class LocomotionManager {
     }
 
     public func stopRecording() {
-        DebugLogger.logger.info("LocomotionManager.stopRecording()")
+        logger.info("LocomotionManager.stopRecording()")
 
         locationManager.stopUpdatingLocation()
         locationManager.stopMonitoringSignificantLocationChanges()
@@ -94,15 +94,15 @@ public final class LocomotionManager {
     // MARK: - Authorisation
 
     public func requestLocationAuthorization() {
-        DebugLogger.logger.info("LocomotionManager.requestLocationAuthorization()")
+        logger.info("LocomotionManager.requestLocationAuthorization()")
         locationManager.requestAlwaysAuthorization()
     }
 
     public func requestMotionAuthorization() async {
-        DebugLogger.logger.info("LocomotionManager.requestMotionAuthorization()")
+        logger.info("LocomotionManager.requestMotionAuthorization()")
         await withCheckedContinuation { continuation in
             motionAuthPedometer.queryPedometerData(from: .now - .hours(1), to: .now) { data, error in
-                if let error { DebugLogger.logger.error(error, subsystem: .misc) }
+                if let error { logger.error(error, subsystem: .misc) }
                 self.motionAuthorizationStatus = CMMotionActivityManager.authorizationStatus()
                 self.motionAuthPedometer.stopUpdates()
                 continuation.resume()
@@ -187,7 +187,7 @@ public final class LocomotionManager {
 
     private func startSleeping() {
         if recordingState != .wakeup {
-            DebugLogger.logger.info("LocomotionManager.startSleeping()")
+            logger.info("LocomotionManager.startSleeping()")
         }
 
         stopCoreMotion()
@@ -227,7 +227,7 @@ public final class LocomotionManager {
         guard let appGroup else { return }
         if appGroup.isAnActiveRecorder { return }
         startRecording()
-        DebugLogger.logger.info("tookOverRecording", subsystem: .misc)
+        logger.info("tookOverRecording", subsystem: .misc)
         appGroup.becameCurrentRecorder()
     }
 
@@ -445,12 +445,12 @@ public final class LocomotionManager {
         }
 
         func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
-            DebugLogger.logger.info("locationManagerDidPauseLocationUpdates()")
+            logger.info("locationManagerDidPauseLocationUpdates()")
             parent.startSleeping()
         }
 
         func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
-            DebugLogger.logger.info("locationManagerDidResumeLocationUpdates()")
+            logger.info("locationManagerDidResumeLocationUpdates()")
         }
 
         func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -458,7 +458,7 @@ public final class LocomotionManager {
         }
 
         func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-            DebugLogger.logger.error(error, subsystem: .misc)
+            logger.error(error, subsystem: .misc)
         }
     }
 

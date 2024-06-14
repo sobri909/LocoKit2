@@ -13,6 +13,8 @@ public enum Subsystem: String {
     case misc, database, appgroup
 }
 
+internal let logger = DebugLogger.logger
+
 @Observable
 public class DebugLogger: LoggingFormatAndPipe.Pipe {
 

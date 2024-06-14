@@ -21,7 +21,7 @@ public class AccelerometerSampler {
     public func startMonitoring() {
         motionManager.startDeviceMotionUpdates(to: queue) { [weak self] motionData, error in
             guard let self else { return }
-            if let error { DebugLogger.logger.error(error, subsystem: .misc) }
+            if let error { logger.error(error, subsystem: .misc) }
             if let motionData { self.add(motionData) }
         }
     }

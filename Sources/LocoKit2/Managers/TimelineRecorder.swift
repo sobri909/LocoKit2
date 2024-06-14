@@ -171,7 +171,7 @@ public final class TimelineRecorder {
             await processSample(&sample)
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
 
         let sampleCopy = sample
@@ -208,7 +208,7 @@ public final class TimelineRecorder {
                 try sampleCopy.save($0)
             }
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
     }
 
@@ -240,7 +240,7 @@ public final class TimelineRecorder {
             }
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
 
         return newItem
@@ -261,7 +261,7 @@ public final class TimelineRecorder {
             await processLegacySample(sample)
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
 
         await MainActor.run {
@@ -296,7 +296,7 @@ public final class TimelineRecorder {
                 _ = try sample.updateChanges($0)
             }
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
     }
 
@@ -316,7 +316,7 @@ public final class TimelineRecorder {
             }
 
         } catch {
-            DebugLogger.logger.error(error, subsystem: .database)
+            logger.error(error, subsystem: .database)
         }
 
         return newItem

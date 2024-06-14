@@ -21,7 +21,7 @@ public actor StepsMonitor {
             guard let self else { return }
 
             if let error {
-                DebugLogger.logger.error(error, subsystem: .misc)
+                logger.error(error, subsystem: .misc)
             }
 
             if let pedometerData {
