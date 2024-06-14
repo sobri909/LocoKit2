@@ -15,11 +15,17 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
     public var base: TimelineItemBase
     public var visit: TimelineItemVisit?
     public var trip: TimelineItemTrip?
-    public var samples: [LocomotionSample]?
+    public internal(set) var samples: [LocomotionSample]?
 
     public var id: String { base.id }
     public var isVisit: Bool { base.isVisit }
+    public var isTrip: Bool { !base.isVisit }
+    public var dateRange: DateInterval { base.dateRange }
+    public var source: String { base.source }
+    public var disabled: Bool { base.disabled }
+    public var deleted: Bool { base.deleted }
     public var samplesChanged: Bool { base.samplesChanged }
+    
     public var debugShortId: String { String(id.split(separator: "-")[0]) }
 
     // MARK: -
@@ -50,11 +56,30 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
         }
     }
 
+    public func previousItem(in list: TimelineLinkedList) async -> TimelineItem? {
+        return await list.previousItem(for: self)
+    }
+
+    public func nextItem(in list: TimelineLinkedList) async -> TimelineItem? {
+        return await list.nextItem(for: self)
+    }
 
     public mutating func breakEdges() {
         base.previousItemId = nil
         base.nextItemId = nil
     }
+    public func edgeSample(withOtherItemId otherItemId: String) -> LocomotionSample? {
+        if otherItemId == base.previousItemId {
+            return samples?.first
+        }
+        if otherItemId == base.nextItemId {
+            return samples?.last
+        }
+        return nil
+    }
+
+    // MARK: - Private
+
     private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
         guard samplesChanged else {
             print("[\(debugShortId)] updateFrom(samples:) skipping; no reason to update")
