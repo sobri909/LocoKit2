@@ -28,9 +28,35 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     public var center: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
-    
+
+    public var centerLocation: CLLocation {
+        CLLocation(latitude: latitude, longitude: longitude)
+    }
+
     public var radius: Radius {
         Radius(mean: radiusMean, sd: radiusSD)
+    }
+
+    // MARK: -
+
+    public func overlaps(_ otherVisit: TimelineItemVisit) -> Bool {
+        return distance(from: otherVisit) < 0
+    }
+
+    public func distance(from otherVisit: TimelineItemVisit) -> CLLocationDistance {
+        return centerLocation.distance(from: otherVisit.centerLocation) - radius.with1sd - otherVisit.radius.with1sd
+    }
+
+    public func distance(from otherItem: TimelineItem) -> CLLocationDistance? {
+        if otherItem.isVisit, let otherVisit = otherItem.visit {
+            return distance(from: otherVisit)
+        }
+
+        if otherItem.isTrip, let otherEdge = otherItem.edgeSample(withOtherItemId: self.id)?.location, otherEdge.coordinate.isUsable {
+            return centerLocation.distance(from: otherEdge) - radius.with1sd
+        }
+        
+        return nil
     }
 
     // MARK: -

@@ -22,6 +22,11 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
     public var samplesChanged: Bool { base.samplesChanged }
     public var debugShortId: String { String(id.split(separator: "-")[0]) }
 
+    // MARK: -
+
+    public var coordinates: [CLLocationCoordinate2D]? {
+        return samples?.compactMap { $0.coordinate }.filter { $0.isUsable }
+    }
     public mutating func fetchSamples() async {
         guard samplesChanged || samples == nil else {
             print("[\(debugShortId)] fetchSamples() skipping; no reason to fetch")
@@ -45,9 +50,14 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
         }
     }
 
+
+    public mutating func breakEdges() {
+        base.previousItemId = nil
+        base.nextItemId = nil
+    }
     private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
         guard samplesChanged else {
-            print("[\(debugShortId)] fetchSamples() skipping; no reason to update")
+            print("[\(debugShortId)] updateFrom(samples:) skipping; no reason to update")
             return
         }
 
@@ -74,6 +84,16 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
 
     enum CodingKeys: CodingKey {
         case base, visit, trip, samples
+    }
+
+    // MARK: - Hashable
+
+    public static func == (lhs: TimelineItem, rhs: TimelineItem) -> Bool {
+        return lhs.id == rhs.id
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 
 }
