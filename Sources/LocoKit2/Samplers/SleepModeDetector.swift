@@ -65,7 +65,7 @@ actor SleepModeDetector {
         guard let newest = sample.last else { return }
 
         // age out samples older than sleepModeDelay
-        while sample.count > 1, let oldest = sample.first, oldest.timestamp.age > Self.sleepModeDelay {
+        while sample.count > 2, let oldest = sample.first, oldest.timestamp.age > Self.sleepModeDelay {
             sample.removeFirst()
         }
 
