@@ -18,6 +18,7 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     public func startRecording() {
         loco.startRecording()
+        Task { await startWatchingLoco() }
     }
 
     public func stopRecording() {
@@ -58,27 +59,35 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     // MARK: - Private
 
-    private var loco = LocomotionManager.highlander
+    private init() {}
 
-    private init() {
-        if self.legacyDbMode {
+    private let loco = LocomotionManager.highlander
+
+    private var watchingLoco = false
+
+    private func startWatchingLoco() async {
+        if watchingLoco { return }
+        watchingLoco = true
+        
+        print("startWatchingLoco()")
+
+        if legacyDbMode {
             updateCurrentItemId()
         } else {
             updateCurrentLegacyItemId()
         }
 
-        withContinousObservation(of: self.loco.lastUpdated) { _ in
-            Task {
-                if self.legacyDbMode {
-                    await self.recordLegacySample()
-                } else {
-                    await self.recordSample()
-                }
+        for await _ in loco.locationUpdates() {
+            print("locationUpdates() fired")
+            if legacyDbMode {
+                await recordLegacySample()
+            } else {
+                await recordSample()
             }
         }
 
-        withContinousObservation(of: self.loco.recordingState) { _ in
-            self.recordingStateChanged()
+        for await newState in loco.stateUpdates() {
+            recordingStateChanged(newState)
         }
     }
 
@@ -107,33 +116,33 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     // MARK: -
 
-    private func recordingStateChanged() {
+    private func recordingStateChanged(_ recordingState: RecordingState) {
         // we're only here for changes
-        if loco.recordingState == previousRecordingState {
+        if recordingState == previousRecordingState {
             return
         }
 
         // keep track of sleep start
-        if loco.recordingState == .recording {
+        if recordingState == .recording {
             recordingEnded = nil
         } else if previousRecordingState == .recording {
             recordingEnded = .now
         }
 
-        previousRecordingState = loco.recordingState
+        previousRecordingState = recordingState
 
-        switch loco.recordingState {
+        switch recordingState {
         case .sleeping, .recording:
-            updateSleepCycleDuration()
+            updateSleepCycleDuration(recordingState)
             break
         default:
             break
         }
     }
 
-    private func updateSleepCycleDuration() {
+    private func updateSleepCycleDuration(_ recordingState: RecordingState) {
         // ensure sleep cycles are short for when sleeping next starts
-        if loco.recordingState == .recording {
+        if recordingState == .recording {
             loco.sleepCycleDuration = 6
             return
         }
@@ -250,29 +259,31 @@ public final class TimelineRecorder: @unchecked Sendable {
     private func recordLegacySample() async {
         guard isRecording else { return }
 
-        let sample = await loco.createALegacySample()
+        var sample = await loco.createALegacySample()
 
         do {
+            let sampleCopy = sample
             try await Database.legacyPool?.write {
-                try sample.save($0)
+                try sampleCopy.save($0)
             }
 
-            await processLegacySample(sample)
+            await processLegacySample(&sample)
 
         } catch {
             logger.error(error, subsystem: .database)
         }
 
+        let sampleCopy = sample
         await MainActor.run {
-            latestLegacySample = sample
+            latestLegacySample = sampleCopy
         }
     }
 
-    private func processLegacySample(_ sample: LegacySample) async {
+    private func processLegacySample(_ sample: inout LegacySample) async {
 
         /** first timeline item **/
         guard let workingItem = currentLegacyItem() else {
-            let newItem = await createLegacyTimelineItem(from: sample)
+            let newItem = await createLegacyTimelineItem(from: &sample)
             currentLegacyItemId = newItem.id
             return
         }
@@ -282,7 +293,7 @@ public final class TimelineRecorder: @unchecked Sendable {
 
         /** stationary -> moving || moving -> stationary **/
         if currentlyMoving != previouslyMoving {
-            let newItem = await createLegacyTimelineItem(from: sample, previousItemId: workingItem.id)
+            let newItem = await createLegacyTimelineItem(from: &sample, previousItemId: workingItem.id)
             currentLegacyItemId = newItem.id
             return
         }
@@ -291,16 +302,17 @@ public final class TimelineRecorder: @unchecked Sendable {
         sample.timelineItemId = workingItem.id
 
         do {
+            let sampleCopy = sample
             try await Database.legacyPool?.write {
-                _ = try sample.updateChanges($0)
+                try sampleCopy.save($0)
             }
         } catch {
             logger.error(error, subsystem: .database)
         }
     }
 
-    private func createLegacyTimelineItem(from sample: LegacySample, previousItemId: String? = nil) async -> LegacyItem {
-        let newItem = LegacyItem(from: sample)
+    private func createLegacyTimelineItem(from sample: inout LegacySample, previousItemId: String? = nil) async -> LegacyItem {
+        var newItem = LegacyItem(from: sample)
 
         // assign the sample
         sample.timelineItemId = newItem.id
@@ -309,9 +321,11 @@ public final class TimelineRecorder: @unchecked Sendable {
         newItem.previousItemId = previousItemId
 
         do {
+            let itemCopy = newItem
+            let sampleCopy = sample
             try await Database.legacyPool?.write {
-                try newItem.save($0)
-                _ = try sample.updateChanges($0)
+                try itemCopy.save($0)
+                try sampleCopy.save($0)
             }
 
         } catch {

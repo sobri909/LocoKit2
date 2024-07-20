@@ -28,7 +28,10 @@ public final class LocomotionManager: @unchecked Sendable {
     public var appGroupOld: AppGroupOld?
 
     public private(set) var recordingState: RecordingState = .off {
-        didSet { appGroup?.save() }
+        didSet {
+            appGroup?.save()
+            stateContinuation?.yield(recordingState)
+        }
     }
     public internal(set) var locationAuthorizationStatus: CLAuthorizationStatus = .notDetermined
     public internal(set) var motionAuthorizationStatus: CMAuthorizationStatus = {
@@ -37,7 +40,32 @@ public final class LocomotionManager: @unchecked Sendable {
 
     public private(set) var lastUpdated: Date?
     public private(set) var lastRawLocation: CLLocation?
-    public private(set) var lastFilteredLocation: CLLocation?
+    public private(set) var lastFilteredLocation: CLLocation? {
+        didSet {
+            if let location = lastFilteredLocation {
+                locationContinuation?.yield(location)
+            }
+            URLSession.shared
+        }
+    }
+
+    // MARK: -
+
+    public func locationUpdates() -> AsyncStream<CLLocation> {
+        AsyncStream { continuation in
+            self.locationContinuation = continuation
+        }
+    }
+
+    private var locationContinuation: AsyncStream<CLLocation>.Continuation?
+
+    public func stateUpdates() -> AsyncStream<RecordingState> {
+        AsyncStream { continuation in
+            self.stateContinuation = continuation
+        }
+    }
+
+    private var stateContinuation: AsyncStream<RecordingState>.Continuation?
 
     // MARK: - Recording states
 
@@ -140,7 +168,7 @@ public final class LocomotionManager: @unchecked Sendable {
         let movingState = await stationaryDetector.currentState()
         let stepHz = await stepsSampler.currentStepHz()
 
-        let sample = LegacySample(
+        var sample = LegacySample(
             date: location.timestamp,
             movingState: movingState.movingState,
             recordingState: recordingState,
@@ -172,15 +200,15 @@ public final class LocomotionManager: @unchecked Sendable {
     private let accelerometerSampler = AccelerometerSampler()
     private let stepsSampler = StepsMonitor()
 
+    @ObservationIgnored
     private var backgroundSession: CLBackgroundActivitySession?
-    private var fallbackUpdateTimer: Timer?
-    private var wakeupTimer: Timer?
-    private var standbyTimer: Timer?
 
     // MARK: -
 
     private init() {
-        _ = locationManager
+        locationDelegate = Delegate(parent: self)
+        locationManager.delegate = locationDelegate
+        sleepLocationManager.delegate = locationDelegate
     }
 
     // MARK: - State changes
@@ -257,11 +285,9 @@ public final class LocomotionManager: @unchecked Sendable {
 
         await updateTheRecordingState()
 
-        await MainActor.run {
-            lastFilteredLocation = kalmanLocation
-            lastRawLocation = location
-            lastUpdated = .now
-        }
+        lastFilteredLocation = kalmanLocation
+        lastRawLocation = location
+        lastUpdated = .now
     }
 
     private func updateTheRecordingState() async {
@@ -298,10 +324,15 @@ public final class LocomotionManager: @unchecked Sendable {
 
     // MARK: - Timer handling
 
+    private var wakeupTimer: Timer?
+    private var standbyTimer: Timer?
+    private var fallbackUpdateTimer: Timer?
+
     private func restartTheFallbackTimer() {
+        let duration = fallbackUpdateDuration
         Task { @MainActor in
             fallbackUpdateTimer?.invalidate()
-            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: fallbackUpdateDuration, repeats: false) { [weak self] _ in
+            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
                 if let self {
                     Task { await self.updateTheRecordingState() }
                 }
@@ -310,68 +341,76 @@ public final class LocomotionManager: @unchecked Sendable {
     }
 
     private func restartTheWakeupTimer() {
+        let duration = sleepCycleDuration
         Task { @MainActor in
             wakeupTimer?.invalidate()
-            wakeupTimer = Timer.scheduledTimer(withTimeInterval: sleepCycleDuration, repeats: false) { [weak self] _ in
-                self?.startWakeup()
+            wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+                if let self {
+                    self.startWakeup()
+                }
             }
         }
     }
 
     private func restartTheStandbyTimer() {
+        let duration = standbyCycleDuration
         Task { @MainActor in
             standbyTimer?.invalidate()
-            standbyTimer = Timer.scheduledTimer(withTimeInterval: standbyCycleDuration, repeats: false) { [weak self] _ in
-                self?.startWakeup()
+            standbyTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+                if let self {
+                    self.startWakeup()
+                }
             }
         }
     }
 
     private func stopTheFallbackTimer() {
-        fallbackUpdateTimer?.invalidate()
-        fallbackUpdateTimer = nil
+        Task { @MainActor in
+            fallbackUpdateTimer?.invalidate()
+            fallbackUpdateTimer = nil
+        }
     }
 
     private func stopTheWakeupTimer() {
-        wakeupTimer?.invalidate()
-        wakeupTimer = nil
+        Task { @MainActor in
+            wakeupTimer?.invalidate()
+            wakeupTimer = nil
+        }
     }
 
     private func stopTheStandbyTimer() {
-        standbyTimer?.invalidate()
-        standbyTimer = nil
+        Task { @MainActor in
+            standbyTimer?.invalidate()
+            standbyTimer = nil
+        }
     }
 
     // MARK: - Location Managers
 
     @ObservationIgnored
-    private lazy var locationManager: CLLocationManager = {
+    private let locationManager: CLLocationManager = {
         let manager = CLLocationManager()
         manager.distanceFilter = 3
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
         manager.allowsBackgroundLocationUpdates = true
-        manager.delegate = self.locationDelegate
         return manager
     }()
 
     @ObservationIgnored
-    private lazy var sleepLocationManager: CLLocationManager = {
+    private let sleepLocationManager: CLLocationManager = {
         let manager = CLLocationManager()
         manager.distanceFilter = kCLLocationAccuracyThreeKilometers
         manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
         manager.allowsBackgroundLocationUpdates = true
-        manager.delegate = self.locationDelegate
         return manager
     }()
 
     @ObservationIgnored
-    private lazy var locationDelegate = {
-        return Delegate(parent: self)
-    }()
+    private var locationDelegate: Delegate?
 
     // MARK: - Debug simulated locations
 

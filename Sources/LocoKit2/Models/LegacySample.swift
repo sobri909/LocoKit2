@@ -9,9 +9,10 @@ import Foundation
 import CoreLocation
 import GRDB
 
-@Observable
-public class LegacySample: Record, Identifiable, Codable {
+public struct LegacySample: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
     
+    public static var databaseTableName: String { return "LocomotionSample" }
+
     public var id: String { sampleId }
     public var sampleId: String = UUID().uuidString
     public var date: Date
@@ -38,14 +39,12 @@ public class LegacySample: Record, Identifiable, Codable {
     public var xyAcceleration: Double?
     public var zAcceleration: Double?
 
-    @ObservationIgnored
-    public lazy var coordinate: CLLocationCoordinate2D? = {
+    public var coordinate: CLLocationCoordinate2D? {
         guard let latitude, let longitude else { return nil }
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-    }()
+    }
 
-    @ObservationIgnored
-    public lazy var location: CLLocation? = {
+    public var location: CLLocation? {
         guard let coordinate else { return nil }
         return CLLocation(
             coordinate: coordinate, altitude: altitude!,
@@ -54,9 +53,7 @@ public class LegacySample: Record, Identifiable, Codable {
             course: course!, speed: speed!,
             timestamp: date
         )
-    }()
-
-    public override class var databaseTableName: String { return "LocomotionSample" }
+    }
 
     // MARK: -
 
@@ -77,39 +74,11 @@ public class LegacySample: Record, Identifiable, Codable {
         self.verticalAccuracy = location?.verticalAccuracy
         self.speed = location?.speed
         self.course = location?.course
-
-        super.init()
     }
 
-    required init(row: Row) throws {
-        sampleId = row["sampleId"]
-        date = row["date"]
-        secondsFromGMT = row["secondsFromGMT"]
-        source = row["source"]
-        movingState = row["movingState"]
-        recordingState = row["recordingState"]
-        deleted = row["deleted"]
+    // MARK: - PersistableRecord
 
-        timelineItemId = row["timelineItemId"]
-
-        latitude = row["latitude"]
-        longitude = row["longitude"]
-        altitude = row["altitude"]
-        horizontalAccuracy = row["horizontalAccuracy"]
-        verticalAccuracy = row["verticalAccuracy"]
-        speed = row["speed"]
-        course = row["course"]
-
-        stepHz = row["stepHz"]
-        xyAcceleration = row["xyAcceleration"]
-        zAcceleration = row["zAcceleration"]
-
-        try super.init(row: row)
-    }
-
-    // MARK: - Record
-
-    public override func encode(to container: inout PersistenceContainer) {
+    public func encode(to container: inout PersistenceContainer) {
         container["sampleId"] = sampleId
         container["date"] = date
         container["secondsFromGMT"] = secondsFromGMT

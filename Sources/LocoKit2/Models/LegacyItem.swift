@@ -8,8 +8,8 @@
 import Foundation
 import GRDB
 
-@Observable
-public class LegacyItem: Record, Identifiable, Codable {
+public struct LegacyItem: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
+    public static var databaseTableName: String { return "TimelineItem" }
 
     public var id: String { itemId }
     public var itemId: String = UUID().uuidString
@@ -26,7 +26,6 @@ public class LegacyItem: Record, Identifiable, Codable {
 
     public var previousItemId: String? {
         didSet {
-            if previousItemId == itemId { fatalError("Can't link to self") }
             if previousItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
@@ -35,14 +34,11 @@ public class LegacyItem: Record, Identifiable, Codable {
 
     public var nextItemId: String? {
         didSet {
-            if nextItemId == itemId { fatalError("Can't link to self") }
             if nextItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
         }
     }
-
-    public override class var databaseTableName: String { return "TimelineItem" }
 
     // MARK: - Init
 
@@ -50,26 +46,11 @@ public class LegacyItem: Record, Identifiable, Codable {
         isVisit = sample.movingState == "stationary"
         startDate = sample.date
         endDate = sample.date
-        super.init()
     }
 
-    // MARK: - Record
+    // MARK: - PersistableRecord
 
-    required init(row: Row) throws {
-        itemId = row["itemId"]
-        source = row["source"]
-        isVisit = row["isVisit"]
-        startDate = row["startDate"]
-        endDate = row["endDate"]
-        deleted = row["deleted"]
-
-        previousItemId = row["previousItemId"]
-        nextItemId = row["nextItemId"]
-
-        try super.init(row: row)
-    }
-
-    public override func encode(to container: inout PersistenceContainer) {
+    public func encode(to container: inout PersistenceContainer) {
         container["itemId"] = itemId
         container["source"] = source
         container["isVisit"] = isVisit
