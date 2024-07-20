@@ -9,7 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable {
+public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
     public private(set) var id: String = UUID().uuidString
     

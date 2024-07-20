@@ -11,7 +11,7 @@ public extension NSNotification.Name {
     static let timelineObjectsExternallyModified = Notification.Name("timelineObjectsExternallyModified")
 }
 
-public class AppGroup {
+public final class AppGroup: @unchecked Sendable {
 
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -208,7 +208,7 @@ public class AppGroup {
 
     // MARK: - Interfaces
 
-    public enum AppName: String, CaseIterable, Codable {
+    public enum AppName: String, CaseIterable, Codable, Sendable {
         case arcV3, arcMini, arcRecorder, arcEditor
         public var sortIndex: Int {
             switch self {
@@ -220,7 +220,7 @@ public class AppGroup {
         }
     }
 
-    public struct AppState: Codable {
+    public struct AppState: Codable, Sendable {
         public let appName: AppName
         public let recordingState: RecordingState
         public var currentItemId: String?
@@ -245,14 +245,14 @@ public class AppGroup {
         }
     }
 
-    public enum Message: String, CaseIterable, Codable {
+    public enum Message: String, CaseIterable, Codable, Sendable {
         case updatedState
         case modifiedObjects
         case tookOverRecording
         func withPrefix(_ prefix: String) -> String { return "\(prefix).\(rawValue)" }
     }
 
-    public struct MessageInfo: Codable {
+    public struct MessageInfo: Codable, Sendable {
         public var date: Date
         public var message: Message
         public var appName: AppName

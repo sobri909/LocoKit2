@@ -9,7 +9,7 @@
 import Foundation
 import UIKit
 
-public class AppGroupOld {
+public final class AppGroupOld: @unchecked Sendable {
 
     private static let encoder = JSONEncoder()
     private static let decoder = JSONDecoder()

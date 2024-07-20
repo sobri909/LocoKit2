@@ -11,7 +11,7 @@ import CoreLocation
 import CoreMotion
 
 @Observable
-public final class LocomotionManager {
+public final class LocomotionManager: @unchecked Sendable {
 
     public static let highlander = LocomotionManager()
 
@@ -428,7 +428,7 @@ public final class LocomotionManager {
 
     // MARK: - CLLocationManagerDelegate
 
-    private class Delegate: NSObject, CLLocationManagerDelegate {
+    private final class Delegate: NSObject, CLLocationManagerDelegate, Sendable {
         let parent: LocomotionManager
 
         init(parent: LocomotionManager) {

@@ -8,8 +8,7 @@
 import Foundation
 import GRDB
 
-@Observable
-public final class TimelineRecorder {
+public final class TimelineRecorder: @unchecked Sendable {
 
     public static let highlander = TimelineRecorder()
 

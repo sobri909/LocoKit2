@@ -16,7 +16,7 @@ public enum Subsystem: String {
 internal let logger = DebugLogger.logger
 
 @Observable
-public class DebugLogger: LoggingFormatAndPipe.Pipe {
+public final class DebugLogger: LoggingFormatAndPipe.Pipe, @unchecked Sendable {
 
     public static let highlander = DebugLogger()
 

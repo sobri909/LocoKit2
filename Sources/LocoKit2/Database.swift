@@ -8,7 +8,7 @@
 import Foundation
 import GRDB
 
-public class Database {
+public final class Database: @unchecked Sendable {
 
     public static let highlander = Database()
 

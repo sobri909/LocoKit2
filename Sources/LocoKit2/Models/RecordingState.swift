@@ -7,7 +7,7 @@
 
 import Foundation
 
-public enum RecordingState: Int, Codable {
+public enum RecordingState: Int, Codable, Sendable {
     case off = 0
     case recording = 1
     case sleeping = 2

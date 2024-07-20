@@ -8,7 +8,7 @@
 import Foundation
 import CoreLocation
 
-public enum MovingState: Int, Codable {
+public enum MovingState: Int, Codable, Sendable {
     case uncertain  = -1
     case stationary = 0
     case moving     = 1
@@ -22,7 +22,7 @@ public enum MovingState: Int, Codable {
     }
 }
 
-public struct MovingStateDetails {
+public struct MovingStateDetails: Sendable {
     public let movingState: MovingState
     public let n: Int
     public let timestamp: Date
