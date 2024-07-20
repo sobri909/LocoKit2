@@ -9,10 +9,10 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable {
+public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
-    public static var minRadius: CLLocationDistance = 10
-    public static var maxRadius: CLLocationDistance = 150
+    public static let minRadius: CLLocationDistance = 10
+    public static let maxRadius: CLLocationDistance = 150
 
     public let itemId: String
     public var latitude: CLLocationDegrees

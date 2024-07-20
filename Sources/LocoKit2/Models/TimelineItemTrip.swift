@@ -9,7 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable {
+public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
     public let itemId: String
     public var distance: CLLocationDistance
     public var classifiedActivityType: String?

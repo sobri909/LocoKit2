@@ -7,9 +7,9 @@
 
 import Foundation
 import CoreLocation
-import GRDB
+@preconcurrency import GRDB
 
-public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable {
+public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
     public var id: String = UUID().uuidString
     public let isVisit: Bool

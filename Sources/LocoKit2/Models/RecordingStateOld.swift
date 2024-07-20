@@ -9,7 +9,7 @@
 /**
  The recording state of the LocomotionManager.
  */
-public enum RecordingStateOld: String, Codable {
+public enum RecordingStateOld: String, Codable, Sendable {
     case recording
     case sleeping
     case deepSleeping

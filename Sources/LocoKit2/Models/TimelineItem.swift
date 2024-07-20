@@ -8,9 +8,9 @@
 import Foundation
 import CoreLocation
 import Combine
-import GRDB
+@preconcurrency import GRDB
 
-public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable {
+public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
 
     public var base: TimelineItemBase
     public var visit: TimelineItemVisit?

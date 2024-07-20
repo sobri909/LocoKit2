@@ -131,7 +131,7 @@ actor SleepModeDetector {
 
 }
 
-public struct SleepDetectorState {
+public struct SleepDetectorState: Sendable {
     public var isFrozen: Bool = false
     public var geofenceCenter: CLLocationCoordinate2D? = nil
     public var geofenceRadius: CLLocationDistance = 50.0

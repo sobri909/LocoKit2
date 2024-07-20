@@ -6,10 +6,10 @@
 //
 
 import Foundation
-import CoreMotion
+@preconcurrency import CoreMotion
 import os
 
-public class AccelerometerSampler {
+public final class AccelerometerSampler: Sendable {
 
     // MARK: - Config
 
@@ -59,6 +59,7 @@ public class AccelerometerSampler {
 
     // MARK: - Private
 
+    nonisolated(unsafe)
     private var sample: [CMDeviceMotion] = []
 
     private func add(_ motionData: CMDeviceMotion) {

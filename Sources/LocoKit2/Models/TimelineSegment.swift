@@ -10,7 +10,7 @@ import Combine
 import GRDB
 
 @Observable
-public class TimelineSegment {
+public final class TimelineSegment: @unchecked Sendable {
 
     public let dateRange: DateInterval
     public private(set) var timelineItems: [TimelineItem] = []

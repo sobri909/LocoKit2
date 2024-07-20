@@ -8,7 +8,7 @@
 import Foundation
 import GRDB
 
-public class TimelineLinkedList {
+public actor TimelineLinkedList {
 
     public private(set) var seedItem: TimelineItem
     public private(set) var timelineItems: [String: TimelineItem] = [:]

@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import CoreMotion
+@preconcurrency import CoreMotion
 
 public actor StepsMonitor {
 
