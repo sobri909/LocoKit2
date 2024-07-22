@@ -31,7 +31,9 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     // MARK: -
 
-    public private(set) var currentItemId: String?
+    public private(set) var currentItemId: String? {
+        didSet { loco.appGroup?.save() }
+    }
 
     public func currentItem() -> TimelineItem? {
         guard let currentItemId else { return nil }
@@ -48,7 +50,9 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     // MARK: -
 
-    public private(set) var currentLegacyItemId: String?
+    public private(set) var currentLegacyItemId: String? {
+        didSet { loco.appGroup?.save() }
+    }
 
     public func currentLegacyItem() -> LegacyItem? {
         guard let currentLegacyItemId else { return nil }
@@ -71,11 +75,7 @@ public final class TimelineRecorder: @unchecked Sendable {
         
         print("startWatchingLoco()")
 
-        if legacyDbMode {
-            updateCurrentItemId()
-        } else {
-            updateCurrentLegacyItemId()
-        }
+        updateCurrentItemId()
 
         for await _ in loco.locationUpdates() {
             if legacyDbMode {
@@ -91,6 +91,11 @@ public final class TimelineRecorder: @unchecked Sendable {
     }
 
     public func updateCurrentItemId() {
+        if legacyDbMode {
+            updateCurrentLegacyItemId()
+            return
+        }
+
         currentItemId = try? Database.pool.read {
             try TimelineItemBase
                 .filter(Column("deleted") == false)
@@ -100,7 +105,7 @@ public final class TimelineRecorder: @unchecked Sendable {
         }
     }
 
-    public func updateCurrentLegacyItemId() {
+    private func updateCurrentLegacyItemId() {
         currentLegacyItemId = try? Database.legacyPool?.read {
             try LegacyItem
                 .filter(Column("deleted") == false)

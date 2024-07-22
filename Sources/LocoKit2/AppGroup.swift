@@ -7,10 +7,6 @@
 import Foundation
 import UIKit
 
-public extension NSNotification.Name {
-    static let timelineObjectsExternallyModified = Notification.Name("timelineObjectsExternallyModified")
-}
-
 public final class AppGroup: @unchecked Sendable {
 
     private let encoder = JSONEncoder()
@@ -121,7 +117,7 @@ public final class AppGroup: @unchecked Sendable {
         return AppState(
             appName: thisApp,
             recordingState: loco.recordingState,
-            currentItemId: timeline.currentItemId
+            currentItemId: timeline.legacyDbMode ? timeline.currentLegacyItemId : timeline.currentItemId
         )
     }
 
@@ -165,7 +161,7 @@ public final class AppGroup: @unchecked Sendable {
         case .updatedState:
             appStateUpdated(by: messageInfo.appName)
         case .modifiedObjects:
-            objectsWereModified(by: messageInfo.appName, messageInfo: messageInfo)
+            break
         case .tookOverRecording:
             recordingWasTakenOver(by: messageInfo.appName, messageInfo: messageInfo)
         }
@@ -195,14 +191,6 @@ public final class AppGroup: @unchecked Sendable {
             
             let appName = LocomotionManager.highlander.appGroup?.currentRecorder?.appName.rawValue ?? "UNKNOWN"
             logger.info("concededRecording to \(appName)", subsystem: .misc)
-        }
-    }
-
-    private func objectsWereModified(by: AppName, messageInfo: MessageInfo) {
-        logger.debug("AppGroup received modifiedObjectIds: \(messageInfo.modifiedObjectIds?.count ?? 0) by: \(by.rawValue)")
-        if let objectIds = messageInfo.modifiedObjectIds, !objectIds.isEmpty {
-            let note = Notification(name: .timelineObjectsExternallyModified, object: self, userInfo: ["modifiedObjectIds": objectIds])
-            NotificationCenter.default.post(note)
         }
     }
 
