@@ -60,7 +60,7 @@ public final class AppGroup: @unchecked Sendable {
         if applicationState == .active { return true }
 
         // there's no current recorder? then we should take on the job
-        guard let currentRecorder = currentRecorder else { return true }
+        guard let currentRecorder else { return true }
 
         // TODO: Arc Recorder shouldn't concede to others
         
@@ -80,7 +80,7 @@ public final class AppGroup: @unchecked Sendable {
         send(message: .tookOverRecording)
     }
 
-    // MARK: - 
+    // MARK: - AppState persistence
 
     public func load() {
         let fileManager = FileManager.default
@@ -116,7 +116,7 @@ public final class AppGroup: @unchecked Sendable {
     var currentAppState: AppState {
         return AppState(
             appName: thisApp,
-            recordingState: loco.recordingState,
+            recordingStateString: loco.recordingState.stringValue,
             currentItemId: timeline.legacyDbMode ? timeline.currentLegacyItemId : timeline.currentItemId
         )
     }
@@ -124,16 +124,6 @@ public final class AppGroup: @unchecked Sendable {
     public func notifyObjectChanges(objectIds: Set<UUID>) {
         let messageInfo = MessageInfo(date: .now, message: .modifiedObjects, appName: thisApp, modifiedObjectIds: objectIds)
         send(message: .modifiedObjects, messageInfo: messageInfo)
-    }
-    
-    // MARK: - Shared settings
-    
-    public func get(setting key: String) -> Any? {
-        return groupDefaults?.value(forKey: "sharedSetting." + key) as Any?
-    }
-    
-    public func set(setting key: String, value: Any?) {
-        groupDefaults?.set(value, forKey: "sharedSetting." + key)
     }
 
     // MARK: - Private
@@ -161,7 +151,7 @@ public final class AppGroup: @unchecked Sendable {
         case .updatedState:
             appStateUpdated(by: messageInfo.appName)
         case .modifiedObjects:
-            break
+            objectsWereModified(by: messageInfo.appName, messageInfo: messageInfo)
         case .tookOverRecording:
             recordingWasTakenOver(by: messageInfo.appName, messageInfo: messageInfo)
         }
@@ -194,6 +184,11 @@ public final class AppGroup: @unchecked Sendable {
         }
     }
 
+    private func objectsWereModified(by: AppName, messageInfo: MessageInfo) {
+        logger.debug("AppGroup received modifiedObjectIds: \(messageInfo.modifiedObjectIds?.count ?? 0) by: \(by.rawValue)")
+        load()
+    }
+
     // MARK: - Interfaces
 
     public enum AppName: String, CaseIterable, Codable, Sendable {
@@ -210,9 +205,14 @@ public final class AppGroup: @unchecked Sendable {
 
     public struct AppState: Codable, Sendable {
         public let appName: AppName
-        public let recordingState: RecordingState
+        public let recordingStateString: String
         public var currentItemId: String?
+        public var currentItemTitle: String?
         public var updated = Date()
+
+        public var recordingState: RecordingState {
+            return RecordingState(stringValue: recordingStateString)!
+        }
 
         public var isAlive: Bool {
             return updated.age < LocomotionManager.highlander.standbyCycleDuration + 3
