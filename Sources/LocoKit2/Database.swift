@@ -14,14 +14,6 @@ public final class Database: @unchecked Sendable {
 
     public var appGroup: AppGroup? 
 
-    public var appGroupOld: AppGroupOld? {
-        didSet {
-            if let appGroupLegacyDbUrl {
-                legacyPool = try? DatabasePool(path: appGroupLegacyDbUrl.path, configuration: config)
-            }
-        }
-    }
-
     // MARK: - Pool
 
     public static var pool: DatabasePool { return highlander.pool }
@@ -33,7 +25,10 @@ public final class Database: @unchecked Sendable {
         return try! DatabasePool(path: dbUrl.path, configuration: config)
     }()
 
-    public private(set) var legacyPool: DatabasePool?
+    public private(set) lazy var legacyPool: DatabasePool? = {
+        guard let dbUrl = appGroupLegacyDbUrl else { return nil }
+        return try! DatabasePool(path: dbUrl.path, configuration: config)
+    }()
 
     private lazy var config: Configuration = {
         var config = Configuration()
@@ -284,8 +279,7 @@ public final class Database: @unchecked Sendable {
     }()
 
     var appGroupDbDir: URL? {
-        let suiteName = appGroup?.suiteName ?? appGroupOld?.suiteName
-        guard let suiteName else { return nil }
+        guard let suiteName = appGroup?.suiteName else { return nil }
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suiteName)
     }
 

@@ -78,7 +78,6 @@ public final class TimelineRecorder: @unchecked Sendable {
         }
 
         for await _ in loco.locationUpdates() {
-            print("locationUpdates() fired")
             if legacyDbMode {
                 await recordLegacySample()
             } else {

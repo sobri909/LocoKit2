@@ -24,8 +24,8 @@ public final class LocomotionManager: @unchecked Sendable {
     public var standbyCycleDuration: TimeInterval = 60 * 2
     public var fallbackUpdateDuration: TimeInterval = 6
 
+    @ObservationIgnored
     public var appGroup: AppGroup?
-    public var appGroupOld: AppGroupOld?
 
     public private(set) var recordingState: RecordingState = .off {
         didSet {

@@ -15,7 +15,7 @@ public enum RecordingState: Int, Codable, Sendable {
     case wakeup = 4
     case standby = 5
 
-    public static let sleepStates = [sleeping, deepSleeping]
+    public static let sleepStates = [wakeup, sleeping, deepSleeping]
     public static let activeRecorderStates = [recording, wakeup, sleeping, deepSleeping]
 
     // MARK: -
@@ -31,6 +31,20 @@ public enum RecordingState: Int, Codable, Sendable {
         case .deepSleeping: return "deepSleeping"
         case .wakeup:       return "wakeup"
         case .standby:      return "standby"
+        }
+    }
+
+    // MARK: -
+
+    init?(stringValue: String) {
+        switch stringValue {
+        case "off": self.init(rawValue: 0)
+        case "recording": self.init(rawValue: 1)
+        case "sleeping": self.init(rawValue: 2)
+        case "deepSleeping": self.init(rawValue: 3)
+        case "wakeup": self.init(rawValue: 4)
+        case "standby": self.init(rawValue: 5)
+        default: return nil
         }
     }
 }
