@@ -93,7 +93,7 @@ public final class AppGroup: @unchecked Sendable {
         }
 
         let fileURLs = try? fileManager.contentsOfDirectory(at: containerURL, includingPropertiesForKeys: nil)
-        let stateFileURLs = fileURLs?.filter { $0.pathExtension == "json" }
+        let stateFileURLs = fileURLs?.filter { $0.lastPathComponent.hasSuffix(".AppState.json") }
 
         var states: [AppName: AppState] = [:]
         for fileURL in stateFileURLs ?? [] {
@@ -111,7 +111,7 @@ public final class AppGroup: @unchecked Sendable {
             return
         }
 
-        let fileURL = containerURL.appendingPathComponent("AppState_\(thisApp.rawValue).json")
+        let fileURL = containerURL.appendingPathComponent("\(thisApp.rawValue).AppState.json")
         try? currentAppState.saveToFile(url: fileURL)
 
         send(message: .updatedState)
