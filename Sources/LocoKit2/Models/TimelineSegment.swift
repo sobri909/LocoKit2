@@ -13,6 +13,8 @@ import GRDB
 public final class TimelineSegment: @unchecked Sendable {
 
     public let dateRange: DateInterval
+
+    @MainActor
     public private(set) var timelineItems: [TimelineItem] = []
 
     @ObservationIgnored
@@ -53,7 +55,7 @@ public final class TimelineSegment: @unchecked Sendable {
 
             } else {
                 // copy over existing samples if available
-                let localItem = timelineItems.first { $0.id == itemCopy.id }
+                let localItem = await timelineItems.first { $0.id == itemCopy.id }
                 if let localItem, let samples = localItem.samples {
                     mutableItems[index].samples = samples
 
@@ -63,7 +65,9 @@ public final class TimelineSegment: @unchecked Sendable {
             }
         }
 
-        self.timelineItems = mutableItems
+        await MainActor.run {
+            self.timelineItems = mutableItems
+        }
     }
 
 }
