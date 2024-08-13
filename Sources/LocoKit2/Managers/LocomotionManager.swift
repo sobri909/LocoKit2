@@ -170,7 +170,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func createALegacySample() async -> LegacySample {
         let location = await kalmanFilter.currentEstimatedLocation()
         let movingState = await stationaryDetector.currentState()
-        let stepHz = await stepsSampler.currentStepHz()
+        let stepHz = stepsSampler.currentStepHz()
 
         var sample = LegacySample(
             date: location.timestamp,
