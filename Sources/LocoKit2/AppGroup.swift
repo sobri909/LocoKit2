@@ -62,8 +62,6 @@ public final class AppGroup: @unchecked Sendable {
         // there's no current recorder? then we should take on the job
         guard let currentRecorder else { return true }
 
-        // TODO: Arc Recorder shouldn't concede to others
-        
         // there's multiple recorders, and we're not in foreground? it's time to concede
         if haveMultipleRecorders { return false }
 
@@ -153,34 +151,41 @@ public final class AppGroup: @unchecked Sendable {
         case .modifiedObjects:
             break
         case .tookOverRecording:
-            recordingWasTakenOver(by: messageInfo.appName, messageInfo: messageInfo)
+            concedeRecording(to: messageInfo.appName)
         }
     }
     
     private func appStateUpdated(by: AppName) {
         logger.debug("RECEIVED: .updatedState, from: \(by.rawValue)")
 
-        guard let currentRecorder else {
-            logger.error("No AppGroup.currentRecorder", subsystem: .appgroup)
-            return
-        }
-        guard let currentItemId = currentRecorder.currentItemId else {
+        if currentRecorder?.currentItemId == nil {
             logger.error("No AppGroup.currentItemId", subsystem: .appgroup)
-            return
         }
 
-        if !isAnActiveRecorder, currentAppState.currentItemId != currentItemId {
-            logger.debug("Local currentItemId is stale (mine: \(self.currentAppState.currentItemId ?? "nil"), theirs: \(currentItemId))")
+        if currentRecorder == nil {
+            logger.error("No AppGroup.currentRecorder", subsystem: .appgroup)
+        }
+
+        if isAnActiveRecorder {
+            if !shouldBeTheRecorder {
+                concedeRecording()
+            }
+
+        } else if let currentItemId = currentRecorder?.currentItemId, currentAppState.currentItemId != currentItemId {
+            logger.debug("Local currentItemId is stale (mine: \(currentAppState.currentItemId ?? "nil"), theirs: \(currentItemId))")
             timeline.updateCurrentItemId()
         }
     }
 
-    private func recordingWasTakenOver(by: AppName, messageInfo: MessageInfo) {
-        if LocomotionManager.highlander.recordingState.isCurrentRecorder {
-            LocomotionManager.highlander.startStandby()
-            
-            let appName = LocomotionManager.highlander.appGroup?.currentRecorder?.appName.rawValue ?? "UNKNOWN"
-            logger.info("concededRecording to \(appName)", subsystem: .misc)
+    private func concedeRecording(to activeRecorder: AppName? = nil) {
+        guard isAnActiveRecorder else { return }
+
+        LocomotionManager.highlander.startStandby()
+
+        if let activeRecorder {
+            logger.info("concededRecording to \(activeRecorder)", subsystem: .misc)
+        } else {
+            logger.info("concededRecording", subsystem: .misc)
         }
     }
 
