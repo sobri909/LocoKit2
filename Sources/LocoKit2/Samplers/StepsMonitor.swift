@@ -7,10 +7,9 @@
 
 import Foundation
 @preconcurrency import CoreMotion
+import os
 
-public actor StepsMonitor {
-
-    // MARK: - Config
+public final class StepsMonitor: Sendable {
 
     public static let maxDataAge: TimeInterval = 30
 
@@ -25,7 +24,7 @@ public actor StepsMonitor {
             }
 
             if let pedometerData {
-                Task { await self.add(pedometerData) }
+                self.add(pedometerData)
             }
         }
     }
@@ -35,6 +34,7 @@ public actor StepsMonitor {
     }
 
     public func currentStepHz() -> Double? {
+        let latestData = lock.withLock { self.latestData }
         guard let latestData else {
             return nil
         }
@@ -57,10 +57,16 @@ public actor StepsMonitor {
     // MARK: - Private
 
     private let pedometer = CMPedometer()
+    
+    nonisolated(unsafe)
     private var latestData: CMPedometerData?
 
-    private func add(_ pedometerData: CMPedometerData) {
-        self.latestData = pedometerData
+    private func add(_ pedometerData: sending CMPedometerData) {
+        lock.withLock { [pedometerData] in
+            self.latestData = pedometerData
+        }
     }
+
+    private let lock = OSAllocatedUnfairLock()
 
 }
