@@ -31,7 +31,9 @@ actor SleepModeDetector {
     // MARK: - Private
 
     private var sample: [CLLocation] = []
-    private var updateTask: Task<(), Never>?
+    private var updateTask: Task<Void, Error>? {
+        willSet { updateTask?.cancel() }
+    }
 
     private func freeze() {
         state.isFrozen = true
@@ -71,12 +73,9 @@ actor SleepModeDetector {
 
         // location updates might stall, but need to keep state current
         defer {
-            updateTask?.cancel()
             updateTask = Task {
-                try? await Task.sleep(for: .seconds(6))
-                if !Task.isCancelled {
-                    updateTheUnfrozenState()
-                }
+                try await Task.sleep(for: .seconds(6))
+                updateTheUnfrozenState()
             }
         }
 
