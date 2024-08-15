@@ -18,9 +18,33 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     nonisolated(unsafe)
     private var changedRowIds: [String: Set<Int64>] = [:]
 
+    nonisolated(unsafe)
+    private var continuations: [UUID: AsyncStream<DateInterval>.Continuation] = [:]
+
     private let lock = OSAllocatedUnfairLock()
 
     // MARK: -
+
+    public func changesStream() -> AsyncStream<DateInterval> {
+        AsyncStream { continuation in
+            let id = UUID()
+            lock.withLock {
+                continuations[id] = continuation
+            }
+            continuation.onTermination = { @Sendable _ in
+                self.lock.withLock {
+                    self.continuations[id] = nil
+                }
+            }
+        }
+    }
+
+    private func notifyChange(_ dateRange: DateInterval) {
+        let continuations = lock.withLock { self.continuations }
+        for continuation in continuations.values {
+            continuation.yield(dateRange)
+        }
+    }
 
     private func processChangedRows(_ rowIds: [String: Set<Int64>]) async {
         let baseRowIds = rowIds["TimelineItemBase", default: []].map(String.init).joined(separator: ",")
