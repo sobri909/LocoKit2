@@ -10,7 +10,7 @@ import Combine
 import GRDB
 
 @Observable
-public final class TimelineSegment: @unchecked Sendable {
+public final class TimelineSegment: Sendable {
 
     public let dateRange: DateInterval
 
@@ -18,34 +18,50 @@ public final class TimelineSegment: @unchecked Sendable {
     public private(set) var timelineItems: [TimelineItem] = []
 
     @ObservationIgnored
-    private var itemsObserver: AnyCancellable?
+    nonisolated(unsafe)
+    private var changesTask: Task<Void, Never>?
 
     public init(dateRange: DateInterval) {
         self.dateRange = dateRange
-
-        let itemsRequest = TimelineItemBase
-            .including(optional: TimelineItemBase.visit)
-            .including(optional: TimelineItemBase.trip)
-            .filter(Column("endDate") > dateRange.start && Column("startDate") < dateRange.end)
-            .order(Column("endDate").desc)
-
-        self.itemsObserver = ValueObservation
-            .trackingConstantRegion {
-                try TimelineItem.fetchAll($0, itemsRequest)
-            }
-            .publisher(in: Database.pool)
-            .sink { completion in
-                if case .failure(let error) = completion {
-                    logger.error(error, subsystem: .database)
-                }
-            } receiveValue: { [weak self] (items: [TimelineItem]) in
-                if let self {
-                    Task { await self.updateItems(from: items) }
-                }
-            }
+        setupObserver()
+        Task { await fetchItems() }
     }
 
-    private func updateItems(from updatedItems: [TimelineItem]) async {
+    deinit {
+        changesTask?.cancel()
+    }
+
+    // MARK: -
+
+    private func setupObserver() {
+        changesTask = Task { [weak self] in
+            guard let self else { return }
+            for await changedRange in TimelineObserver.highlander.changesStream() {
+                if self.dateRange.intersects(changedRange) {
+                    await self.fetchItems()
+                }
+            }
+        }
+    }
+
+    private func fetchItems() async {
+        do {
+            let items = try await Database.pool.read { [dateRange] in
+                let request = TimelineItemBase
+                    .including(optional: TimelineItemBase.visit)
+                    .including(optional: TimelineItemBase.trip)
+                    .filter(Column("endDate") > dateRange.start && Column("startDate") < dateRange.end)
+                    .order(Column("endDate").desc)
+                return try TimelineItem.fetchAll($0, request)
+            }
+            await update(from: items)
+
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
+    }
+
+    private func update(from updatedItems: [TimelineItem]) async {
         var mutableItems = updatedItems
 
         for index in mutableItems.indices {
