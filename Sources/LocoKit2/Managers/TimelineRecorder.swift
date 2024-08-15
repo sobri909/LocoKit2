@@ -63,7 +63,9 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     // MARK: - Private
 
-    private init() {}
+    private init() {
+        Database.pool.add(transactionObserver: TimelineObserver.highlander)
+    }
 
     private let loco = LocomotionManager.highlander
 
