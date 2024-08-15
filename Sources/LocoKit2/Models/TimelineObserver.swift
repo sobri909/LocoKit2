@@ -67,7 +67,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
                 .map { DateInterval(start: $0["startDate"] as Date, end: $0["endDate"] as Date) }
 
             for dateRange in dateRanges {
-                print("TimelineObserver() changes in: \(dateRange)")
+                notifyChange(dateRange)
             }
 
         } catch {
