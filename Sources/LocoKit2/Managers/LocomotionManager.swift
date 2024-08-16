@@ -148,7 +148,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func createASample() async -> LocomotionSample {
         let location = await kalmanFilter.currentEstimatedLocation()
         let movingState = await stationaryDetector.currentState()
-        let stepHz = await stepsSampler.currentStepHz()
+        let stepHz = stepsSampler.currentStepHz()
 
         var sample = LocomotionSample(
             date: location.timestamp,
@@ -266,12 +266,12 @@ public final class LocomotionManager: @unchecked Sendable {
 
     private func startCoreMotion() {
         accelerometerSampler.startMonitoring()
-        Task { await stepsSampler.startMonitoring() }
+        stepsSampler.startMonitoring()
     }
 
     private func stopCoreMotion() {
         accelerometerSampler.stopMonitoring()
-        Task { await stepsSampler.stopMonitoring() }
+        stepsSampler.stopMonitoring()
     }
 
     // MARK: - Incoming locations handling
