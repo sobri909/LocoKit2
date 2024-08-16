@@ -45,7 +45,6 @@ public final class LocomotionManager: @unchecked Sendable {
             if let location = lastFilteredLocation {
                 locationContinuation?.yield(location)
             }
-            URLSession.shared
         }
     }
 
