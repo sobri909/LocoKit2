@@ -33,6 +33,19 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var coordinates: [CLLocationCoordinate2D]? {
         return samples?.compactMap { $0.coordinate }.filter { $0.isUsable }
     }
+
+    public var isValid: Bool { return true }
+
+    public var isInvalid: Bool { !isValid }
+
+    public var isWorthKeeping: Bool { return true }
+
+    public var isDataGap: Bool { return false }
+
+    public var isNolo: Bool { return false }
+
+    // MARK: - Relationships
+
     public mutating func fetchSamples() async {
         guard samplesChanged || samples == nil else {
             print("[\(debugShortId)] fetchSamples() skipping; no reason to fetch")
@@ -68,6 +81,51 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         base.previousItemId = nil
         base.nextItemId = nil
     }
+
+    // MARK: - Timeline processing
+
+    @TimelineActor
+    public func scoreForConsuming(_ item: TimelineItem) -> ConsumptionScore {
+        return MergeScores.consumptionScoreFor(self, toConsume: item)
+    }
+
+    public var keepnessScore: Int {
+        if isWorthKeeping { return 2 }
+        if isValid { return 1 }
+        return 0
+    }
+
+    internal func willConsume(_ otherItem: TimelineItem) {
+        if otherItem.isVisit {
+            // if self.swarmCheckinId == nil, otherItem.swarmCheckinId != nil {
+            //     self.swarmCheckinId = otherItem.swarmCheckinId
+            // }
+            // if self.customTitle == nil, otherItem.customTitle != nil {
+            //     self.customTitle = otherItem.customTitle
+            // }
+        }
+    }
+
+    public func isWithinMergeableDistance(of otherItem: TimelineItem) -> Bool? {
+        if self.isNolo || otherItem.isNolo { return true }
+//        if let gap = distance(from: otherItem), gap <= maximumMergeableDistance(from: otherItem) { return true }
+
+        // if the items overlap in time, any physical distance is acceptable
+//        guard let timeGap = self.timeInterval(from: otherItem), timeGap < 0 else { return true }
+
+        return false
+    }
+
+    public func distance(from otherItem: TimelineItem) -> CLLocationDistance? {
+        if self.isVisit, let selfVisit = self.visit {
+            return selfVisit.distance(from: otherItem)
+        }
+        if self.isTrip, let selfTrip = self.trip {
+            return selfTrip.distance(from: otherItem)
+        }
+        fatalError()
+    }
+
     public func edgeSample(withOtherItemId otherItemId: String) -> LocomotionSample? {
         if otherItemId == base.previousItemId {
             return samples?.first
@@ -76,6 +134,35 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             return samples?.last
         }
         return nil
+    }
+
+    internal func sanitiseEdges(in list: TimelineLinkedList, excluding: Set<LocomotionSample> = []) async -> Set<LocomotionSample> {
+        var movedSamples: Set<LocomotionSample> = []
+
+        // Sanitise with previous item
+        if let previousItem = await previousItem(in: list) {
+            let movedWithPrevious = await sanitiseEdgeWith(previousItem, in: list, excluding: excluding)
+            movedSamples.formUnion(movedWithPrevious)
+        }
+
+        // Sanitise with next item
+        if let nextItem = await nextItem(in: list) {
+            let movedWithNext = await sanitiseEdgeWith(nextItem, in: list, excluding: excluding)
+            movedSamples.formUnion(movedWithNext)
+        }
+
+        return movedSamples
+    }
+
+    internal func sanitiseEdgeWith(_ otherItem: TimelineItem, in list: TimelineLinkedList, excluding: Set<LocomotionSample>) async -> Set<LocomotionSample> {
+        // TODO: Implement the actual edge sanitising logic
+        // This should involve:
+        // 1. Determining which samples should be moved
+        // 2. Moving samples between this item and otherItem
+        // 3. Updating both items' samples collections
+        // 4. Returning the set of moved samples
+
+        return []
     }
 
     // MARK: - Private
