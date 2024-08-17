@@ -134,6 +134,7 @@ public final class AppGroup: @unchecked Sendable {
         talker.send(message)
     }
 
+    // TODO: should store lastMessage in AppGroup (don't want to be relying on groupDefaults)
     private func received(_ message: AppGroup.Message) {
         guard let data = groupDefaults?.value(forKey: "lastMessage") as? Data else { return }
         guard let messageInfo = try? decoder.decode(MessageInfo.self, from: data) else { return }
