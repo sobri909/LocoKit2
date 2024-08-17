@@ -11,6 +11,9 @@ import GRDB
 
 public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
+    public static let minimumKeeperDuration: TimeInterval = .minutes(2)
+    public static let minimumValidDuration: TimeInterval = 10
+
     public static let minRadius: CLLocationDistance = 10
     public static let maxRadius: CLLocationDistance = 150
 

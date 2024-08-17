@@ -10,6 +10,14 @@ import CoreLocation
 import GRDB
 
 public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
+
+    public static let minimumValidDuration: TimeInterval = 10
+    public static let minimumValidDistance: Double = 10
+    public static let minimumValidSamples = 2
+
+    public static let minimumKeeperDuration: TimeInterval = 60
+    public static let minimumKeeperDistance: Double = 20
+
     public let itemId: String
     public var distance: CLLocationDistance
     public var classifiedActivityType: String?
