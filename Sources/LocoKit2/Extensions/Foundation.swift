@@ -4,9 +4,23 @@
 
 import Foundation
 
-// MARK: - Public
+extension Array {
+    var second: Element? {
+        guard count > 1 else { return nil }
+        return self[1]
+    }
 
-public extension Array where Element: BinaryFloatingPoint {
+    var secondToLast: Element? {
+        guard count > 1 else { return nil }
+        return self[count - 2]
+    }
+
+    var penultimate: Element? {
+        return secondToLast
+    }
+}
+
+extension Array where Element: BinaryFloatingPoint {
     func mean() -> Element {
         guard !isEmpty else { return 0 }
         return reduce(0, +) / Element(count)
@@ -27,7 +41,18 @@ public extension Array where Element: BinaryFloatingPoint {
     }
 }
 
-// MARK: - Internal
+extension Comparable {
+    mutating func clamp(min: Self, max: Self) {
+        if self < min { self = min }
+        if self > max { self = max }
+    }
+
+    func clamped(min: Self, max: Self) -> Self {
+        if self < min { return min }
+        if self > max { return max }
+        return self
+    }
+}
 
 extension String {
     func deletingPrefix(_ prefix: String) -> String {

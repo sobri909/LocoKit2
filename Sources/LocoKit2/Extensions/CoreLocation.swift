@@ -17,6 +17,10 @@ extension CLLocationDegrees {
     var radians: Radians { self * .pi / 180.0 }
 }
 
+extension CLLocationSpeed {
+    init(kmh: Double) { self.init(kmh / 3.6) }
+}
+
 public extension CLLocation {
     convenience init(from codable: CodableLocation) {
         self.init(

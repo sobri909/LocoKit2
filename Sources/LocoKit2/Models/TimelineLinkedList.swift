@@ -6,9 +6,11 @@
 //
 
 import Foundation
+import Combine
 import GRDB
 
-public actor TimelineLinkedList {
+@TimelineActor
+public final class TimelineLinkedList {
 
     public private(set) var seedItem: TimelineItem
     public private(set) var timelineItems: [String: TimelineItem] = [:]
@@ -49,8 +51,12 @@ public actor TimelineLinkedList {
 
     // MARK: - Private
 
+    private var cancellables: [String: AnyCancellable] = [:]
+
     private func getItem(itemId: String) async -> TimelineItem? {
         if let cached = timelineItems[itemId] { return cached }
+
+        addObserverFor(itemId: itemId)
 
         do {
             let item = try await Database.pool.read {
@@ -62,14 +68,43 @@ public actor TimelineLinkedList {
                     .asRequest(of: TimelineItem.self)
                     .fetchOne($0)
             }
-            guard let item else { return nil }
-            timelineItems[item.id] = item
+            if let item {
+                timelineItems[item.id] = item
+            }
             return item
 
         } catch {
             logger.error(error, subsystem: .database)
             return nil
         }
+    }
+
+    private func addObserverFor(itemId: String) {
+        guard cancellables[itemId] == nil else { return }
+
+        let cancellable = ValueObservation
+            .trackingConstantRegion { db in
+                try TimelineItemBase
+                    .including(optional: TimelineItemBase.visit)
+                    .including(optional: TimelineItemBase.trip)
+                    .including(all: TimelineItemBase.samples)
+                    .filter(Column("id") == itemId)
+                    .asRequest(of: TimelineItem.self)
+                    .fetchOne(db)
+            }
+            .shared(in: Database.pool, scheduling: .async(onQueue: TimelineActor.queue))
+            .publisher()
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    logger.error(error, subsystem: .database)
+                }
+            } receiveValue: { item in
+                if let item {
+                    self.timelineItems[item.id] = item
+                }
+            }
+
+        cancellables[itemId] = cancellable
     }
 
 }

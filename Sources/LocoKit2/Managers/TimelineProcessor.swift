@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreLocation
 import GRDB
 
 @TimelineActor
@@ -15,6 +16,8 @@ public final class TimelineProcessor {
 
     public static let debugLogging = true
     
+    public static let maximumModeShiftSpeed = CLLocationSpeed(kmh: 2)
+
     private let maxProcessingListSize = 21
     private let maximumPotentialMergesInProcessingLoop = 10
 
@@ -48,16 +51,16 @@ public final class TimelineProcessor {
 
         // collect items before seedItem, up to two keepers
         var previousKeepers = 0
-        var workingItem = await list.seedItem
-        while previousKeepers < 2, await list.timelineItems.count < maxProcessingListSize, let previous = await workingItem.previousItem(in: list) {
+        var workingItem = list.seedItem
+        while previousKeepers < 2, list.timelineItems.count < maxProcessingListSize, let previous = await workingItem.previousItem(in: list) {
             if previous.isWorthKeeping { previousKeepers += 1 }
             workingItem = previous
         }
 
         // collect items after seedItem, up to two keepers
         var nextKeepers = 0
-        workingItem = await list.seedItem
-        while nextKeepers < 2, await list.timelineItems.count < maxProcessingListSize, let next = await workingItem.nextItem(in: list) {
+        workingItem = list.seedItem
+        while nextKeepers < 2, list.timelineItems.count < maxProcessingListSize, let next = await workingItem.nextItem(in: list) {
             if next.isWorthKeeping { nextKeepers += 1 }
             workingItem = next
         }
@@ -69,9 +72,8 @@ public final class TimelineProcessor {
 
     private func collectPotentialMerges(for list: TimelineLinkedList) async -> [Merge] {
         var merges: Set<Merge> = []
-        let items = await list.timelineItems.values
 
-        for workingItem in items {
+        for workingItem in list.timelineItems.values {
             if shouldStopCollecting(merges) {
                 break
             }
@@ -135,23 +137,21 @@ public final class TimelineProcessor {
 
     // MARK: - Edge cleansing
 
-    private var lastCleansedSamples: Set<LocomotionSample> = []
+    private var alreadyMovedSamples: Set<LocomotionSample> = []
 
     private func sanitiseEdges(for list: TimelineLinkedList) async {
-        let items = Array(await list.timelineItems.values)
         var allMoved: Set<LocomotionSample> = []
 
-        for item in items {
-            let moved = await item.sanitiseEdges(in: list, excluding: lastCleansedSamples)
+        for item in list.timelineItems.values {
+            let moved = await item.sanitiseEdges(in: list, excluding: alreadyMovedSamples)
             allMoved.formUnion(moved)
         }
 
         if TimelineProcessor.debugLogging, !allMoved.isEmpty {
-            logger.debug("Moved \(allMoved.count) samples between item edges")
+            logger.debug("sanitiseEdges() moved \(allMoved.count) samples")
         }
 
-        // Update lastCleansedSamples for the next processing cycle
-        lastCleansedSamples = allMoved
+        alreadyMovedSamples = allMoved
     }
 
 }
