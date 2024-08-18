@@ -178,23 +178,73 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
-    public func isWithinMergeableDistance(of otherItem: TimelineItem) throws -> Bool {
+    internal func isWithinMergeableDistance(of otherItem: TimelineItem) throws -> Bool {
         if try self.isNolo { return true }
         if try otherItem.isNolo { return true }
-        
-//        if let gap = distance(from: otherItem), gap <= maximumMergeableDistance(from: otherItem) { return true }
+
+        if let gap = try distance(from: otherItem), gap <= maximumMergeableDistance(from: otherItem) { return true }
 
         // if the items overlap in time, any physical distance is acceptable
-//        guard let timeGap = self.timeInterval(from: otherItem), timeGap < 0 else { return true }
+        if timeInterval(from: otherItem) < 0 { return true }
 
         return false
     }
 
-    public func distance(from otherItem: TimelineItem) -> CLLocationDistance? {
-        if isVisit {
-            return visit?.distance(from: otherItem)
+    private func maximumMergeableDistance(from otherItem: TimelineItem) -> CLLocationDistance {
+        if self.isVisit {
+            return maximumMergeableDistanceForVisit(from: otherItem)
         } else {
-            return trip?.distance(from: otherItem)
+            return maximumMergeableDistanceForTrip(from: otherItem)
+        }
+    }
+
+    // VISIT <-> OTHER
+    private func maximumMergeableDistanceForVisit(from otherItem: TimelineItem) -> CLLocationDistance {
+
+        // VISIT <-> VISIT
+        if otherItem.isVisit {
+            return .greatestFiniteMagnitude
+        }
+
+        // VISIT <-> TRIP
+
+        // visit-trip gaps less than this should be forgiven
+        let minimum: CLLocationDistance = 150
+
+        let timeSeparation = abs(self.timeInterval(from: otherItem))
+        let rawMax = CLLocationDistance(otherItem.trip?.speed ?? 0 * timeSeparation * 4)
+
+        return max(rawMax, minimum)
+    }
+
+    // TRIP <-> OTHER
+    private func maximumMergeableDistanceForTrip(from otherItem: TimelineItem) -> CLLocationDistance {
+
+        // TRIP <-> VISIT
+        if otherItem.isVisit {
+            return otherItem.maximumMergeableDistance(from: self)
+        }
+
+        // TRIP <-> TRIP
+
+        let timeSeparation = abs(self.timeInterval(from: otherItem))
+        var speeds: [CLLocationSpeed] = []
+        if let selfSpeed = self.trip?.speed, selfSpeed > 0 {
+            speeds.append(selfSpeed)
+        }
+        if let otherSpeed = otherItem.trip?.speed, otherSpeed > 0 {
+            speeds.append(otherSpeed)
+        }
+        return CLLocationDistance(speeds.mean() * timeSeparation * 4)
+    }
+
+    // MARK: -
+
+    public func distance(from otherItem: TimelineItem) throws -> CLLocationDistance? {
+        if isVisit {
+            return try visit?.distance(from: otherItem)
+        } else {
+            return try trip?.distance(from: otherItem)
         }
     }
 
@@ -217,25 +267,37 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return myRange.start.timeIntervalSince(theirRange.end)
     }
 
-    public func edgeSample(withOtherItemId otherItemId: String) -> LocomotionSample? {
+    public func edgeSample(withOtherItemId otherItemId: String) throws -> LocomotionSample? {
+        guard let samples else {
+            throw TimelineItemError.samplesNotLoaded
+        }
+
         if otherItemId == base.previousItemId {
-            return samples?.first
+            return samples.first
         }
         if otherItemId == base.nextItemId {
-            return samples?.last
+            return samples.last
         }
+
         return nil
     }
 
-    public func secondToEdgeSample(withOtherItemId otherItemId: String) -> LocomotionSample? {
+    public func secondToEdgeSample(withOtherItemId otherItemId: String) throws -> LocomotionSample? {
+        guard let samples else {
+            throw TimelineItemError.samplesNotLoaded
+        }
+
         if otherItemId == base.previousItemId {
-            return samples?.second
+            return samples.second
         }
         if otherItemId == base.nextItemId {
-            return samples?.secondToLast
+            return samples.secondToLast
         }
+
         return nil
     }
+
+    // MARK: - Edge cleansing
 
     @TimelineActor
     internal func sanitiseEdges(in list: TimelineLinkedList, excluding: Set<LocomotionSample> = []) async throws -> Set<LocomotionSample> {
@@ -280,22 +342,22 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         guard timeInterval(from: otherItem) < .minutes(10) else { return nil } // 10 mins seems like a lot?
 
         if self.isTrip {
-            return await cleanseTripEdge(with: otherItem, in: list, excluding: excluding)
+            return try await cleanseTripEdge(with: otherItem, in: list, excluding: excluding)
         } else {
-            return await cleanseVisitEdge(with: otherItem, in: list, excluding: excluding)
+            return try await cleanseVisitEdge(with: otherItem, in: list, excluding: excluding)
         }
     }
 
     @TimelineActor
-    private func cleanseTripEdge(with otherTrip: TimelineItem, in list: TimelineLinkedList, excluding: Set<LocomotionSample>) async -> LocomotionSample? {
+    private func cleanseTripEdge(with otherTrip: TimelineItem, in list: TimelineLinkedList, excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard let trip else { return nil }
 
         guard let myActivityType = trip.activityType,
               let theirActivityType = otherTrip.trip?.activityType,
               myActivityType != theirActivityType else { return nil }
 
-        guard let myEdge = self.edgeSample(withOtherItemId: otherTrip.id),
-              let theirEdge = otherTrip.edgeSample(withOtherItemId: self.id),
+        guard let myEdge = try self.edgeSample(withOtherItemId: otherTrip.id),
+              let theirEdge = try otherTrip.edgeSample(withOtherItemId: self.id),
               let myEdgeLocation = myEdge.location,
               let theirEdgeLocation = theirEdge.location else { return nil }
 
@@ -314,13 +376,13 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     }
 
     @TimelineActor
-    private func cleanseVisitEdge(with otherTrip: TimelineItem, in list: TimelineLinkedList, excluding: Set<LocomotionSample>) async -> LocomotionSample? {
+    private func cleanseVisitEdge(with otherTrip: TimelineItem, in list: TimelineLinkedList, excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard let visit else { return nil }
 
-        guard let visitEdge = self.edgeSample(withOtherItemId: otherTrip.id),
-              let visitEdgeNext = self.secondToEdgeSample(withOtherItemId: otherTrip.id),
-              let tripEdge = otherTrip.edgeSample(withOtherItemId: self.id),
-              let tripEdgeNext = otherTrip.secondToEdgeSample(withOtherItemId: self.id),
+        guard let visitEdge = try self.edgeSample(withOtherItemId: otherTrip.id),
+              let visitEdgeNext = try self.secondToEdgeSample(withOtherItemId: otherTrip.id),
+              let tripEdge = try otherTrip.edgeSample(withOtherItemId: self.id),
+              let tripEdgeNext = try otherTrip.secondToEdgeSample(withOtherItemId: self.id),
               let tripEdgeLocation = tripEdge.location,
               let tripEdgeNextLocation = tripEdgeNext.location else { return nil }
 

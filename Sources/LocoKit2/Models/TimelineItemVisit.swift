@@ -50,12 +50,12 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         return centerLocation.distance(from: otherVisit.centerLocation) - radius.with1sd - otherVisit.radius.with1sd
     }
 
-    public func distance(from otherItem: TimelineItem) -> CLLocationDistance? {
+    public func distance(from otherItem: TimelineItem) throws -> CLLocationDistance? {
         if otherItem.isVisit, let otherVisit = otherItem.visit {
             return distance(from: otherVisit)
         }
 
-        if otherItem.isTrip, let otherEdge = otherItem.edgeSample(withOtherItemId: self.id)?.location, otherEdge.coordinate.isUsable {
+        if otherItem.isTrip, let otherEdge = try otherItem.edgeSample(withOtherItemId: self.id)?.location, otherEdge.coordinate.isUsable {
             return centerLocation.distance(from: otherEdge) - radius.with1sd
         }
         
