@@ -241,10 +241,42 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     // MARK: -
 
     public func distance(from otherItem: TimelineItem) throws -> CLLocationDistance? {
-        if isVisit {
+        if self.isVisit {
             return try visit?.distance(from: otherItem)
+
         } else {
-            return try trip?.distance(from: otherItem)
+            if otherItem.isVisit {
+                return try otherItem.visit?.distance(from: self)
+
+            } else {
+                return try distanceFromTripToTrip(otherItem)
+            }
+        }
+    }
+
+    private func distanceFromTripToTrip(_ otherItem: TimelineItem) throws -> CLLocationDistance? {
+        guard self.isTrip, otherItem.isTrip else { fatalError() }
+
+        guard let samples, let otherSamples = otherItem.samples else {
+            throw TimelineItemError.samplesNotLoaded
+        }
+
+        let selfStart = dateRange.start
+        let otherStart = otherItem.dateRange.start
+
+        if selfStart < otherStart {
+            guard let selfEdge = samples.last?.location,
+                  let otherEdge = otherSamples.first?.location else {
+                return nil
+            }
+            return selfEdge.distance(from: otherEdge)
+
+        } else {
+            guard let selfEdge = samples.first?.location,
+                  let otherEdge = otherSamples.last?.location else {
+                return nil
+            }
+            return selfEdge.distance(from: otherEdge)
         }
     }
 

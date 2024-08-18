@@ -33,20 +33,6 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     // and store a separate movingClassifiedActivityType at the same time,
     // to make modeMovingActivityType also unnecessary
 
-    public func distance(from otherItem: TimelineItem) throws -> CLLocationDistance? {
-        // trip - trip
-        if otherItem.isTrip, let otherTrip = otherItem.trip {
-            return nil // TODO: -
-        }
-
-        // trip - visit
-        if otherItem.isVisit, let otherVisit = otherItem.visit {
-            return nil // TODO: -
-        }
-
-        return nil
-    }
-
     // MARK: -
 
     public mutating func update(from samples: [LocomotionSample]) -> Bool {
