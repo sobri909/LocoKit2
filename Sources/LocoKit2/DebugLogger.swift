@@ -10,7 +10,7 @@ import Logging
 import LoggingFormatAndPipe
 
 public enum Subsystem: String {
-    case misc, database, appgroup
+    case misc, database, appgroup, timeline
 }
 
 internal let logger = DebugLogger.logger
