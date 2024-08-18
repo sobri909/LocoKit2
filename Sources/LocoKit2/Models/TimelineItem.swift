@@ -12,6 +12,13 @@ import Combine
 
 public enum TimelineItemError: Error {
     case samplesNotLoaded
+
+    public var description: String {
+        switch self {
+        case .samplesNotLoaded:
+            return "TimelineItemError.samplesNotLoaded"
+        }
+    }
 }
 
 public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
@@ -231,7 +238,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     }
 
     @TimelineActor
-    internal func sanitiseEdges(in list: TimelineLinkedList, excluding: Set<LocomotionSample> = []) async -> Set<LocomotionSample> {
+    internal func sanitiseEdges(in list: TimelineLinkedList, excluding: Set<LocomotionSample> = []) async throws -> Set<LocomotionSample> {
         var allMoved: Set<LocomotionSample> = []
         let maximumEdgeSteals = 30
 
@@ -239,12 +246,12 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             var movedThisLoop: Set<LocomotionSample> = []
 
             if let previousItem = await previousItem(in: list), previousItem.source == self.source, previousItem.isTrip {
-                if let moved = await cleanseEdge(with: previousItem, in: list, excluding: excluding.union(allMoved)) {
+                if let moved = try await cleanseEdge(with: previousItem, in: list, excluding: excluding.union(allMoved)) {
                     movedThisLoop.insert(moved)
                 }
             }
             if let nextItem = await nextItem(in: list), nextItem.source == self.source, nextItem.isTrip {
-                if let moved = await cleanseEdge(with: nextItem, in: list, excluding: excluding.union(allMoved)) {
+                if let moved = try await cleanseEdge(with: nextItem, in: list, excluding: excluding.union(allMoved)) {
                     movedThisLoop.insert(moved)
                 }
             }
@@ -263,13 +270,13 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     }
 
     @TimelineActor
-    private func cleanseEdge(with otherItem: TimelineItem, in list: TimelineLinkedList, excluding: Set<LocomotionSample>) async -> LocomotionSample? {
+    private func cleanseEdge(with otherItem: TimelineItem, in list: TimelineLinkedList, excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         // we only cleanse edges with Trips
         guard otherItem.isTrip else { return nil }
 
         guard !self.deleted && !otherItem.deleted else { return nil }
         guard self.source == otherItem.source else { return nil } // no edge stealing between different data sources
-        guard isWithinMergeableDistance(of: otherItem) else { return nil }
+        guard try isWithinMergeableDistance(of: otherItem) else { return nil }
         guard timeInterval(from: otherItem) < .minutes(10) else { return nil } // 10 mins seems like a lot?
 
         if self.isTrip {

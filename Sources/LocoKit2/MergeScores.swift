@@ -40,78 +40,81 @@ public final class MergeScores {
         // if consumer has zero samples, call it impossible
         if consumerSamples.isEmpty { return .impossible }
 
-        // data gaps can only consume data gaps
-        if consumer.isDataGap { return consumee.isDataGap ? .perfect : .impossible }
+        do {
+            // data gaps can only consume data gaps
+            if try consumer.isDataGap { return (try consumee.isDataGap) ? .perfect : .impossible }
 
-        // anyone can consume an invalid data gap, but no one can consume a valid data gap
-        if consumee.isDataGap { return consumee.isInvalid ? .medium : .impossible }
+            // anyone can consume an invalid data gap, but no one can consume a valid data gap
+            if try consumee.isDataGap { return (try consumee.isInvalid) ? .medium : .impossible }
 
-        // nolos can only consume nolos
-        if consumer.isNolo { return consumee.isNolo ? .perfect : .impossible }
+            // nolos can only consume nolos
+            if try consumer.isNolo { return (try consumee.isNolo) ? .perfect : .impossible }
 
-        // anyone can consume an invalid nolo
-        if consumee.isNolo && consumee.isInvalid { return .medium }
+            // anyone can consume an invalid nolo
+            if try consumee.isNolo && consumee.isInvalid { return .medium }
 
-        // test for impossible separation distance
-        guard consumer.isWithinMergeableDistance(of: consumee) == true else { return .impossible }
+            // test for impossible separation distance
+            guard try consumer.isWithinMergeableDistance(of: consumee) else { return .impossible }
 
-        // visit <- something
-        if consumer.isVisit {
-            return consumptionScoreFor(visit: consumer, toConsume: consumee)
+            // visit <- something
+            if consumer.isVisit {
+                return consumptionScoreFor(visit: consumer, toConsume: consumee)
+            } else { // trip <- something
+                return try consumptionScoreFor(trip: consumer, toConsume: consumee)
+            }
 
-        } else { // trip <- something
-            return consumptionScoreFor(trip: consumer, toConsume: consumee)
+        } catch {
+            logger.error("MergeScores.consumptionScoreFor() \(error)", subsystem: .timeline)
+            return .impossible
         }
-
-        return .impossible
     }
 
     // MARK: - TRIP <- SOMETHING
-    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsume consumee: TimelineItem) -> ConsumptionScore {
+    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsume consumee: TimelineItem) throws -> ConsumptionScore {
         guard consumer.isTrip else { fatalError() }
 
         // consumer is invalid
-        if consumer.isInvalid {
-            
+        if try consumer.isInvalid {
+
             // invalid <- invalid
-            if consumee.isInvalid { return .veryLow }
-            
+            if try consumee.isInvalid { return .veryLow }
+
             // invalid <- valid
             return .impossible
         }
 
         // trip <- visit
-        if consumee.isVisit { return consumptionScoreFor(trip: consumer, toConsumeVisit: consumee) }
+        if consumee.isVisit { return try consumptionScoreFor(trip: consumer, toConsumeVisit: consumee) }
 
         // trip <- trip
-        if consumee.isTrip { return consumptionScoreFor(trip: consumer, toConsumeTrip: consumee) }
+        if consumee.isTrip { return try consumptionScoreFor(trip: consumer, toConsumeTrip: consumee) }
 
         return .impossible
     }
     
     // MARK: - TRIP <- VISIT
-    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeVisit consumee: TimelineItem) -> ConsumptionScore {
+    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeVisit consumee: TimelineItem) throws -> ConsumptionScore {
         guard consumer.isTrip, consumee.isVisit else { fatalError() }
 
         // can't consume a keeper visit
-        if consumee.isWorthKeeping { return .impossible }
+        if try consumee.isWorthKeeping { return .impossible }
 
         // consumer is keeper
-        if consumer.isWorthKeeping {
-            
+        if try consumer.isWorthKeeping {
+
             // keeper <- invalid
-            if consumee.isInvalid { return .medium }
-            
+            if try consumee.isInvalid { return .medium }
+
             // keeper  <- valid
             return .low
         }
         
         // consumer is valid
-        if consumer.isValid {
-            
+        if try consumer.isValid {
+
             // valid <- invalid
-            if consumee.isInvalid { return .low }
-            
+            if try consumee.isInvalid { return .low }
+
             // valid <- valid
             return .veryLow
         }
@@ -121,7 +124,7 @@ public final class MergeScores {
     }
 
     // MARK: - TRIP <- TRIP
-    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeTrip consumee: TimelineItem) -> ConsumptionScore {
+    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeTrip consumee: TimelineItem) throws -> ConsumptionScore {
         guard consumer.isTrip, consumee.isTrip else { fatalError() }
         guard let consumerTrip = consumer.trip, let consumeeTrip = consumee.trip else { fatalError() }
 
@@ -138,7 +141,7 @@ public final class MergeScores {
         if consumeeType == consumerType { return .perfect }
 
         // can't consume a keeper path
-        if consumee.isWorthKeeping { return .impossible }
+        if try consumee.isWorthKeeping { return .impossible }
 
         // a path with nil type can't consume anyone
         guard let scoringType = consumerType else { return .impossible }

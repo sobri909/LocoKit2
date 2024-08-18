@@ -22,38 +22,50 @@ public final class TimelineProcessor {
     private let maximumPotentialMergesInProcessingLoop = 10
 
     public func processFrom(itemId: String) async {
-        guard let list = await processingList(fromItemId: itemId) else { return }
-        if let results = await process(list) {
-            await processFrom(itemId: results.kept.id)
+        do {
+            guard let list = try await processingList(fromItemId: itemId) else { return }
+
+            if let results = await process(list) {
+                await processFrom(itemId: results.kept.id)
+            }
+            
+        } catch {
+            logger.error(error, subsystem: .timeline)
         }
     }
 
     public func process(_ list: TimelineLinkedList) async -> MergeResult? {
-        await sanitiseEdges(for: list)
+        do {
+            try await sanitiseEdges(for: list)
 
-        let merges = await collectPotentialMerges(for: list)
-            .sorted { $0.score.rawValue > $1.score.rawValue }
+            let merges = try await collectPotentialMerges(for: list)
+                .sorted { $0.score.rawValue > $1.score.rawValue }
 
-        // find the highest scoring valid merge
-        guard let winningMerge = merges.first, winningMerge.score != .impossible else {
+            // find the highest scoring valid merge
+            guard let winningMerge = merges.first, winningMerge.score != .impossible else {
+                return nil
+            }
+
+            return await winningMerge.doIt()
+
+        } catch {
+            logger.error(error, subsystem: .timeline)
             return nil
         }
-
-        return await winningMerge.doIt()
     }
 
     // MARK: - Private
 
     private init() {}
 
-    private func processingList(fromItemId: String) async -> TimelineLinkedList? {
+    private func processingList(fromItemId: String) async throws -> TimelineLinkedList? {
         guard let list = await TimelineLinkedList(fromItemId: fromItemId) else { return nil }
 
         // collect items before seedItem, up to two keepers
         var previousKeepers = 0
         var workingItem = list.seedItem
         while previousKeepers < 2, list.timelineItems.count < maxProcessingListSize, let previous = await workingItem.previousItem(in: list) {
-            if previous.isWorthKeeping { previousKeepers += 1 }
+            if try previous.isWorthKeeping { previousKeepers += 1 }
             workingItem = previous
         }
 
@@ -61,7 +73,7 @@ public final class TimelineProcessor {
         var nextKeepers = 0
         workingItem = list.seedItem
         while nextKeepers < 2, list.timelineItems.count < maxProcessingListSize, let next = await workingItem.nextItem(in: list) {
-            if next.isWorthKeeping { nextKeepers += 1 }
+            if try next.isWorthKeeping { nextKeepers += 1 }
             workingItem = next
         }
 
@@ -70,7 +82,7 @@ public final class TimelineProcessor {
 
     // MARK: - Merge collating
 
-    private func collectPotentialMerges(for list: TimelineLinkedList) async -> [Merge] {
+    private func collectPotentialMerges(for list: TimelineLinkedList) async throws -> [Merge] {
         var merges: Set<Merge> = []
 
         for workingItem in list.timelineItems.values {
@@ -79,8 +91,8 @@ public final class TimelineProcessor {
             }
 
             await collectAdjacentMerges(for: workingItem, in: list, into: &merges)
-            await collectBetweenerMerges(for: workingItem, in: list, into: &merges)
-            await collectBridgeMerges(for: workingItem, in: list, into: &merges)
+            try await collectBetweenerMerges(for: workingItem, in: list, into: &merges)
+            try await collectBridgeMerges(for: workingItem, in: list, into: &merges)
         }
 
         return Array(merges)
@@ -102,31 +114,31 @@ public final class TimelineProcessor {
         }
     }
 
-    private func collectBetweenerMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async {
-        if let next = await item.nextItem(in: list), !item.isDataGap, next.keepnessScore < item.keepnessScore {
-            if let nextNext = await next.nextItem(in: list), !nextNext.isDataGap, nextNext.keepnessScore > next.keepnessScore {
+    private func collectBetweenerMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async throws {
+        if let next = await item.nextItem(in: list), try !item.isDataGap, try next.keepnessScore < item.keepnessScore {
+            if let nextNext = await next.nextItem(in: list), try !nextNext.isDataGap, try nextNext.keepnessScore > next.keepnessScore {
                 merges.insert(await Merge(keeper: item, betweener: next, deadman: nextNext, in: list))
                 merges.insert(await Merge(keeper: nextNext, betweener: next, deadman: item, in: list))
             }
         }
 
-        if let previous = await item.previousItem(in: list), !item.isDataGap, previous.keepnessScore < item.keepnessScore {
-            if let prevPrev = await previous.previousItem(in: list), !prevPrev.isDataGap, prevPrev.keepnessScore > previous.keepnessScore {
+        if let previous = await item.previousItem(in: list), try !item.isDataGap, try previous.keepnessScore < item.keepnessScore {
+            if let prevPrev = await previous.previousItem(in: list), try !prevPrev.isDataGap, try prevPrev.keepnessScore > previous.keepnessScore {
                 merges.insert(await Merge(keeper: item, betweener: previous, deadman: prevPrev, in: list))
                 merges.insert(await Merge(keeper: prevPrev, betweener: previous, deadman: item, in: list))
             }
         }
     }
 
-    private func collectBridgeMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async {
+    private func collectBridgeMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async throws {
         guard let previous = await item.previousItem(in: list),
               let next = await item.nextItem(in: list),
               previous.source == item.source,
               next.source == item.source,
-              previous.keepnessScore > item.keepnessScore,
-              next.keepnessScore > item.keepnessScore,
-              !previous.isDataGap,
-              !next.isDataGap
+              try previous.keepnessScore > item.keepnessScore,
+              try next.keepnessScore > item.keepnessScore,
+              try !previous.isDataGap,
+              try !next.isDataGap
         else {
             return
         }
@@ -139,11 +151,11 @@ public final class TimelineProcessor {
 
     private var alreadyMovedSamples: Set<LocomotionSample> = []
 
-    private func sanitiseEdges(for list: TimelineLinkedList) async {
+    private func sanitiseEdges(for list: TimelineLinkedList) async throws {
         var allMoved: Set<LocomotionSample> = []
 
         for item in list.timelineItems.values {
-            let moved = await item.sanitiseEdges(in: list, excluding: alreadyMovedSamples)
+            let moved = try await item.sanitiseEdges(in: list, excluding: alreadyMovedSamples)
             allMoved.formUnion(moved)
         }
 
