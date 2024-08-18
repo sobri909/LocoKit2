@@ -159,6 +159,7 @@ public final class Database: @unchecked Sendable {
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
 
                 table.column("distance", .double).notNull()
+                table.column("speed", .double).notNull()
                 table.column("classifiedActivityType", .text)
                 table.column("confirmedActivityType", .text)
             }

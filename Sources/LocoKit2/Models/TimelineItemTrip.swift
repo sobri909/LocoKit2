@@ -20,6 +20,7 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
 
     public let itemId: String
     public var distance: CLLocationDistance
+    public var speed: CLLocationSpeed
     public var classifiedActivityType: String?
     public var confirmedActivityType: String?
     public var id: String { itemId }
@@ -32,7 +33,7 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     // and store a separate movingClassifiedActivityType at the same time,
     // to make modeMovingActivityType also unnecessary
 
-    public func distance(from otherItem: TimelineItem) -> CLLocationDistance? {
+    public func distance(from otherItem: TimelineItem) throws -> CLLocationDistance? {
         // trip - trip
         if otherItem.isTrip, let otherTrip = otherItem.trip {
             return nil // TODO: -
@@ -50,15 +51,34 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
 
     public mutating func update(from samples: [LocomotionSample]) -> Bool {
         let oldSelf = self
-        self.distance = samples.compactMap { $0.location }.usableLocations().distance() ?? 0
+
+        self.distance = samples.compactMap { $0.location }.distance() ?? 0
+        self.speed = Self.calculateSpeed(from: samples, distance: distance)
+
         return !self.databaseEquals(oldSelf)
+    }
+
+    private static func calculateSpeed(from samples: [LocomotionSample], distance: Double) -> CLLocationSpeed {
+        if samples.count == 1, let first = samples.first {
+            return first.location?.speed ?? 0
+
+        }
+
+        if samples.count >= 2, let first = samples.first, let last = samples.last {
+            let duration = last.date - first.date
+            return duration > 0 ? distance / duration : 0
+        }
+
+        return 0
     }
 
     // MARK: - Init
 
     init(itemId: String, samples: [LocomotionSample]) {
         self.itemId = itemId
-        self.distance = samples.compactMap { $0.location }.usableLocations().distance() ?? 0
+        let distance = samples.compactMap { $0.location }.distance() ?? 0
+        self.speed = Self.calculateSpeed(from: samples, distance: distance)
+        self.distance = distance
     }
 
 }
