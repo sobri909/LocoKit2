@@ -10,6 +10,10 @@ import CoreLocation
 import Combine
 @preconcurrency import GRDB
 
+public enum TimelineItemError: Error {
+    case samplesNotLoaded
+}
+
 public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
 
     public var base: TimelineItemBase
@@ -34,15 +38,72 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return samples?.compactMap { $0.coordinate }.filter { $0.isUsable }
     }
 
-    public var isValid: Bool { return true }
+    public var isValid: Bool {
+        get throws {
+            guard let samples else {
+                throw TimelineItemError.samplesNotLoaded
+            }
 
-    public var isInvalid: Bool { !isValid }
+            if isVisit {
+                // Visit-specific validity logic
+                if samples.isEmpty { return false }
+                if try isNolo { return false }
+                if dateRange.duration < TimelineItemVisit.minimumValidDuration { return false }
+                return true
+            } else {
+                // Path-specific validity logic
+                if samples.count < TimelineItemTrip.minimumValidSamples { return false }
+                if dateRange.duration < TimelineItemTrip.minimumValidDuration { return false }
+                if let distance = trip?.distance, distance < TimelineItemTrip.minimumValidDistance { return false }
+                return true
+            }
+        }
+    }
 
-    public var isWorthKeeping: Bool { return true }
+    public var isInvalid: Bool {
+        get throws { try !isValid }
+    }
 
-    public var isDataGap: Bool { return false }
+    public var isWorthKeeping: Bool {
+        get throws {
+            if try !isValid { return false }
 
-    public var isNolo: Bool { return false }
+            if isVisit {
+                // Visit-specific worth keeping logic
+                if dateRange.duration < TimelineItemVisit.minimumKeeperDuration { return false }
+                return true
+            } else {
+                // Trip-specific worth keeping logic
+                if dateRange.duration < TimelineItemTrip.minimumKeeperDuration { return false }
+                if let distance = trip?.distance, distance < TimelineItemTrip.minimumKeeperDistance { return false }
+                return true
+            }
+        }
+    }
+
+    public var isDataGap: Bool {
+        get throws {
+            guard let samples else {
+                throw TimelineItemError.samplesNotLoaded
+            }
+
+            if isVisit { return false }
+            if samples.isEmpty { return false }
+
+            return samples.allSatisfy { $0.recordingState == .off }
+        }
+    }
+
+    public var isNolo: Bool {
+        get throws {
+            guard let samples else {
+                throw TimelineItemError.samplesNotLoaded
+            }
+
+            if try isDataGap { return false }
+            return !samples.contains { $0.location != nil }
+        }
+    }
 
     // MARK: - Relationships
 
@@ -92,9 +153,11 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     }
 
     public var keepnessScore: Int {
-        if isWorthKeeping { return 2 }
-        if isValid { return 1 }
-        return 0
+        get throws {
+            if try isWorthKeeping { return 2 }
+            if try isValid { return 1 }
+            return 0
+        }
     }
 
     internal func willConsume(_ otherItem: TimelineItem) {
@@ -108,8 +171,10 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
-    public func isWithinMergeableDistance(of otherItem: TimelineItem) -> Bool {
-        if self.isNolo || otherItem.isNolo { return true }
+    public func isWithinMergeableDistance(of otherItem: TimelineItem) throws -> Bool {
+        if try self.isNolo { return true }
+        if try otherItem.isNolo { return true }
+        
 //        if let gap = distance(from: otherItem), gap <= maximumMergeableDistance(from: otherItem) { return true }
 
         // if the items overlap in time, any physical distance is acceptable
@@ -119,13 +184,11 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     }
 
     public func distance(from otherItem: TimelineItem) -> CLLocationDistance? {
-        if self.isVisit, let selfVisit = self.visit {
-            return selfVisit.distance(from: otherItem)
+        if isVisit {
+            return visit?.distance(from: otherItem)
+        } else {
+            return trip?.distance(from: otherItem)
         }
-        if self.isTrip, let selfTrip = self.trip {
-            return selfTrip.distance(from: otherItem)
-        }
-        fatalError()
     }
 
     // a negative value indicates overlapping items, thus the duration of their overlap
