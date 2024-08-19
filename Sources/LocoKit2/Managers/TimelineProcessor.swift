@@ -242,8 +242,7 @@ public final class TimelineProcessor {
         if speedIsSlow != otherSpeedIsSlow { return nil }
 
         if !excluding.contains(otherEdge), otherEdge.classifiedActivityType == activityType {
-            // TODO: Implement add method
-            // self.add(theirEdge)
+            try await moveSample(otherEdge, to: tripItem.id)
             return otherEdge
         }
 
@@ -265,8 +264,7 @@ public final class TimelineProcessor {
         let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation)
 
         if !excluding.contains(tripEdge), tripEdgeIsInside && tripEdgeNextIsInside {
-            // TODO: Implement add method
-            // self.add(pathEdge)
+            try await moveSample(tripEdge, to: tripItem.id)
             return tripEdge
         }
 
@@ -274,12 +272,20 @@ public final class TimelineProcessor {
         if edgeNextDuration > 120 { return nil }
 
         if !excluding.contains(visitEdge), !tripEdgeIsInside {
-            // TODO: Implement add method
-            // trip.add(visitEdge)
+            try await moveSample(visitEdge, to: tripItem.id)
             return visitEdge
         }
 
         return nil
+    }
+
+    private func moveSample(_ sample: LocomotionSample, to destinationItemId: String) async throws {
+        try await Database.pool.write { db in
+            var mutableSample = sample
+            try mutableSample.updateChanges(db) {
+                $0.timelineItemId = destinationItemId
+            }
+        }
     }
 
 }
