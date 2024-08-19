@@ -155,7 +155,7 @@ public final class TimelineProcessor {
         var allMoved: Set<LocomotionSample> = []
 
         for item in list.timelineItems.values {
-            let moved = try await item.sanitiseEdges(in: list, excluding: alreadyMovedSamples)
+            let moved = try await sanitiseEdges(for: item, in: list, excluding: alreadyMovedSamples)
             allMoved.formUnion(moved)
         }
 
@@ -164,6 +164,114 @@ public final class TimelineProcessor {
         }
 
         alreadyMovedSamples = allMoved
+    }
+
+    private func sanitiseEdges(for item: TimelineItem, in list: TimelineLinkedList,
+                               excluding: Set<LocomotionSample> = []) async throws -> Set<LocomotionSample> {
+        var allMoved: Set<LocomotionSample> = []
+        let maximumEdgeSteals = 30
+
+        while allMoved.count < maximumEdgeSteals {
+            var movedThisLoop: Set<LocomotionSample> = []
+
+            if let previousItem = await item.previousItem(in: list), previousItem.source == item.source, previousItem.isTrip {
+                if let moved = try await cleanseEdge(for: item, otherItem: previousItem, in: list, excluding: excluding.union(allMoved)) {
+                    movedThisLoop.insert(moved)
+                }
+            }
+            if let nextItem = await item.nextItem(in: list), nextItem.source == item.source, nextItem.isTrip {
+                if let moved = try await cleanseEdge(for: item, otherItem: nextItem, in: list, excluding: excluding.union(allMoved)) {
+                    movedThisLoop.insert(moved)
+                }
+            }
+
+            // no changes, so we're done
+            if movedThisLoop.isEmpty { break }
+
+            // break from an infinite loop
+            guard movedThisLoop.intersection(allMoved).isEmpty else { break }
+
+            // keep track of changes
+            allMoved.formUnion(movedThisLoop)
+        }
+
+        return allMoved
+    }
+
+    private func cleanseEdge(for item: TimelineItem, otherItem: TimelineItem, in list: TimelineLinkedList,
+                             excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
+        // we only cleanse edges with Trips
+        guard otherItem.isTrip else { return nil }
+
+        guard !item.deleted && !otherItem.deleted else { return nil }
+        guard item.source == otherItem.source else { return nil } // no edge stealing between different data sources
+        guard try item.isWithinMergeableDistance(of: otherItem) else { return nil }
+        guard item.timeInterval(from: otherItem) < .minutes(10) else { return nil } // 10 mins seems like a lot?
+
+        if item.isTrip {
+            return try await cleanseEdge(forTripItem: item, otherTrip: otherItem, in: list, excluding: excluding)
+        } else {
+            return try await cleanseEdge(forVisitItem: item, tripItem: otherItem, in: list, excluding: excluding)
+        }
+    }
+
+    private func cleanseEdge(forTripItem tripItem: TimelineItem, otherTrip: TimelineItem, in list: TimelineLinkedList,
+                                 excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
+        guard let trip = tripItem.trip, otherTrip.isTrip else { return nil }
+
+        guard let activityType = trip.activityType,
+              let otherActivityType = otherTrip.trip?.activityType,
+              activityType != otherActivityType else { return nil }
+
+        guard let edge = try tripItem.edgeSample(withOtherItemId: otherTrip.id),
+              let otherEdge = try otherTrip.edgeSample(withOtherItemId: tripItem.id),
+              let edgeLocation = edge.location,
+              let otherEdgeLocation = otherEdge.location else { return nil }
+
+        let speedIsSlow = edgeLocation.speed < TimelineProcessor.maximumModeShiftSpeed
+        let otherSpeedIsSlow = otherEdgeLocation.speed < TimelineProcessor.maximumModeShiftSpeed
+
+        if speedIsSlow != otherSpeedIsSlow { return nil }
+
+        if !excluding.contains(otherEdge), otherEdge.classifiedActivityType == activityType {
+            // TODO: Implement add method
+            // self.add(theirEdge)
+            return otherEdge
+        }
+
+        return nil
+    }
+
+    private func cleanseEdge(forVisitItem visitItem: TimelineItem, tripItem: TimelineItem, in list: TimelineLinkedList,
+                             excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
+        guard let visit = visitItem.visit, tripItem.isTrip else { return nil }
+
+        guard let visitEdge = try visitItem.edgeSample(withOtherItemId: tripItem.id),
+              let visitEdgeNext = try visitItem.secondToEdgeSample(withOtherItemId: tripItem.id),
+              let tripEdge = try tripItem.edgeSample(withOtherItemId: visitItem.id),
+              let tripEdgeNext = try tripItem.secondToEdgeSample(withOtherItemId: visitItem.id),
+              let tripEdgeLocation = tripEdge.location,
+              let tripEdgeNextLocation = tripEdgeNext.location else { return nil }
+
+        let tripEdgeIsInside = visit.contains(tripEdgeLocation)
+        let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation)
+
+        if !excluding.contains(tripEdge), tripEdgeIsInside && tripEdgeNextIsInside {
+            // TODO: Implement add method
+            // self.add(pathEdge)
+            return tripEdge
+        }
+
+        let edgeNextDuration = abs(visitEdge.date.timeIntervalSince(visitEdgeNext.date))
+        if edgeNextDuration > 120 { return nil }
+
+        if !excluding.contains(visitEdge), !tripEdgeIsInside {
+            // TODO: Implement add method
+            // trip.add(visitEdge)
+            return visitEdge
+        }
+
+        return nil
     }
 
 }
