@@ -153,10 +153,15 @@ public final class TimelineProcessor {
 
     private func sanitiseEdges(for list: TimelineLinkedList) async throws {
         var allMoved: Set<LocomotionSample> = []
+        var processedItemIds = Set<String>()
 
-        for item in list.timelineItems.values {
-            let moved = try await sanitiseEdges(for: item, in: list, excluding: alreadyMovedSamples)
+        for itemId in list.timelineItems.keys {
+            if processedItemIds.contains(itemId) { continue }
+
+            let moved = try await sanitiseEdges(forItemId: itemId, in: list, excluding: alreadyMovedSamples)
+
             allMoved.formUnion(moved)
+            processedItemIds.insert(itemId)
         }
 
         if TimelineProcessor.debugLogging, !allMoved.isEmpty {
@@ -166,41 +171,44 @@ public final class TimelineProcessor {
         alreadyMovedSamples = allMoved
     }
 
-    private func sanitiseEdges(for item: TimelineItem, in list: TimelineLinkedList,
+    private func sanitiseEdges(forItemId itemId: String, in list: TimelineLinkedList,
                                excluding: Set<LocomotionSample> = []) async throws -> Set<LocomotionSample> {
         var allMoved: Set<LocomotionSample> = []
         let maximumEdgeSteals = 30
 
         while allMoved.count < maximumEdgeSteals {
+            guard let item = list.timelineItems[itemId] else { break }
+
             var movedThisLoop: Set<LocomotionSample> = []
 
-            if let previousItem = await item.previousItem(in: list), previousItem.source == item.source, previousItem.isTrip {
-                if let moved = try await cleanseEdge(for: item, otherItem: previousItem, in: list, excluding: excluding.union(allMoved)) {
-                    movedThisLoop.insert(moved)
-                }
-            }
-            if let nextItem = await item.nextItem(in: list), nextItem.source == item.source, nextItem.isTrip {
-                if let moved = try await cleanseEdge(for: item, otherItem: nextItem, in: list, excluding: excluding.union(allMoved)) {
+            if let previousItemId = item.base.previousItemId {
+                if let moved = try await edgeSteal(forItemId: itemId, otherItemId: previousItemId, in: list, excluding: excluding.union(allMoved)) {
                     movedThisLoop.insert(moved)
                 }
             }
 
-            // no changes, so we're done
+            if let nextItemId = item.base.nextItemId {
+                if let moved = try await edgeSteal(forItemId: itemId, otherItemId: nextItemId, in: list, excluding: excluding.union(allMoved)) {
+                    movedThisLoop.insert(moved)
+                }
+            }
+
             if movedThisLoop.isEmpty { break }
 
-            // break from an infinite loop
-            guard movedThisLoop.intersection(allMoved).isEmpty else { break }
-
-            // keep track of changes
             allMoved.formUnion(movedThisLoop)
         }
 
         return allMoved
     }
 
-    private func cleanseEdge(for item: TimelineItem, otherItem: TimelineItem, in list: TimelineLinkedList,
+    private func edgeSteal(forItemId itemId: String, otherItemId: String, in list: TimelineLinkedList,
                              excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
-        // we only cleanse edges with Trips
+        guard let item = list.timelineItems[itemId],
+              let otherItem = list.timelineItems[otherItemId] else {
+            return nil
+        }
+
+        // we only cleanse Trip edges (ie Visit-Trip or Trip-Trip)
         guard otherItem.isTrip else { return nil }
 
         guard !item.deleted && !otherItem.deleted else { return nil }
@@ -209,13 +217,13 @@ public final class TimelineProcessor {
         guard item.timeInterval(from: otherItem) < .minutes(10) else { return nil } // 10 mins seems like a lot?
 
         if item.isTrip {
-            return try await cleanseEdge(forTripItem: item, otherTrip: otherItem, in: list, excluding: excluding)
+            return try await edgeSteal(forTripItem: item, otherTrip: otherItem, in: list, excluding: excluding)
         } else {
-            return try await cleanseEdge(forVisitItem: item, tripItem: otherItem, in: list, excluding: excluding)
+            return try await edgeSteal(forVisitItem: item, tripItem: otherItem, in: list, excluding: excluding)
         }
     }
 
-    private func cleanseEdge(forTripItem tripItem: TimelineItem, otherTrip: TimelineItem, in list: TimelineLinkedList,
+    private func edgeSteal(forTripItem tripItem: TimelineItem, otherTrip: TimelineItem, in list: TimelineLinkedList,
                                  excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard let trip = tripItem.trip, otherTrip.isTrip else { return nil }
 
@@ -242,7 +250,7 @@ public final class TimelineProcessor {
         return nil
     }
 
-    private func cleanseEdge(forVisitItem visitItem: TimelineItem, tripItem: TimelineItem, in list: TimelineLinkedList,
+    private func edgeSteal(forVisitItem visitItem: TimelineItem, tripItem: TimelineItem, in list: TimelineLinkedList,
                              excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard let visit = visitItem.visit, tripItem.isTrip else { return nil }
 
