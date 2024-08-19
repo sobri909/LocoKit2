@@ -17,8 +17,8 @@ public final class TimelineRecorder: @unchecked Sendable {
     public var legacyDbMode = false
 
     public func startRecording() {
+        startWatchingLoco()
         loco.startRecording()
-        Task { await startWatchingLoco() }
     }
 
     public func stopRecording() {
@@ -71,7 +71,7 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     private var watchingLoco = false
 
-    private func startWatchingLoco() async {
+    private func startWatchingLoco() {
         if watchingLoco { return }
         watchingLoco = true
         
@@ -79,16 +79,20 @@ public final class TimelineRecorder: @unchecked Sendable {
 
         updateCurrentItemId()
 
-        for await _ in loco.locationUpdates() {
-            if legacyDbMode {
-                await recordLegacySample()
-            } else {
-                await recordSample()
+        Task {
+            for await _ in loco.locationUpdates() {
+                if legacyDbMode {
+                    await recordLegacySample()
+                } else {
+                    await recordSample()
+                }
             }
         }
 
-        for await newState in loco.stateUpdates() {
-            recordingStateChanged(newState)
+        Task {
+            for await newState in loco.stateUpdates() {
+                recordingStateChanged(newState)
+            }
         }
     }
 
