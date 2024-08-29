@@ -67,6 +67,46 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         self.course = location?.course
     }
 
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.date = try container.decode(Date.self, forKey: .date)
+        self.secondsFromGMT = try container.decode(Int.self, forKey: .secondsFromGMT)
+        self.source = try container.decode(String.self, forKey: .source)
+        self.sourceVersion = try container.decode(String.self, forKey: .sourceVersion)
+        self.movingState = try container.decode(MovingState.self, forKey: .movingState)
+        self.recordingState = try container.decode(RecordingState.self, forKey: .recordingState)
+        self.disabled = try container.decode(Bool.self, forKey: .disabled)
+
+        self.timelineItemId = try container.decodeIfPresent(String.self, forKey: .timelineItemId)
+
+        self.latitude = try container.decodeIfPresent(CLLocationDegrees.self, forKey: .latitude)
+        self.longitude = try container.decodeIfPresent(CLLocationDegrees.self, forKey: .longitude)
+        self.altitude = try container.decodeIfPresent(CLLocationDistance.self, forKey: .altitude)
+        self.horizontalAccuracy = try container.decodeIfPresent(CLLocationAccuracy.self, forKey: .horizontalAccuracy)
+        self.verticalAccuracy = try container.decodeIfPresent(CLLocationAccuracy.self, forKey: .verticalAccuracy)
+        self.speed = try container.decodeIfPresent(CLLocationSpeed.self, forKey: .speed)
+        self.course = try container.decodeIfPresent(CLLocationDirection.self, forKey: .course)
+
+        self.classifiedActivityType = try container.decodeIfPresent(String.self, forKey: .classifiedActivityType)
+        self.confirmedActivityType = try container.decodeIfPresent(String.self, forKey: .confirmedActivityType)
+
+        self.stepHz = try container.decodeIfPresent(Double.self, forKey: .stepHz)
+        self.xyAcceleration = try container.decodeIfPresent(Double.self, forKey: .xyAcceleration)
+        self.zAcceleration = try container.decodeIfPresent(Double.self, forKey: .zAcceleration)
+
+        if let latitude, let longitude {
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            self.location = CLLocation(
+                coordinate: coordinate, altitude: altitude!,
+                horizontalAccuracy: horizontalAccuracy ?? -1,
+                verticalAccuracy: verticalAccuracy ?? -1,
+                course: course ?? -1, speed: speed ?? -1,
+                timestamp: date
+            )
+        }
+    }
+
     public init(row: Row) throws {
         id = row["id"]
         date = row["date"]
