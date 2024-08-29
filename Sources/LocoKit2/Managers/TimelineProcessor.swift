@@ -41,6 +41,19 @@ public final class TimelineProcessor {
             let merges = try await collectPotentialMerges(for: list)
                 .sorted { $0.score.rawValue > $1.score.rawValue }
 
+            if TimelineProcessor.debugLogging {
+                if merges.isEmpty {
+                    logger.info("Considering 0 merges")
+                } else {
+                    do {
+                        let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
+                        logger.info("Considering \(merges.count) merges:\n\(descriptions)")
+                    } catch {
+                        logger.error(error, subsystem: .timeline)
+                    }
+                }
+            }
+
             // find the highest scoring valid merge
             guard let winningMerge = merges.first, winningMerge.score != .impossible else {
                 return nil
@@ -165,7 +178,7 @@ public final class TimelineProcessor {
         }
 
         if TimelineProcessor.debugLogging, !allMoved.isEmpty {
-            logger.debug("sanitiseEdges() moved \(allMoved.count) samples")
+            logger.info("sanitiseEdges() moved \(allMoved.count) samples")
         }
 
         alreadyMovedSamples = allMoved

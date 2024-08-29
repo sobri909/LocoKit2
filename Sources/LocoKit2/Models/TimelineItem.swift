@@ -108,7 +108,22 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             }
 
             if try isDataGap { return false }
-            return !samples.contains { $0.location != nil }
+            return samples.allSatisfy { $0.location == nil }
+        }
+    }
+
+    public var typeString: String {
+        get throws {
+            if try isDataGap { return "datagap" }
+            if try isNolo    { return "nolo" }
+            if isVisit       { return "visit" }
+            return "trip"
+        }
+    }
+
+    public var description: String {
+        get throws {
+            String(format: "%@ %@", try keepnessString, try typeString)
         }
     }
 
@@ -164,6 +179,14 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             if try isWorthKeeping { return 2 }
             if try isValid { return 1 }
             return 0
+        }
+    }
+
+    public var keepnessString: String {
+        get throws {
+            if try isWorthKeeping { return "keeper" }
+            if try isValid { return "valid" }
+            return "invalid"
         }
     }
 

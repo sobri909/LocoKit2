@@ -9,7 +9,7 @@ typealias MergeScore = ConsumptionScore
 public typealias MergeResult = (kept: TimelineItem, killed: [TimelineItem])
 
 @TimelineActor
-internal final class Merge: Hashable, @preconcurrency CustomStringConvertible, Sendable {
+internal final class Merge: Hashable, Sendable {
 
     let list: TimelineLinkedList
     let keeper: TimelineItem
@@ -69,8 +69,11 @@ internal final class Merge: Hashable, @preconcurrency CustomStringConvertible, S
 
     @discardableResult
     func doIt() async -> MergeResult? {
-        let description = String(describing: self)
-        if TimelineProcessor.debugLogging { logger.debug("Doing:\n\(description)") }
+        if TimelineProcessor.debugLogging {
+            if let description = try? description {
+                logger.info("Doing:\n\(description)")
+            }
+        }
 
         let keeperPrevious = await keeper.previousItem(in: list)
         let keeperNext = await keeper.nextItem(in: list)
@@ -159,7 +162,8 @@ internal final class Merge: Hashable, @preconcurrency CustomStringConvertible, S
 
     // MARK: - Hashable
 
-    nonisolated func hash(into hasher: inout Hasher) {
+    nonisolated
+    func hash(into hasher: inout Hasher) {
         hasher.combine(keeper)
         hasher.combine(deadman)
         if let betweener {
@@ -168,7 +172,8 @@ internal final class Merge: Hashable, @preconcurrency CustomStringConvertible, S
         hasher.combine(keeper.dateRange.start)
     }
 
-    nonisolated static func == (lhs: Merge, rhs: Merge) -> Bool {
+    nonisolated
+    static func == (lhs: Merge, rhs: Merge) -> Bool {
         return (
             lhs.keeper == rhs.keeper &&
             lhs.deadman == rhs.deadman &&
@@ -177,15 +182,18 @@ internal final class Merge: Hashable, @preconcurrency CustomStringConvertible, S
         )
     }
 
-    // MARK: - CustomStringConvertible
-
     var description: String {
-        if let betweener {
-            return String(format: "score: %d (%@) <- (%@) <- (%@)",
-                          score.rawValue, String(describing: keeper), String(describing: betweener), String(describing: deadman))
-        } else {
-            return String(format: "score: %d (%@) <- (%@)",
-                          score.rawValue, String(describing: keeper), String(describing: deadman))
+        get throws {
+            if let betweener {
+                return String(
+                    format: "score: %d (%@) <- (%@) <- (%@)", score.rawValue,
+                    try keeper.description, try betweener.description, try deadman.description
+                )
+            }
+            return String(
+                format: "score: %d (%@) <- (%@)", score.rawValue,
+                try keeper.description, try deadman.description
+            )
         }
     }
     
