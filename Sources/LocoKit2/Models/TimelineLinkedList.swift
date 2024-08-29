@@ -28,7 +28,9 @@ public final class TimelineLinkedList {
             }
             if let seedItem {
                 self.seedItem = seedItem
-                timelineItems[seedItem.id] = seedItem
+                timelineItems[seedItemId] = seedItem
+                observers[seedItemId] = addObserverFor(itemId: seedItemId)
+
             } else {
                 return nil
             }
@@ -51,12 +53,12 @@ public final class TimelineLinkedList {
 
     // MARK: - Private
 
-    private var cancellables: [String: AnyCancellable] = [:]
-
     private func getItem(itemId: String) async -> TimelineItem? {
         if let cached = timelineItems[itemId] { return cached }
 
-        addObserverFor(itemId: itemId)
+        if observers[itemId] == nil {
+            observers[itemId] = addObserverFor(itemId: itemId)
+        }
 
         do {
             let item = try await Database.pool.read {
@@ -79,10 +81,16 @@ public final class TimelineLinkedList {
         }
     }
 
-    private func addObserverFor(itemId: String) {
-        guard cancellables[itemId] == nil else { return }
+    private func receivedItem(_ item: TimelineItem) {
+        timelineItems[item.id] = item
+        print("receivedItem() itemId: \(item.id), timelineItems: \(timelineItems.count)")
+    }
 
-        let cancellable = ValueObservation
+    private var observers: [String: AnyCancellable] = [:]
+
+    nonisolated
+    private func addObserverFor(itemId: String) -> AnyCancellable {
+        return ValueObservation
             .trackingConstantRegion { db in
                 try TimelineItemBase
                     .including(optional: TimelineItemBase.visit)
@@ -98,13 +106,11 @@ public final class TimelineLinkedList {
                 if case .failure(let error) = completion {
                     logger.error(error, subsystem: .database)
                 }
-            } receiveValue: { item in
-                if let item {
-                    self.timelineItems[item.id] = item
+            } receiveValue: { [weak self] item in
+                if let self, let item {
+                    Task { await self.receivedItem(item) }
                 }
             }
-
-        cancellables[itemId] = cancellable
     }
 
 }
