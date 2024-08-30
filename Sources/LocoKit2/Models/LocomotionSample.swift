@@ -184,4 +184,12 @@ public extension Array where Element == LocomotionSample {
     func radius(from center: CLLocation) -> Radius {
         return compactMap { $0.location }.radius(from: center)
     }
+
+    func dateRange() -> DateInterval? {
+        let dates = map { $0.date }
+        guard let start = dates.min(), let end = dates.max() else {
+            return nil
+        }
+        return DateInterval(start: start, end: end)
+    }
 }

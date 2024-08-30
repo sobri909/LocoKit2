@@ -199,21 +199,28 @@ public final class MergeScores {
     // MARK: - VISIT <- TRIP
     private static func consumptionScoreFor(visit consumer: TimelineItem, toConsumeTrip consumee: TimelineItem) -> ConsumptionScore {
         guard consumer.isVisit, consumee.isTrip else { fatalError() }
+        guard let consumerVisit = consumer.visit else { return .impossible }
 
-//        // percentage of path inside the visit
-//        let pctInsideScore = Int(floor(consumee.percentInside(consumer) * 10))
-//        
-//        // valid / keeper visit <- invalid path
-//        if consumer.isValid && consumee.isInvalid {
-//            switch pctInsideScore {
-//            case 10: // 100%
-//                return .low
-//            default:
-//                return .veryLow
-//            }
-//        }
-        
-        return .impossible
+        do {
+            let pctInside = try consumee.percentInside(consumerVisit)
+            let pctInsideScore = Int(floor(pctInside * 10))
+
+            // valid / keeper visit <- invalid trip
+            if try consumer.isValid && consumee.isInvalid {
+                switch pctInsideScore {
+                case 10: // 100%
+                    return .low
+                default:
+                    return .veryLow
+                }
+            }
+
+            return .impossible
+
+        } catch {
+            logger.error(error, subsystem: .timeline)
+            return .impossible
+        }
     }
 
 }

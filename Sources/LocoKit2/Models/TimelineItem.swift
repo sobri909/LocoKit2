@@ -322,6 +322,35 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return myRange.start.timeIntervalSince(theirRange.end)
     }
 
+    // TODO: need to look for Place, to use Place radius instead, if available
+    // (old ArcPath has an overload for this)
+    public func samplesInside(_ visit: TimelineItemVisit) throws -> [LocomotionSample] {
+        guard let samples else {
+            throw TimelineItemError.samplesNotLoaded
+        }
+
+        return samples.filter { sample in
+            if let location = sample.location {
+                return visit.contains(location)
+            }
+            return false
+        }
+    }
+
+    public func percentInside(_ visit: TimelineItemVisit) throws -> Double {
+        guard let samples else {
+            throw TimelineItemError.samplesNotLoaded
+        }
+
+        if samples.isEmpty { return 0 }
+
+        let samplesInsideVisit = try self.samplesInside(visit)
+
+        return Double(samplesInsideVisit.count) / Double(samples.count)
+    }
+
+    // MARK: -
+
     public func edgeSample(withOtherItemId otherItemId: String) throws -> LocomotionSample? {
         guard let samples else {
             throw TimelineItemError.samplesNotLoaded
