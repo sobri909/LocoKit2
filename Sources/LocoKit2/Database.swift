@@ -266,6 +266,36 @@ public final class Database: @unchecked Sendable {
                     WHERE id = OLD.timelineItemId;
                 END;
                 """)
+
+            // keep nextItemId / previousItemId links correct
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_UPDATE_nextItemId
+                AFTER UPDATE OF previousItemId ON TimelineItemBase
+                BEGIN
+                    UPDATE TimelineItemBase
+                    SET nextItemId = NEW.id
+                    WHERE id = NEW.previousItemId;
+                    
+                    UPDATE TimelineItemBase
+                    SET nextItemId = NULL
+                    WHERE nextItemId = NEW.id AND id != NEW.previousItemId;
+                END;
+                """)
+
+            // keep nextItemId / previousItemId links correct
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_UPDATE_previousItemId
+                AFTER UPDATE OF nextItemId ON TimelineItemBase
+                BEGIN
+                    UPDATE TimelineItemBase
+                    SET previousItemId = NEW.id
+                    WHERE id = NEW.nextItemId;
+                    
+                    UPDATE TimelineItemBase
+                    SET previousItemId = NULL
+                    WHERE previousItemId = NEW.id AND id != NEW.nextItemId;
+                END;
+                """)
         }
     }
 
