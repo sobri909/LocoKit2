@@ -64,7 +64,11 @@ public final class TimelineObserver: TransactionObserver, Sendable {
         do {
             let dateRanges = try await Database.pool
                 .read { try Row.fetchAll($0, sql: query) }
-                .map { DateInterval(start: $0["startDate"] as Date, end: $0["endDate"] as Date) }
+                .compactMap { row -> DateInterval? in
+                    guard let startDate = row["startDate"] as Date? else { return nil }
+                    guard let endDate = row["endDate"] as Date? else { return nil }
+                    return DateInterval(start: startDate, end: endDate)
+                }
 
             for dateRange in dateRanges {
                 notifyChange(dateRange)
