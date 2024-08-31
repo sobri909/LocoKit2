@@ -139,6 +139,14 @@ public final class TimelineRecorder: @unchecked Sendable {
             recordingEnded = .now
         }
 
+        // fire up the processor on transition to sleep
+        if previousRecordingState == .recording, recordingState == .sleeping {
+            print("recordingStateChanged() .recording -> .sleeping")
+            if let currentItemId {
+                Task { await TimelineProcessor.highlander.processFrom(itemId: currentItemId) }
+            }
+        }
+
         previousRecordingState = recordingState
 
         switch recordingState {
