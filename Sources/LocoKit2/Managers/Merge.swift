@@ -28,7 +28,7 @@ internal final class Merge: Hashable, Sendable {
     // MARK: -
 
     private static func calculateScore(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> MergeScore {
-        if await !isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) {
+        guard await isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
             return .impossible
         }
         return keeper.scoreForConsuming(deadman)
@@ -37,29 +37,16 @@ internal final class Merge: Hashable, Sendable {
     private static func isValid(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> Bool {
         if keeper.deleted || deadman.deleted || betweener?.deleted == true { return false }
 
-        // check for dupes (which should be impossible, but weird stuff happens)
-        var itemIds: Set<String> = [keeper.id, deadman.id]
-        if let betweener {
-            itemIds.insert(betweener.id)
-            if itemIds.count != 3 { return false }
-        } else {
-            if itemIds.count != 2 { return false }
-        }
-
-        let keeperNext = await keeper.nextItem(in: list)
-        let betweenerNext = await betweener?.nextItem(in: list)
-        let deadmanNext = await deadman.nextItem(in: list)
-
         if let betweener {
             // keeper -> betweener -> deadman
-            if keeperNext == betweener, betweenerNext == deadman { return true }
+            if keeper.base.nextItemId == betweener.id, betweener.base.nextItemId == deadman.id { return true }
             // deadman -> betweener -> keeper
-            if deadmanNext == betweener, betweenerNext == keeper { return true }
+            if deadman.base.nextItemId == betweener.id, betweener.base.nextItemId == keeper.id { return true }
         } else {
             // keeper -> deadman
-            if keeperNext == deadman { return true }
+            if keeper.base.nextItemId == deadman.id { return true }
             // deadman -> keeper
-            if deadmanNext == keeper { return true }
+            if deadman.base.nextItemId == keeper.id { return true }
         }
 
         return false
