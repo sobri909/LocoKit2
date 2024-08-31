@@ -83,7 +83,7 @@ public final class TimelineLinkedList {
 
     private func receivedItem(_ item: TimelineItem) {
         timelineItems[item.id] = item
-        print("receivedItem() itemId: \(item.id), timelineItems: \(timelineItems.count)")
+        print("TimelineLinkedList.receivedItem() itemId: \(item.id), timelineItems: \(timelineItems.count)")
     }
 
     private var observers: [String: AnyCancellable] = [:]
