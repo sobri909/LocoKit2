@@ -195,6 +195,7 @@ public final class TimelineRecorder: @unchecked Sendable {
             }
             
             await processSample(&sample)
+            await sample.saveRTree()
 
         } catch {
             logger.error(error, subsystem: .database)

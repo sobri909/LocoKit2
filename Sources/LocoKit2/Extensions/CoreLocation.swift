@@ -41,6 +41,10 @@ public extension CLLocation {
     var invalidVelocity: Bool {
         course < 0 || speed < 0 || courseAccuracy < 0 || speedAccuracy < 0
     }
+
+    var hasUsableCoordinate: Bool {
+        horizontalAccuracy >= 0 && coordinate.isUsable
+    }
 }
 
 public extension CLLocationCoordinate2D {

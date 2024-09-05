@@ -21,11 +21,11 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     public let itemId: String
     public var distance: CLLocationDistance
     public var speed: CLLocationSpeed
-    public var classifiedActivityType: String?
-    public var confirmedActivityType: String?
+    public var classifiedActivityType: ActivityType?
+    public var confirmedActivityType: ActivityType?
     public var id: String { itemId }
 
-    public var activityType: String? { confirmedActivityType ?? classifiedActivityType }
+    public var activityType: ActivityType? { confirmedActivityType ?? classifiedActivityType }
 
     // TODO: would be good to keep modeActivityType and modeMovingActivityType
     // or perhaps make sure classifiedActivityType always has a relatively up to date value,

@@ -168,6 +168,13 @@ public final class Database: @unchecked Sendable {
 
             try db.create(table: "LocomotionSample") { table in
                 table.primaryKey("id", .text)
+
+                // NOTE: indexing this column in old LocoKit made the query planner do dumb things
+                // make sure there's a composite index that includes it instead
+                // and make sure rtreeId IS NOT the first column in the composite index
+                // otherwise again the query planner will do dumb things
+                table.column("rtreeId", .integer)
+
                 table.column("date", .datetime).notNull().indexed()
                 table.column("source", .text).notNull()
                 table.column("sourceVersion", .text).notNull()
@@ -197,7 +204,35 @@ public final class Database: @unchecked Sendable {
                 table.column("confirmedActivityType", .text)
             }
 
-            // TODO: r-tree index for LocomotionSample
+            try db.create(
+                virtualTable: "SampleRTree",
+                using: "rtree(id, latMin, latMax, lonMin, lonMax)"
+            )
+
+            try db.create(
+                index: "LocomotionSample_on_date_rtreeId_confirmedActivityType_xyAcceleration_zAcceleration_stepHz",
+                on: "LocomotionSample",
+                columns: ["date", "rtreeId", "confirmedActivityType", "xyAcceleration", "zAcceleration", "stepHz"]
+            )
+
+            // MARK: - ActivityTypesModel
+
+            try db.create(table: "ActivityTypesModel") { table in
+                table.column("geoKey", .text).primaryKey()
+                table.column("lastSaved", .datetime).notNull().indexed()
+                table.column("lastUpdated", .datetime).indexed()
+                table.column("filename", .text).notNull()
+
+                table.column("depth", .integer).notNull().indexed()
+                table.column("needsUpdate", .boolean).indexed()
+                table.column("totalSamples", .integer).notNull()
+                table.column("accuracyScore", .double)
+
+                table.column("latitudeMax", .double).notNull().indexed()
+                table.column("latitudeMin", .double).notNull().indexed()
+                table.column("longitudeMax", .double).notNull().indexed()
+                table.column("longitudeMin", .double).notNull().indexed()
+            }
 
             // MARK: - Triggers
 

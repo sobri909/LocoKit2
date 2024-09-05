@@ -487,12 +487,12 @@ public final class LocomotionManager: @unchecked Sendable {
         }
 
         func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
-            logger.info("locationManagerDidPauseLocationUpdates()")
+            print("locationManagerDidPauseLocationUpdates()")
             parent.startSleeping()
         }
 
         func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
-            logger.info("locationManagerDidResumeLocationUpdates()")
+            print("locationManagerDidResumeLocationUpdates()")
         }
 
         func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

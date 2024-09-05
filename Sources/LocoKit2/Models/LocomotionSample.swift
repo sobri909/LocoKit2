@@ -7,7 +7,7 @@
 
 import Foundation
 import CoreLocation
-import GRDB
+@preconcurrency import GRDB
 
 public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
@@ -34,8 +34,8 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     public let course: CLLocationDirection?
 
     // strings for now, until classifier stuff is ported over
-    public var classifiedActivityType: String?
-    public var confirmedActivityType: String?
+    public var classifiedActivityType: ActivityType?
+    public var confirmedActivityType: ActivityType?
 
     // motion sensor data
     public var stepHz: Double?
@@ -44,6 +44,37 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     public private(set) var location: CLLocation? = nil
     public var coordinate: CLLocationCoordinate2D? { location?.coordinate }
+    public var hasUsableCoordinate: Bool { location?.hasUsableCoordinate ?? false }
+
+    // TODO: hook this up
+    public var sinceVisitStart: Double { return 0 }
+
+    // rtree
+    public var rtreeId: Int64?
+
+    static let rtree = belongsTo(SampleRTree.self, using: ForeignKey(["rtreeId"]))
+
+    // TODO: needs to us correct calendar based on secondsFromGMT
+    public var timeOfDay: TimeInterval { date.sinceStartOfDay() }
+
+    internal var coreMLFeatureProvider: CoreMLFeatureProvider {
+        return CoreMLFeatureProvider(
+            stepHz: stepHz,
+            xyAcceleration: xyAcceleration,
+            zAcceleration: zAcceleration,
+            movingState: movingState.stringValue,
+            verticalAccuracy: location?.verticalAccuracy,
+            horizontalAccuracy: location?.horizontalAccuracy,
+            courseVariance: nil,
+            speed: location?.speed,
+            course: location?.course,
+            latitude: location?.coordinate.latitude,
+            longitude: location?.coordinate.longitude,
+            altitude: location?.altitude,
+            timeOfDay: timeOfDay,
+            sinceVisitStart: sinceVisitStart
+        )
+    }
 
     // MARK: -
 
@@ -88,8 +119,8 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         self.speed = try container.decodeIfPresent(CLLocationSpeed.self, forKey: .speed)
         self.course = try container.decodeIfPresent(CLLocationDirection.self, forKey: .course)
 
-        self.classifiedActivityType = try container.decodeIfPresent(String.self, forKey: .classifiedActivityType)
-        self.confirmedActivityType = try container.decodeIfPresent(String.self, forKey: .confirmedActivityType)
+        self.classifiedActivityType = try container.decodeIfPresent(ActivityType.self, forKey: .classifiedActivityType)
+        self.confirmedActivityType = try container.decodeIfPresent(ActivityType.self, forKey: .confirmedActivityType)
 
         self.stepHz = try container.decodeIfPresent(Double.self, forKey: .stepHz)
         self.xyAcceleration = try container.decodeIfPresent(Double.self, forKey: .xyAcceleration)
@@ -127,9 +158,13 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         speed = row["speed"]
         course = row["course"]
 
-        classifiedActivityType = row["classifiedActivityType"]
-        confirmedActivityType = row["confirmedActivityType"]
-        
+        if let rawValue = row["classifiedActivityType"] as? String {
+            classifiedActivityType = ActivityType(rawValue: rawValue)
+        }
+        if let rawValue = row["confirmedActivityType"] as? String {
+            confirmedActivityType = ActivityType(rawValue: rawValue)
+        }
+
         stepHz = row["stepHz"]
         xyAcceleration = row["xyAcceleration"]
         zAcceleration = row["zAcceleration"]
@@ -143,6 +178,33 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
                 course: course ?? -1, speed: speed ?? -1,
                 timestamp: date
             )
+        }
+    }
+
+    // MARK: -
+
+    internal mutating func saveRTree() async {
+        guard let coordinate = location?.coordinate, coordinate.isUsable else { return }
+        guard rtreeId == nil else { return }
+
+        do {
+            rtreeId = try await Database.pool.write { [self] db in
+                var rtree = SampleRTree(
+                    latMin: coordinate.latitude, latMax: coordinate.latitude,
+                    lonMin: coordinate.longitude, lonMax: coordinate.longitude
+                )
+                try rtree.insert(db)
+
+                var mutableSelf = self
+                try mutableSelf.updateChanges(db) { sample in
+                    sample.rtreeId = rtree.id
+                }
+
+                return rtree.id
+            }
+
+        } catch {
+            logger.error(error, subsystem: .database)
         }
     }
 

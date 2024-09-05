@@ -41,6 +41,12 @@ extension Array where Element: BinaryFloatingPoint {
     }
 }
 
+extension Array where Element: AdditiveArithmetic {
+    func sum() -> Element {
+        reduce(.zero, +)
+    }
+}
+
 extension Comparable {
     mutating func clamp(min: Self, max: Self) {
         if self < min { self = min }
