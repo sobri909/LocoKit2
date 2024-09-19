@@ -124,11 +124,13 @@ public final class Database: @unchecked Sendable {
 
                 table.column("previousItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
-                    .check(sql: "previousItemId != id AND (previousItemId IS NULL OR deleted = 0)")
+                    .check { $0 == nil || Column("deleted") == false }
+                    .check { $0 != Column("id") }
 
                 table.column("nextItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
-                    .check(sql: "nextItemId != id AND (nextItemId IS NULL OR deleted = 0)")
+                    .check { $0 == nil || Column("deleted") == false }
+                    .check { $0 != Column("id") }
 
                 table.column("stepCount", .integer)
                 table.column("floorsAscended", .integer)
