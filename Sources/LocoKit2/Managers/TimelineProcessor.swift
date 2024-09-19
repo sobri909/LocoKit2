@@ -128,7 +128,8 @@ public final class TimelineProcessor {
     }
 
     private func shouldStopCollecting(_ merges: Set<Merge>) -> Bool {
-        merges.count >= maximumPotentialMergesInProcessingLoop && merges.first(where: { $0.score != .impossible }) != nil
+        let validMerges = merges.count { $0.score != .impossible }
+        return validMerges >= maximumPotentialMergesInProcessingLoop
     }
 
     private func collectAdjacentMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async {
