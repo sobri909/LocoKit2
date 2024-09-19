@@ -156,7 +156,9 @@ internal final class Merge: Hashable, Sendable {
         if let betweener {
             hasher.combine(betweener)
         }
-        hasher.combine(keeper.dateRange.start)
+        if let start = keeper.dateRange?.start {
+            hasher.combine(start)
+        }
     }
 
     nonisolated
@@ -165,7 +167,7 @@ internal final class Merge: Hashable, Sendable {
             lhs.keeper == rhs.keeper &&
             lhs.deadman == rhs.deadman &&
             lhs.betweener == rhs.betweener &&
-            lhs.keeper.dateRange.start == rhs.keeper.dateRange.start
+            lhs.keeper.dateRange?.start == rhs.keeper.dateRange?.start
         )
     }
 

@@ -31,7 +31,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var id: String { base.id }
     public var isVisit: Bool { base.isVisit }
     public var isTrip: Bool { !base.isVisit }
-    public var dateRange: DateInterval { base.dateRange }
+    public var dateRange: DateInterval? { base.dateRange }
     public var source: String { base.source }
     public var disabled: Bool { base.disabled }
     public var deleted: Bool { base.deleted }
@@ -50,6 +50,8 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             guard let samples else {
                 throw TimelineItemError.samplesNotLoaded
             }
+
+            guard let dateRange else { return false }
 
             if isVisit {
                 // Visit-specific validity logic
@@ -74,6 +76,8 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var isWorthKeeping: Bool {
         get throws {
             if try !isValid { return false }
+
+            guard let dateRange else { return false }
 
             if isVisit {
                 // Visit-specific worth keeping logic
@@ -284,8 +288,10 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             throw TimelineItemError.samplesNotLoaded
         }
 
-        let selfStart = dateRange.start
-        let otherStart = otherItem.dateRange.start
+        guard let selfStart = dateRange?.start,
+              let otherStart = otherItem.dateRange?.start else {
+            return nil
+        }
 
         if selfStart < otherStart {
             guard let selfEdge = samples.last?.location,
@@ -305,8 +311,10 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // a negative value indicates overlapping items, thus the duration of their overlap
     public func timeInterval(from otherItem: TimelineItem) -> TimeInterval {
-        let myRange = self.dateRange
-        let theirRange = otherItem.dateRange
+        guard let myRange = self.dateRange,
+              let theirRange = otherItem.dateRange else {
+            return .greatestFiniteMagnitude
+        }
 
         // case 1: items overlap
         if let intersection = myRange.intersection(with: theirRange) {

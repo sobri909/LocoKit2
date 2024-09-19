@@ -13,8 +13,8 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
 
     public var id: String = UUID().uuidString
     public let isVisit: Bool
-    public let startDate: Date
-    public let endDate: Date
+    public let startDate: Date?
+    public let endDate: Date?
     public var source: String = "LocoKit"
     public var sourceVersion: String = LocomotionManager.locoKitVersion
     public var disabled = false
@@ -31,8 +31,11 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
     public var averageHeartRate: Double?
     public var maxHeartRate: Double?
 
-    public var dateRange: DateInterval {
-        return DateInterval(start: startDate, end: endDate)
+    public var dateRange: DateInterval? {
+        if let startDate, let endDate {
+            return DateInterval(start: startDate, end: endDate)
+        }
+        return nil
     }
 
     public var previousItemId: String? {

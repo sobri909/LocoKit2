@@ -189,8 +189,8 @@ public final class MergeScores {
         guard let consumerVisit = consumer.visit, let consumeeVisit = consumee.visit else { fatalError() }
 
         // overlapping visits
-        if consumerVisit.overlaps(consumeeVisit) {
-            return consumer.dateRange.duration > consumee.dateRange.duration ? .perfect : .high
+        if let consumerRange = consumer.dateRange, let consumeeRange = consumee.dateRange, consumerVisit.overlaps(consumeeVisit) {
+            return consumerRange.duration > consumeeRange.duration ? .perfect : .high
         }
         
         return .impossible

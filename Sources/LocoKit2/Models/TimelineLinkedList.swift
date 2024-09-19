@@ -103,7 +103,6 @@ public final class TimelineLinkedList: AsyncSequence {
 
     private func receivedItem(_ item: TimelineItem) {
         timelineItems[item.id] = item
-        print("TimelineLinkedList.receivedItem() itemId: \(item.id), timelineItems: \(timelineItems.count)")
     }
 
     private var observers: [String: AnyCancellable] = [:]
