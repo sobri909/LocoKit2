@@ -22,50 +22,65 @@ public final class TimelineProcessor {
     private let maximumPotentialMergesInProcessingLoop = 10
 
     public func processFrom(itemId: String) async {
+        print("TimelineProcessor.processFrom(itemId:)")
+
         do {
             guard let list = try await processingList(fromItemId: itemId) else { return }
 
-            if let results = await process(list) {
-                await processFrom(itemId: results.kept.id)
-            }
-            
+            _ = await process(list)
+
         } catch {
             logger.error(error, subsystem: .timeline)
         }
     }
 
+    @discardableResult
     public func process(_ list: TimelineLinkedList) async -> MergeResult? {
+        print("TimelineProcessor.process(list:)")
+
+        var lastResult: MergeResult?
         do {
-            try await sanitiseEdges(for: list)
+            while true {
+                try await sanitiseEdges(for: list)
 
-            let merges = try await collectPotentialMerges(for: list)
-                .sorted { $0.score.rawValue > $1.score.rawValue }
+                let merges = try await collectPotentialMerges(for: list)
+                    .sorted { $0.score.rawValue > $1.score.rawValue }
 
-            if TimelineProcessor.debugLogging {
-                if merges.isEmpty {
-                    logger.info("Considering 0 merges")
-                } else {
-                    do {
-                        let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
-                        logger.info("Considering \(merges.count) merges:\n\(descriptions)")
-                    } catch {
-                        logger.error(error, subsystem: .timeline)
+                if TimelineProcessor.debugLogging {
+                    if merges.isEmpty {
+                        logger.info("Considering 0 merges")
+                    } else {
+                        do {
+                            let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
+                            logger.info("Considering \(merges.count) merges:\n\(descriptions)")
+                        } catch {
+                            logger.error(error, subsystem: .timeline)
+                        }
+                    }
+                }
+
+                // Find the highest scoring valid merge
+                guard let winningMerge = merges.first, winningMerge.score != .impossible else {
+                    break
+                }
+
+                lastResult = await winningMerge.doIt()
+
+                if let lastResult {
+                    list.invalidate(itemId: lastResult.kept.id)
+                    for killed in lastResult.killed {
+                        list.invalidate(itemId: killed.id)
                     }
                 }
             }
-
-            // find the highest scoring valid merge
-            guard let winningMerge = merges.first, winningMerge.score != .impossible else {
-                return nil
-            }
-
-            return await winningMerge.doIt()
-
         } catch {
             logger.error(error, subsystem: .timeline)
             return nil
         }
+
+        return lastResult
     }
+
 
     // MARK: - Private
 
@@ -73,19 +88,20 @@ public final class TimelineProcessor {
 
     private func processingList(fromItemId: String) async throws -> TimelineLinkedList? {
         guard let list = await TimelineLinkedList(fromItemId: fromItemId) else { return nil }
+        guard let seedItem = list.seedItem else { return nil }
 
         // collect items before seedItem, up to two keepers
         var previousKeepers = 0
-        var workingItem = list.seedItem
-        while previousKeepers < 2, list.timelineItems.count < maxProcessingListSize, let previous = await workingItem.previousItem(in: list) {
+        var workingItem = seedItem
+        while previousKeepers < 2, list.count < maxProcessingListSize, let previous = await workingItem.previousItem(in: list) {
             if try previous.isWorthKeeping { previousKeepers += 1 }
             workingItem = previous
         }
 
         // collect items after seedItem, up to two keepers
         var nextKeepers = 0
-        workingItem = list.seedItem
-        while nextKeepers < 2, list.timelineItems.count < maxProcessingListSize, let next = await workingItem.nextItem(in: list) {
+        workingItem = seedItem
+        while nextKeepers < 2, list.count < maxProcessingListSize, let next = await workingItem.nextItem(in: list) {
             if try next.isWorthKeeping { nextKeepers += 1 }
             workingItem = next
         }
@@ -98,7 +114,7 @@ public final class TimelineProcessor {
     private func collectPotentialMerges(for list: TimelineLinkedList) async throws -> [Merge] {
         var merges: Set<Merge> = []
 
-        for workingItem in list.timelineItems.values {
+        for await workingItem in list where !workingItem.deleted {
             if shouldStopCollecting(merges) {
                 break
             }
@@ -165,10 +181,12 @@ public final class TimelineProcessor {
     private var alreadyMovedSamples: Set<LocomotionSample> = []
 
     private func sanitiseEdges(for list: TimelineLinkedList) async throws {
+        print("TimelineProcessor.sanitiseEdges(for:)")
+
         var allMoved: Set<LocomotionSample> = []
         var processedItemIds = Set<String>()
 
-        for itemId in list.timelineItems.keys {
+        for itemId in list.itemIds {
             if processedItemIds.contains(itemId) { continue }
 
             let moved = try await sanitiseEdges(forItemId: itemId, in: list, excluding: alreadyMovedSamples)
@@ -190,7 +208,7 @@ public final class TimelineProcessor {
         let maximumEdgeSteals = 30
 
         while allMoved.count < maximumEdgeSteals {
-            guard let item = list.timelineItems[itemId] else { break }
+            guard let item = await list.itemFor(itemId: itemId) else { break }
 
             var movedThisLoop: Set<LocomotionSample> = []
 
@@ -216,8 +234,8 @@ public final class TimelineProcessor {
 
     private func edgeSteal(forItemId itemId: String, otherItemId: String, in list: TimelineLinkedList,
                              excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
-        guard let item = list.timelineItems[itemId],
-              let otherItem = list.timelineItems[otherItemId] else {
+        guard let item = await list.itemFor(itemId: itemId),
+              let otherItem = await list.itemFor(itemId: otherItemId) else {
             return nil
         }
 
