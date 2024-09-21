@@ -311,11 +311,11 @@ public final class Database: @unchecked Sendable {
                 BEGIN
                     UPDATE TimelineItemBase
                     SET nextItemId = NEW.id
-                    WHERE id = NEW.previousItemId;
+                    WHERE id = NEW.previousItemId AND deleted = 0;
                     
                     UPDATE TimelineItemBase
                     SET nextItemId = NULL
-                    WHERE nextItemId = NEW.id AND id != NEW.previousItemId;
+                    WHERE nextItemId = NEW.id AND id != NEW.previousItemId AND deleted = 0;
                 END;
                 """)
 
@@ -326,11 +326,11 @@ public final class Database: @unchecked Sendable {
                 BEGIN
                     UPDATE TimelineItemBase
                     SET previousItemId = NEW.id
-                    WHERE id = NEW.nextItemId;
+                    WHERE id = NEW.nextItemId AND deleted = 0;
                     
                     UPDATE TimelineItemBase
                     SET previousItemId = NULL
-                    WHERE previousItemId = NEW.id AND id != NEW.nextItemId;
+                    WHERE previousItemId = NEW.id AND id != NEW.nextItemId AND deleted = 0;
                 END;
                 """)
         }
