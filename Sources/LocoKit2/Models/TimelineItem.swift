@@ -255,14 +255,12 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         // TRIP <-> TRIP
 
         let timeSeparation = abs(self.timeInterval(from: otherItem))
-        var speeds: [CLLocationSpeed] = []
-        if let selfSpeed = self.trip?.speed, selfSpeed > 0 {
-            speeds.append(selfSpeed)
-        }
-        if let otherSpeed = otherItem.trip?.speed, otherSpeed > 0 {
-            speeds.append(otherSpeed)
-        }
-        return CLLocationDistance(speeds.mean() * timeSeparation * 4)
+
+        let selfSpeed = self.trip?.speed ?? 0
+        let otherSpeed = otherItem.trip?.speed ?? 0
+        let maxSpeed = max(selfSpeed, otherSpeed)
+
+        return CLLocationDistance(maxSpeed * timeSeparation * 50)
     }
 
     // MARK: -
