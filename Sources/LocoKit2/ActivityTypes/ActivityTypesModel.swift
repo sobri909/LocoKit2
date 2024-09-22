@@ -309,8 +309,6 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
 
     // MARK: - PersistableRecord
 
-//    public static override var databaseTableName: String { return "ActivityTypesModel" }
-
     public override func encode(to container: inout PersistenceContainer) {
         container["geoKey"] = geoKey
         container["depth"] = depth
