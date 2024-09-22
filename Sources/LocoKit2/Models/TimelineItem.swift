@@ -125,6 +125,27 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
+    public var title: String {
+        get throws {
+            if try isDataGap {
+                return "Data Gap"
+            }
+
+            if let trip {
+                if let activityType = trip.activityType {
+                    return activityType.displayName.capitalized
+                }
+                return "Transport"
+            }
+
+            // must be a visit
+            if try isWorthKeeping {
+                return "Unknown Place"
+            }
+            return "Brief Stop"
+        }
+    }
+
     public var description: String {
         get throws {
             String(format: "%@ %@", try keepnessString, try typeString)
