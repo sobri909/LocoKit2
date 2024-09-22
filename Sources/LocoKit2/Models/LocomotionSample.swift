@@ -76,7 +76,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         )
     }
 
-    // MARK: -
+    // MARK: - Init
 
     public init(
         date: Date, secondsFromGMT: Int = TimeZone.current.secondsFromGMT(),
@@ -178,6 +178,14 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
                 course: course ?? -1, speed: speed ?? -1,
                 timestamp: date
             )
+        }
+    }
+
+    // MARK: -
+
+    public var classifierResults: ClassifierResults? {
+        get async {
+            return await ActivityClassifier.highlander.results(for: self)
         }
     }
 

@@ -97,7 +97,7 @@ public final class CoreMLModelUpdater {
         }
 
         // do the current CD2 first, if it needs it
-        let currentModel = classifier?.discreteClassifiers.first { $0.value.geoKey.hasPrefix("CD2") }?.value
+        let currentModel = classifier?.models.first { $0.value.geoKey.hasPrefix("CD2") }?.value
         if let currentModel, currentModel.needsUpdate {
             update(model: currentModel, in: task, currentClassifier: classifier)
             return

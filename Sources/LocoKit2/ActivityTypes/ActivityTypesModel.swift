@@ -261,14 +261,14 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         guard let model else {
             totalSamples = 0 // if file used to exist, sample count will be wrong and will cause incorrect weighting
 //            print("[\(geoKey)] classify(classifiable:) NO MODEL!")
-            return ClassifierResults(results: [], moreComing: false)
+            return ClassifierResults(resultItems: [])
         }
         let input = sample.coreMLFeatureProvider
         let output = try? model.prediction(from: input, options: MLPredictionOptions())
         if let output {
             return results(for: output)
         }
-        return ClassifierResults(results: [], moreComing: false)
+        return ClassifierResults(resultItems: [])
     }
 
     public func contains(coordinate: CLLocationCoordinate2D) -> Bool {
@@ -293,7 +293,7 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         for (name, score) in scores {
             items.append(ClassifierResultItem(name: ActivityType(rawValue: name)!, score: score))
         }
-        return ClassifierResults(results: items, moreComing: false)
+        return ClassifierResults(resultItems: items)
     }
 
     // MARK: - Saving

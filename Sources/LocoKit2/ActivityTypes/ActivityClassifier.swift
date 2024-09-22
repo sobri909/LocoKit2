@@ -7,7 +7,6 @@
 
 import Foundation
 import CoreLocation
-import TabularData
 import CoreML
 import Surge
 import GRDB
@@ -15,36 +14,35 @@ import GRDB
 @ActivityTypesActor
 public final class ActivityClassifier {
 
-    public private(set) var discreteClassifiers: [Int: ActivityTypesModel] = [:] // index = priority
+    public static let highlander = ActivityClassifier()
 
-    // MARK: - MLCompositeClassifier
+    // MARK: - Classifying
 
     public func canClassify(_ coordinate: CLLocationCoordinate2D? = nil) -> Bool {
         if let coordinate {
-            updateDiscreteClassifiers(for: coordinate)
+            refreshModels(for: coordinate)
         }
-        return !discreteClassifiers.isEmpty
+        return !models.isEmpty
     }
 
-    public func classify(_ sample: LocomotionSample) -> ClassifierResults? {
+    public func results(for sample: LocomotionSample) -> ClassifierResults? {
+        if let cached = cache.object(forKey: sample.id as NSString) {
+            return cached
+        }
 
         // make sure have suitable classifiers
         if let coordinate = sample.location?.coordinate {
-            updateDiscreteClassifiers(for: coordinate)
+            refreshModels(for: coordinate)
         }
 
         // highest priorty first (ie CD2 first)
-        let classifiers = discreteClassifiers.sorted { $0.key > $1.key }.map { $0.value } 
+        let classifiers = models.sorted { $0.key > $1.key }.map { $0.value } 
 
         var combinedResults: ClassifierResults?
         var remainingWeight = 1.0
-        var moreComing = true
 
         for classifier in classifiers {
             let results = classifier.classify(sample)
-
-            // at least one classifier in the tree is complete?
-            if classifier.completenessScore >= 1 { moreComing = false }
 
             if combinedResults == nil {
                 combinedResults = results
@@ -71,14 +69,16 @@ public final class ActivityClassifier {
             if remainingWeight <= 0 { break }
         }
 
-        combinedResults?.moreComing = moreComing
+        if let combinedResults {
+            cache.setObject(combinedResults, forKey: sample.id as NSString)
+        }
 
         return combinedResults
     }
 
     // TODO: is this date ordering still a thing? double check
     // NOTE: samples should be provided in date ascending order
-    public func classify(_ samples: [LocomotionSample], timeout: TimeInterval? = nil) -> ClassifierResults? {
+    public func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) -> ClassifierResults? {
         if samples.isEmpty { return nil }
 
         let start = Date()
@@ -88,21 +88,14 @@ public final class ActivityClassifier {
             allScores[typeName] = []
         }
 
-        var moreComing = false
-
         for sample in samples {
             if let timeout = timeout, start.age >= timeout {
                 logger.info("Classifer reached timeout limit.")
-                moreComing = true
                 break
             }
 
-            guard let results = classify(sample) else {
+            guard let results = results(for: sample) else {
                 continue
-            }
-
-            if results.moreComing {
-                moreComing = true
             }
 
             for typeName in ActivityType.allCases {
@@ -125,22 +118,32 @@ public final class ActivityClassifier {
             finalResults.append(ClassifierResultItem(name: typeName, score: finalScore))
         }
 
-        return ClassifierResults(results: finalResults, moreComing: moreComing)
+        return ClassifierResults(resultItems: finalResults)
     }
 
     public func classify(_ timelineItem: TimelineItem, timeout: TimeInterval?) -> ClassifierResults? {
         guard let samples = timelineItem.samples else { return nil }
-        return classify(samples, timeout: timeout)
+        return results(for: samples, timeout: timeout)
     }
 
 //    public func classify(_ segment: ItemSegment, timeout: TimeInterval?) -> ClassifierResults? {
 //        return classify(segment.samples, timeout: timeout)
 //    }
 
-    // MARK: -
+    // MARK: - Results caching
 
-    private func updateDiscreteClassifiers(for coordinate: CLLocationCoordinate2D) {
-        var updated = discreteClassifiers.filter { (key, classifier) in
+    private let cache = NSCache<NSString, ClassifierResults>()
+
+    private func set(results: ClassifierResults, sampleId: String) {
+        cache.setObject(results, forKey: sampleId as NSString)
+    }
+
+    // MARK: - Fetching models
+
+    public private(set) var models: [Int: ActivityTypesModel] = [:] // index = priority
+
+    private func refreshModels(for coordinate: CLLocationCoordinate2D) {
+        var updated = models.filter { (key, classifier) in
             return classifier.contains(coordinate: coordinate)
         }
 
@@ -170,10 +173,7 @@ public final class ActivityClassifier {
             updated[-1] = ActivityTypesModel(bundledURL: bundledModelURL)
         }
 
-        discreteClassifiers = updated
+        models = updated
     }
-
-    // MARK: -
-  
 
 }
