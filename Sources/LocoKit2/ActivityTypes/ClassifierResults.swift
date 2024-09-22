@@ -14,7 +14,7 @@ public final class ClassifierResults:  Sendable {
         self.resultItems = resultItems.sorted { $0.score > $1.score }
     }
 
-    func merging(_ otherResults: ClassifierResults, withWeight otherWeight: Double) -> ClassifierResults {
+    public func merging(_ otherResults: ClassifierResults, withWeight otherWeight: Double) -> ClassifierResults {
         let selfWeight = 1.0 - otherWeight
 
         var combinedDict: [ActivityType: ClassifierResultItem] = [:]
@@ -34,8 +34,7 @@ public final class ClassifierResults:  Sendable {
     // MARK: -
 
     public var bestMatch: ClassifierResultItem {
-        if let first = resultItems.first, first.score > 0 { return first }
-        return ClassifierResultItem(name: .unknown, score: 0)
+        return resultItems.first ?? ClassifierResultItem(name: .unknown, score: 0)
     }
     
     public var scoresTotal: Double {
