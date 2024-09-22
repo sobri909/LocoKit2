@@ -236,55 +236,54 @@ public final class Database: @unchecked Sendable {
                 table.column("longitudeMin", .double).notNull().indexed()
             }
 
-            // MARK: - Triggers
+            // MARK: - LocomotionSample AFTER INSERT / UPDATE triggers
 
-            // update startDate and endDate on sample insert
+            /** update startDate and endDate on sample insert */
+
             try db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_INSERT_TimelineItem_DateRangeOnAssign
+                CREATE TRIGGER LocomotionSample_AFTER_INSERT_timelineItemId_SET
                 AFTER INSERT ON LocomotionSample
                 WHEN NEW.timelineItemId IS NOT NULL
                 BEGIN
                     UPDATE TimelineItemBase
-                    SET startDate = (
-                        SELECT MIN(date)
-                        FROM LocomotionSample
-                        WHERE timelineItemId = NEW.timelineItemId
-                    ),
-                    endDate = (
-                        SELECT MAX(date)
-                        FROM LocomotionSample
-                        WHERE timelineItemId = NEW.timelineItemId
-                    ),
-                    samplesChanged = 1
+                        SET startDate = CASE
+                            WHEN startDate IS NULL THEN NEW.date
+                            ELSE MIN(startDate, NEW.date)
+                        END,
+                        endDate = CASE
+                            WHEN endDate IS NULL THEN NEW.date
+                            ELSE MAX(endDate, NEW.date)
+                        END,
+                        samplesChanged = 1
                     WHERE id = NEW.timelineItemId;
                 END;
                 """)
 
-            // update startDate and endDate on sample assign
+            /** update startDate and endDate on sample assign */
+
             try db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_UPDATE_TimelineItem_DateRangeOnAssign
+                CREATE TRIGGER LocomotionSample_AFTER_UPDATE_timelineItemId_SET
                 AFTER UPDATE OF timelineItemId ON LocomotionSample
                 WHEN NEW.timelineItemId IS NOT NULL AND (OLD.timelineItemId IS NULL OR OLD.timelineItemId != NEW.timelineItemId)
                 BEGIN
                     UPDATE TimelineItemBase
-                    SET startDate = (
-                        SELECT MIN(date)
-                        FROM LocomotionSample
-                        WHERE timelineItemId = NEW.timelineItemId
-                    ),
-                    endDate = (
-                        SELECT MAX(date)
-                        FROM LocomotionSample
-                        WHERE timelineItemId = NEW.timelineItemId
-                    ),
-                    samplesChanged = 1
+                        SET startDate = CASE
+                            WHEN startDate IS NULL THEN NEW.date
+                            ELSE MIN(startDate, NEW.date)
+                        END,
+                        endDate = CASE
+                            WHEN endDate IS NULL THEN NEW.date
+                            ELSE MAX(endDate, NEW.date)
+                        END,
+                        samplesChanged = 1
                     WHERE id = NEW.timelineItemId;
                 END;
                 """)
 
-            // update startDate and endDate on sample unassign
+            /** update startDate and endDate on sample unassign */
+
             try db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_UPDATE_TimelineItem_DateRangeOnUnassign
+                CREATE TRIGGER LocomotionSample_AFTER_UPDATE_timelineItemId_UNSET
                 AFTER UPDATE OF timelineItemId ON LocomotionSample
                 WHEN OLD.timelineItemId IS NOT NULL AND (NEW.timelineItemId IS NULL OR OLD.timelineItemId != NEW.timelineItemId)
                 BEGIN
@@ -304,33 +303,131 @@ public final class Database: @unchecked Sendable {
                 END;
                 """)
 
-            // keep nextItemId / previousItemId links correct
+            // MARK: - TimelineItemBase BEFORE INSERT / UPDATE triggers
+
+            /** prevent setting previousItemId or nextItemId to a deleted item */
+
             try db.execute(sql: """
-                CREATE TRIGGER TimelineItemBase_UPDATE_nextItemId
+                CREATE TRIGGER TimelineItemBase_BEFORE_INSERT_previousItemId_SET
+                BEFORE INSERT ON TimelineItemBase
+                WHEN NEW.previousItemId IS NOT NULL
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot set previousItemId to a deleted item')
+                    WHERE EXISTS (
+                        SELECT 1 FROM TimelineItemBase WHERE id = NEW.previousItemId AND deleted = 1
+                    );
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_previousItemId_SET
+                BEFORE UPDATE OF previousItemId ON TimelineItemBase
+                WHEN NEW.previousItemId IS NOT NULL AND (OLD.previousItemId IS NULL OR OLD.previousItemId != NEW.previousItemId)
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot set previousItemId to a deleted item')
+                    WHERE EXISTS (
+                        SELECT 1 FROM TimelineItemBase WHERE id = NEW.previousItemId AND deleted = 1
+                    );
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_BEFORE_INSERT_nextItemId_SET
+                BEFORE INSERT ON TimelineItemBase
+                WHEN NEW.nextItemId IS NOT NULL
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot set nextItemId to a deleted item')
+                    WHERE EXISTS (
+                        SELECT 1 FROM TimelineItemBase WHERE id = NEW.nextItemId AND deleted = 1
+                    );
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_nextItemId_SET
+                BEFORE UPDATE OF nextItemId ON TimelineItemBase
+                WHEN NEW.nextItemId IS NOT NULL AND (OLD.nextItemId IS NULL OR OLD.nextItemId != NEW.nextItemId)
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot set nextItemId to a deleted item')
+                    WHERE EXISTS (
+                        SELECT 1 FROM TimelineItemBase WHERE id = NEW.nextItemId AND deleted = 1
+                    );
+                END;
+                """)
+
+            // MARK: - TimelineItemBase AFTER INSERT / UPDATE triggers
+
+            /** keep nextItemId and previousItemId links correct */
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_AFTER_INSERT_previousItemId_SET
+                AFTER INSERT ON TimelineItemBase
+                WHEN NEW.previousItemId IS NOT NULL
+                BEGIN
+                    UPDATE TimelineItemBase
+                    SET nextItemId = NEW.id
+                    WHERE id = NEW.previousItemId;
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_AFTER_INSERT_nextItemId_SET
+                AFTER INSERT ON TimelineItemBase
+                WHEN NEW.nextItemId IS NOT NULL
+                BEGIN
+                    UPDATE TimelineItemBase
+                    SET previousItemId = NEW.id
+                    WHERE id = NEW.nextItemId;
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_previousItemId
                 AFTER UPDATE OF previousItemId ON TimelineItemBase
                 BEGIN
                     UPDATE TimelineItemBase
                     SET nextItemId = NEW.id
-                    WHERE id = NEW.previousItemId AND deleted = 0;
+                    WHERE id = NEW.previousItemId;
                     
                     UPDATE TimelineItemBase
                     SET nextItemId = NULL
-                    WHERE nextItemId = NEW.id AND id != NEW.previousItemId AND deleted = 0;
+                    WHERE nextItemId = NEW.id AND id != NEW.previousItemId;
                 END;
                 """)
 
-            // keep nextItemId / previousItemId links correct
             try db.execute(sql: """
-                CREATE TRIGGER TimelineItemBase_UPDATE_previousItemId
+                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_nextItemId
                 AFTER UPDATE OF nextItemId ON TimelineItemBase
                 BEGIN
                     UPDATE TimelineItemBase
                     SET previousItemId = NEW.id
-                    WHERE id = NEW.nextItemId AND deleted = 0;
+                    WHERE id = NEW.nextItemId;
                     
                     UPDATE TimelineItemBase
                     SET previousItemId = NULL
-                    WHERE previousItemId = NEW.id AND id != NEW.nextItemId AND deleted = 0;
+                    WHERE previousItemId = NEW.id AND id != NEW.nextItemId;
+                END;
+                """)
+
+            /** break edges on item delete and disable */
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_deleted
+                AFTER UPDATE OF deleted ON TimelineItemBase
+                WHEN NEW.deleted = 1 AND NEW.deleted != OLD.deleted
+                BEGIN
+                    UPDATE TimelineItemBase SET nextItemId = NULL WHERE nextItemId = OLD.id;
+                    UPDATE TimelineItemBase SET previousItemId = NULL WHERE previousItemId = OLD.id;
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_disabled
+                AFTER UPDATE OF disabled ON TimelineItemBase
+                WHEN NEW.disabled = 1 AND NEW.disabled != OLD.disabled
+                BEGIN
+                    UPDATE TimelineItemBase SET nextItemId = NULL WHERE nextItemId = OLD.id;
+                    UPDATE TimelineItemBase SET previousItemId = NULL WHERE previousItemId = OLD.id;
                 END;
                 """)
         }
