@@ -17,7 +17,7 @@ public enum ClassifierResultScoreGroup: Int {
 
 public struct ClassifierResultItem: Equatable, Identifiable, Sendable {
 
-    public var id: String { return activityType.rawValue }
+    public var id: Int { return activityType.rawValue }
     public let activityType: ActivityType
     public let score: Double
     public let modelAccuracyScore: Double?

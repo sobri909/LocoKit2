@@ -158,10 +158,10 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         speed = row["speed"]
         course = row["course"]
 
-        if let rawValue = row["classifiedActivityType"] as? String {
+        if let rawValue = row["classifiedActivityType"] as? Int {
             classifiedActivityType = ActivityType(rawValue: rawValue)
         }
-        if let rawValue = row["confirmedActivityType"] as? String {
+        if let rawValue = row["confirmedActivityType"] as? Int {
             confirmedActivityType = ActivityType(rawValue: rawValue)
         }
 

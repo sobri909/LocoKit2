@@ -76,8 +76,6 @@ public final class ActivityClassifier {
         return combinedResults
     }
 
-    // TODO: is this date ordering still a thing? double check
-    // NOTE: samples should be provided in date ascending order
     public func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) -> ClassifierResults? {
         if samples.isEmpty { return nil }
 
@@ -89,8 +87,8 @@ public final class ActivityClassifier {
         }
 
         for sample in samples {
-            if let timeout = timeout, start.age >= timeout {
-                logger.info("Classifer reached timeout limit.")
+            if let timeout, start.age >= timeout {
+                logger.info("ActivityClassifier reached timeout limit (\(timeout) seconds)", subsystem: .activitytypes)
                 break
             }
 

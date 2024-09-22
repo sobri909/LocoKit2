@@ -271,10 +271,10 @@ public final class CoreMLModelUpdater {
 
     private func exportCSV(samples: [LocomotionSample], appendingTo: URL? = nil) throws -> (URL, Int, Set<ActivityType>) {
         let modelFeatures = [
-            "stepHz", "xyAcceleration", "zAcceleration", "movingState",
-            "verticalAccuracy", "horizontalAccuracy",
-            "speed", "course", "latitude", "longitude", "altitude",
-            "timeOfDay", "confirmedType", "sinceVisitStart"
+            "confirmedActivityType", "stepHz", "xyAcceleration", "zAcceleration", "movingState",
+            "verticalAccuracy", "horizontalAccuracy", "speed", "course",
+            "latitude", "longitude", "altitude",
+            "timeOfDay", "sinceVisitStart"
         ]
 
         let csvFile = appendingTo ?? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -288,8 +288,9 @@ public final class CoreMLModelUpdater {
         var includedTypes: Set<ActivityType> = []
 
         // write the samples to file
-        for sample in samples where sample.confirmedActivityType != nil {
+        for sample in samples {
             guard sample.source == "LocoKit" else { continue }
+            guard let confirmedActivityType = sample.confirmedActivityType else { continue }
             guard let location = sample.location, location.hasUsableCoordinate else { continue }
             guard location.speed >= 0, location.course >= 0 else { continue }
             guard let stepHz = sample.stepHz else { continue }
@@ -303,10 +304,10 @@ public final class CoreMLModelUpdater {
             includedTypes.insert(sample.confirmedActivityType!)
 
             var line = ""
-            line += "\(stepHz),\(xyAcceleration),\(zAcceleration),\"\(sample.movingState.rawValue)\","
-            line += "\(location.horizontalAccuracy),\(location.verticalAccuracy),"
-            line += "\(location.speed),\(location.course),\(location.coordinate.latitude),\(location.coordinate.longitude),\(location.altitude),"
-            line += "\(sample.timeOfDay),\"\(sample.confirmedActivityType!)\",\(sample.sinceVisitStart)"
+            line += "\(confirmedActivityType),\(stepHz),\(xyAcceleration),\(zAcceleration),\(sample.movingState.rawValue),"
+            line += "\(location.verticalAccuracy),\(location.horizontalAccuracy),\(location.speed),\(location.course),"
+            line += "\(location.coordinate.latitude),\(location.coordinate.longitude),\(location.altitude),"
+            line += "\(sample.timeOfDay),\(sample.sinceVisitStart)"
 
             try line.appendLineTo(csvFile)
             samplesAdded += 1

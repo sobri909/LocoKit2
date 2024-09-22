@@ -288,7 +288,7 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
     // MARK: - Core ML classifying
 
     private func results(for classifierOutput: MLFeatureProvider) -> ClassifierResults {
-        let scores = classifierOutput.featureValue(for: "confirmedTypeProbability")!.dictionaryValue as! [String: Double]
+        let scores = classifierOutput.featureValue(for: "confirmedActivityTypeProbability")!.dictionaryValue as! [Int: Double]
         var items: [ClassifierResultItem] = []
         for (name, score) in scores {
             items.append(ClassifierResultItem(name: ActivityType(rawValue: name)!, score: score))

@@ -162,8 +162,8 @@ public final class Database: @unchecked Sendable {
 
                 table.column("distance", .double).notNull()
                 table.column("speed", .double).notNull()
-                table.column("classifiedActivityType", .text)
-                table.column("confirmedActivityType", .text)
+                table.column("classifiedActivityType", .integer)
+                table.column("confirmedActivityType", .integer)
             }
 
             // MARK: - LocomotionSample
@@ -202,8 +202,8 @@ public final class Database: @unchecked Sendable {
                 table.column("xyAcceleration", .double)
                 table.column("zAcceleration", .double)
                 
-                table.column("classifiedActivityType", .text)
-                table.column("confirmedActivityType", .text)
+                table.column("classifiedActivityType", .integer)
+                table.column("confirmedActivityType", .integer)
             }
 
             try db.create(
