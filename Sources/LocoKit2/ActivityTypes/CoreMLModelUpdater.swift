@@ -182,6 +182,9 @@ public final class CoreMLModelUpdater {
             samplesCount += samplesAdded
             includedTypes.formUnion(typesAdded)
 
+            // TODO: if includedTypes only has one type, throw in a fake stationary sample
+            // well, if the only included type is already stationary... then fuck it, let it fail
+
             guard samplesCount > 0, includedTypes.count > 1 else {
                 print("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))")
                 model.totalSamples = samplesCount
@@ -227,12 +230,12 @@ public final class CoreMLModelUpdater {
             model.needsUpdate = false
             model.save()
 
-            logger.info("UPDATED: \(model.geoKey) (samples: \(model.totalSamples), accuracy: \(String(format: "%.2f", model.accuracyScore!)), includedTypes: \(includedTypes.count))")
+            logger.info("UPDATED: \(model.geoKey) (samples: \(model.totalSamples), accuracy: \(String(format: "%.2f", model.accuracyScore!)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
 
             try model.reloadModel()
 
         } catch {
-            logger.error("buildModel() ERROR: \(error)")
+            logger.error(error, subsystem: .activitytypes)
         }
     }
 #endif
