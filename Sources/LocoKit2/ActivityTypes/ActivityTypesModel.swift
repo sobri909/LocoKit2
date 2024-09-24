@@ -77,11 +77,9 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         model.needsUpdate = true
         model.save()
 
+        // fire it off for update
         let geoKey = model.geoKey
-
-        Task {
-            await CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey)
-        }
+        Task { await CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
 
         return model
     }

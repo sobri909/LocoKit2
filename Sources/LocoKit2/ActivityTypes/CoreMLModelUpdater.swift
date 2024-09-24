@@ -7,6 +7,7 @@
 
 import Foundation
 import BackgroundTasks
+import CoreLocation
 import TabularData
 import CoreML
 import GRDB
@@ -195,8 +196,30 @@ public final class CoreMLModelUpdater {
             samplesCount += samplesAdded
             includedTypes.formUnion(typesAdded)
 
-            // TODO: if includedTypes only has one type, throw in a fake stationary sample
-            // well, if the only included type is already stationary... then fuck it, let it fail
+            // if includedTypes only has one type and it's not stationary, throw in a fake stationary sample
+            if samplesCount > 0 && includedTypes.count == 1 && !includedTypes.contains(.stationary) {
+                print("UPDATING: \(model.geoKey), ADDING FAKE STATIONARY SAMPLE")
+
+                // create a fake stationary sample
+                let coord = model.centerCoordinate
+                let location = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+                var fakeSample = LocomotionSample(
+                    date: .now,
+                    movingState: .stationary,
+                    recordingState: .recording,
+                    location: location
+                )
+                fakeSample.confirmedActivityType = .stationary
+                fakeSample.xyAcceleration = 0
+                fakeSample.zAcceleration = 0
+                fakeSample.stepHz = 0
+
+                // add the fake sample to the CSV
+                let (url, samplesAdded, typesAdded) = try exportCSV(samples: [fakeSample], appendingTo: csvFile)
+                csvFile = url
+                samplesCount += samplesAdded
+                includedTypes.formUnion(typesAdded)
+            }
 
             guard samplesCount > 0, includedTypes.count > 1 else {
                 print("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))")
