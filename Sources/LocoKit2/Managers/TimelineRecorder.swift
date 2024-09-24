@@ -8,6 +8,7 @@
 import Foundation
 import GRDB
 
+// TODO: get rid of @unchecked
 public final class TimelineRecorder: @unchecked Sendable {
 
     public static let highlander = TimelineRecorder()
