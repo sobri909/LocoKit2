@@ -35,7 +35,7 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
 
     // MARK: - Init
 
-    init(itemId: String, samples: [LocomotionSample]) async {
+    init(itemId: String, samples: [LocomotionSample]) {
         self.itemId = itemId
         let distance = Self.calculateDistance(from: samples)
         self.speed = Self.calculateSpeed(from: samples, distance: distance)
