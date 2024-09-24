@@ -7,25 +7,24 @@
 
 import Foundation
 import Combine
+import UIKit
 import GRDB
 
 @Observable
 public final class TimelineSegment: Sendable {
 
     public let dateRange: DateInterval
+    public let shouldReprocessOnUpdate: Bool
 
     @MainActor
     public private(set) var timelineItems: [TimelineItem] = []
 
     @ObservationIgnored
     nonisolated(unsafe)
-    public var shouldReprocessOnUpdate = false
-
-    @ObservationIgnored
-    nonisolated(unsafe)
     private var changesTask: Task<Void, Never>?
 
-    public init(dateRange: DateInterval) {
+    public init(dateRange: DateInterval, shouldReprocessOnUpdate: Bool = false) {
+        self.shouldReprocessOnUpdate = shouldReprocessOnUpdate
         self.dateRange = dateRange
         setupObserver()
         Task { await fetchItems() }
@@ -68,10 +67,18 @@ public final class TimelineSegment: Sendable {
     private func update(from updatedItems: [TimelineItem]) async {
         var mutableItems = updatedItems
 
+        // no classifying or reprocessing in the background
+        let doProcessing: Bool
+        if shouldReprocessOnUpdate {
+            doProcessing = await UIApplication.shared.applicationState == .active
+        } else {
+            doProcessing = false
+        }
+        
         for index in mutableItems.indices {
             let itemCopy = mutableItems[index]
             if itemCopy.samplesChanged {
-                await mutableItems[index].fetchSamples(andClassify: shouldReprocessOnUpdate)
+                await mutableItems[index].fetchSamples(andClassify: doProcessing)
 
             } else {
                 // copy over existing samples if available
@@ -80,7 +87,7 @@ public final class TimelineSegment: Sendable {
                     mutableItems[index].samples = samples
 
                 } else { // need to fetch samples
-                    await mutableItems[index].fetchSamples(andClassify: shouldReprocessOnUpdate)
+                    await mutableItems[index].fetchSamples(andClassify: doProcessing)
                 }
             }
         }
@@ -89,28 +96,27 @@ public final class TimelineSegment: Sendable {
             self.timelineItems = mutableItems
         }
 
-        if shouldReprocessOnUpdate {
-            await reprocess()
+        if doProcessing {
+            do {
+                try await reprocess()
+            } catch {
+                logger.error(error, subsystem: .timeline)
+            }
         }
     }
 
-    private func reprocess() async {
+    private func reprocess() async throws {
         let workingItems = await timelineItems
         let currentItemId = TimelineRecorder.highlander.currentItemId
         let currentItem = await timelineItems.first { $0.id == currentItemId }
 
         // shouldn't do processing if currentItem is in the segment and isn't a keeper
         // (TimelineRecorder should be the sole authority on processing those cases)
-        do {
-            if let currentItem, try !currentItem.isWorthKeeping {
-                return
-            }
-        } catch {
-            logger.error("Throw on currentItem.isWorthKeeping", subsystem: .timeline)
+        if let currentItem, try !currentItem.isWorthKeeping {
+            return
         }
 
-        let list = await TimelineLinkedList(fromItems: workingItems)
-        await TimelineProcessor.highlander.process(list)
+        await TimelineProcessor.highlander.process(workingItems)
     }
 
 }

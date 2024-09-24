@@ -35,6 +35,12 @@ public final class TimelineProcessor {
     }
 
     @discardableResult
+    public func process(_ items: [TimelineItem]) async -> MergeResult? {
+        let list = TimelineLinkedList(fromItems: items)
+        return await process(list)
+    }
+
+    @discardableResult
     public func process(_ list: TimelineLinkedList) async -> MergeResult? {
         print("TimelineProcessor.process(list:)")
 
