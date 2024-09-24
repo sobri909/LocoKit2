@@ -221,7 +221,6 @@ public final class Database: @unchecked Sendable {
 
             try db.create(table: "ActivityTypesModel") { table in
                 table.column("geoKey", .text).primaryKey()
-                table.column("lastSaved", .datetime).notNull().indexed()
                 table.column("lastUpdated", .datetime).indexed()
                 table.column("filename", .text).notNull()
 
