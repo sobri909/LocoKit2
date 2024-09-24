@@ -43,6 +43,7 @@ public final class TimelineRecorder: @unchecked Sendable {
                 .including(optional: TimelineItemBase.visit)
                 .including(optional: TimelineItemBase.trip)
                 .filter(Column("id") == currentItemId)
+                .filter(Column("deleted") == false && Column("disabled") == false)
             return try TimelineItem.fetchOne($0, request)
         }
     }
@@ -105,7 +106,7 @@ public final class TimelineRecorder: @unchecked Sendable {
 
         currentItemId = try? Database.pool.read {
             try TimelineItemBase
-                .filter(Column("deleted") == false)
+                .filter(Column("deleted") == false && Column("disabled") == false)
                 .order(Column("endDate").desc)
                 .selectPrimaryKey()
                 .fetchOne($0)
@@ -115,7 +116,7 @@ public final class TimelineRecorder: @unchecked Sendable {
     private func updateCurrentLegacyItemId() {
         currentLegacyItemId = try? Database.legacyPool?.read {
             try LegacyItem
-                .filter(Column("deleted") == false)
+                .filter(Column("deleted") == false && Column("disabled") == false)
                 .order(Column("endDate").desc)
                 .selectPrimaryKey()
                 .fetchOne($0)
