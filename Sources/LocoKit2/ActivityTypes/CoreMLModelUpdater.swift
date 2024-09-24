@@ -152,7 +152,6 @@ public final class CoreMLModelUpdater {
             let model = try Database.pool.read {
                 try ActivityTypesModel.fetchOne($0, key: geoKey)
             }
-            print("updateModel(geoKey:) model: \(model)")
             if let model {
                 update(model: model)
             }
