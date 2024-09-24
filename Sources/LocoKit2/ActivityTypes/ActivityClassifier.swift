@@ -76,7 +76,7 @@ public final class ActivityClassifier {
         return combinedResults
     }
 
-    public func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) -> ClassifierResults? {
+    public func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) -> (combinedResults: ClassifierResults?, perSampleResults: [String: ClassifierResults])? {
         if samples.isEmpty { return nil }
 
         let start = Date()
@@ -85,6 +85,8 @@ public final class ActivityClassifier {
         for typeName in ActivityType.allCases {
             allScores[typeName] = []
         }
+
+        var perSampleResults: [String: ClassifierResults] = [:]
 
         for sample in samples {
             if let timeout, start.age >= timeout {
@@ -95,6 +97,8 @@ public final class ActivityClassifier {
             guard let results = results(for: sample) else {
                 continue
             }
+
+            perSampleResults[sample.id] = results
 
             for typeName in ActivityType.allCases {
                 if let resultRow = results[typeName] {
@@ -116,17 +120,8 @@ public final class ActivityClassifier {
             finalResults.append(ClassifierResultItem(name: typeName, score: finalScore))
         }
 
-        return ClassifierResults(resultItems: finalResults)
+        return (ClassifierResults(resultItems: finalResults), perSampleResults)
     }
-
-    public func classify(_ timelineItem: TimelineItem, timeout: TimeInterval?) -> ClassifierResults? {
-        guard let samples = timelineItem.samples else { return nil }
-        return results(for: samples, timeout: timeout)
-    }
-
-//    public func classify(_ segment: ItemSegment, timeout: TimeInterval?) -> ClassifierResults? {
-//        return classify(segment.samples, timeout: timeout)
-//    }
 
     // MARK: - Results caching
 

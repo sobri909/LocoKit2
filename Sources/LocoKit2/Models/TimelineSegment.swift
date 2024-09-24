@@ -19,6 +19,10 @@ public final class TimelineSegment: Sendable {
 
     @ObservationIgnored
     nonisolated(unsafe)
+    public var shouldReprocessOnUpdate = false
+
+    @ObservationIgnored
+    nonisolated(unsafe)
     private var changesTask: Task<Void, Never>?
 
     public init(dateRange: DateInterval) {
@@ -67,7 +71,7 @@ public final class TimelineSegment: Sendable {
         for index in mutableItems.indices {
             let itemCopy = mutableItems[index]
             if itemCopy.samplesChanged {
-                await mutableItems[index].fetchSamples()
+                await mutableItems[index].fetchSamples(andClassify: shouldReprocessOnUpdate)
 
             } else {
                 // copy over existing samples if available
@@ -76,7 +80,7 @@ public final class TimelineSegment: Sendable {
                     mutableItems[index].samples = samples
 
                 } else { // need to fetch samples
-                    await mutableItems[index].fetchSamples()
+                    await mutableItems[index].fetchSamples(andClassify: shouldReprocessOnUpdate)
                 }
             }
         }
@@ -84,6 +88,29 @@ public final class TimelineSegment: Sendable {
         await MainActor.run {
             self.timelineItems = mutableItems
         }
+
+        if shouldReprocessOnUpdate {
+            await reprocess()
+        }
+    }
+
+    private func reprocess() async {
+        let workingItems = await timelineItems
+        let currentItemId = TimelineRecorder.highlander.currentItemId
+        let currentItem = await timelineItems.first { $0.id == currentItemId }
+
+        // shouldn't do processing if currentItem is in the segment and isn't a keeper
+        // (TimelineRecorder should be the sole authority on processing those cases)
+        do {
+            if let currentItem, try !currentItem.isWorthKeeping {
+                return
+            }
+        } catch {
+            logger.error("Throw on currentItem.isWorthKeeping", subsystem: .timeline)
+        }
+
+        let list = await TimelineLinkedList(fromItems: workingItems)
+        await TimelineProcessor.highlander.process(list)
     }
 
 }

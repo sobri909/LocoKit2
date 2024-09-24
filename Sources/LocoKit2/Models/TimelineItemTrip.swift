@@ -33,15 +33,24 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     // and store a separate movingClassifiedActivityType at the same time,
     // to make modeMovingActivityType also unnecessary
 
-    // MARK: -
+    // MARK: - Init
 
-    public mutating func update(from samples: [LocomotionSample]) -> Bool {
-        let oldSelf = self
-
-        self.distance = samples.compactMap { $0.location }.distance() ?? 0
+    init(itemId: String, samples: [LocomotionSample]) async {
+        self.itemId = itemId
+        let distance = Self.calculateDistance(from: samples)
         self.speed = Self.calculateSpeed(from: samples, distance: distance)
+        self.distance = distance
+    }
 
-        return !self.databaseEquals(oldSelf)
+    // MARK: - Updating
+
+    public mutating func update(from samples: [LocomotionSample]) async {
+        self.distance = Self.calculateDistance(from: samples)
+        self.speed = Self.calculateSpeed(from: samples, distance: distance)
+    }
+
+    private static func calculateDistance(from samples: [LocomotionSample]) -> CLLocationDistance {
+        return samples.compactMap { $0.location }.distance() ?? 0
     }
 
     private static func calculateSpeed(from samples: [LocomotionSample], distance: Double) -> CLLocationSpeed {
@@ -56,15 +65,6 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         }
 
         return 0
-    }
-
-    // MARK: - Init
-
-    init(itemId: String, samples: [LocomotionSample]) {
-        self.itemId = itemId
-        let distance = samples.compactMap { $0.location }.distance() ?? 0
-        self.speed = Self.calculateSpeed(from: samples, distance: distance)
-        self.distance = distance
     }
 
 }

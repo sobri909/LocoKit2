@@ -252,7 +252,7 @@ public final class TimelineRecorder: @unchecked Sendable {
             newVisit = TimelineItemVisit(itemId: newItem.id, samples: [sample])
             newTrip = nil
         } else {
-            newTrip = TimelineItemTrip(itemId: newItem.id, samples: [sample])
+            newTrip = await TimelineItemTrip(itemId: newItem.id, samples: [sample])
             newVisit = nil
         }
 

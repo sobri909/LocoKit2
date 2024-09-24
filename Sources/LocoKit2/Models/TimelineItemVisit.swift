@@ -40,7 +40,27 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         Radius(mean: radiusMean, sd: radiusSD)
     }
 
-    // MARK: -
+    // MARK: - Init
+
+    init?(itemId: String, samples: [LocomotionSample]) {
+        let usableLocations = samples.compactMap { $0.location }.usableLocations()
+
+        guard let coordinate = usableLocations.weightedCenter() else {
+            return nil
+        }
+
+        self.itemId = itemId
+        self.latitude = coordinate.latitude
+        self.longitude = coordinate.longitude
+
+        let center = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let radius = Self.calculateBoundedRadius(of: usableLocations, from: center)
+
+        self.radiusMean = radius.mean
+        self.radiusSD = radius.sd
+    }
+
+    // MARK: - Comparisons etc
 
     public func overlaps(_ otherVisit: TimelineItemVisit) -> Bool {
         return distance(from: otherVisit) < 0
@@ -67,45 +87,30 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         return otherLocation.distance(from: centerLocation) <= testRadius
     }
 
-    // MARK: -
+    // MARK: - Updating
 
-    public mutating func update(from samples: [LocomotionSample]) -> Bool {
-        let oldSelf = self
-
+    public mutating func update(from samples: [LocomotionSample]) async {
         let usableLocations = samples.compactMap { $0.location }.usableLocations()
 
         guard let coordinate = usableLocations.weightedCenter() else {
-            return false
+            return
         }
 
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
         let center = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let radius = usableLocations.radius(from: center)
-        self.radiusMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
-        self.radiusSD = min(radius.sd, Self.maxRadius)
+        let radius = Self.calculateBoundedRadius(of: usableLocations, from: center)
 
-        return !self.databaseEquals(oldSelf)
+        self.radiusMean = radius.mean
+        self.radiusSD = radius.sd
     }
 
-    // MARK: - Init
-
-    init?(itemId: String, samples: [LocomotionSample]) {
-        let usableLocations = samples.compactMap { $0.location }.usableLocations()
-
-        guard let coordinate = usableLocations.weightedCenter() else {
-            return nil
-        }
-
-        self.itemId = itemId
-        self.latitude = coordinate.latitude
-        self.longitude = coordinate.longitude
-
-        let center = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let radius = usableLocations.radius(from: center)
-        self.radiusMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
-        self.radiusSD = min(radius.sd, Self.maxRadius)
+    private static func calculateBoundedRadius(of locations: [CLLocation], from center: CLLocation) -> Radius {
+        let radius = locations.radius(from: center)
+        let boundedMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
+        let boundedSD = min(radius.sd, Self.maxRadius)
+        return Radius(mean: boundedMean, sd: boundedSD)
     }
 
 }
