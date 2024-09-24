@@ -219,7 +219,7 @@ public final class CoreMLModelUpdater {
             let dataFrame = try DataFrame(contentsOfCSVFile: csvFile)
 
             // train the model
-            let classifier = try MLBoostedTreeClassifier(trainingData: dataFrame, targetColumn: "confirmedType")
+            let classifier = try MLBoostedTreeClassifier(trainingData: dataFrame, targetColumn: "confirmedActivityType")
 
             do {
                 try FileManager.default.createDirectory(at: ActivityTypesModel.modelsDir, withIntermediateDirectories: true, attributes: nil)
