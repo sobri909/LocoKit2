@@ -147,6 +147,20 @@ public final class CoreMLModelUpdater {
         task.setTaskCompleted(success: true)
     }
 
+    public func updateModel(geoKey: String) {
+        do {
+            let model = try Database.pool.read {
+                try ActivityTypesModel.fetchOne($0, key: geoKey)
+            }
+            print("updateModel(geoKey:) model: \(model)")
+            if let model {
+                update(model: model)
+            }
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
+    }
+
     // MARK: - Model building
 
 #if targetEnvironment(simulator)

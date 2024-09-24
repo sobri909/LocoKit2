@@ -77,6 +77,12 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         model.needsUpdate = true
         model.save()
 
+        let geoKey = model.geoKey
+
+        Task {
+            await CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey)
+        }
+
         return model
     }
 
@@ -100,9 +106,6 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
             latitudeRange: Self.latitudeRangeFor(depth: 0, coordinate: coordinate),
             longitudeRange: Self.longitudeRangeFor(depth: 0, coordinate: coordinate)
         )
-
-        // TODO: make Swift 6 not be a dick about this
-        // Task { await updateTheModel() }
     }
 
     internal init(geoKey: String? = nil, depth: Int, latitudeRange: ClosedRange<Double>, longitudeRange: ClosedRange<Double>, filename: String? = nil, needsUpdate: Bool = true) {
@@ -162,7 +165,6 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         do {
             return try MLModel(contentsOf: modelURL)
         } catch {
-            logger.error(error, subsystem: .activitytypes)
             if !needsUpdate {
                 needsUpdate = true
                 save()
