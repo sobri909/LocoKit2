@@ -26,8 +26,20 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var base: TimelineItemBase
     public var visit: TimelineItemVisit?
     public var trip: TimelineItemTrip?
-    public internal(set) var samples: [LocomotionSample]?
+
+    public internal(set) var samples: [LocomotionSample]? {
+        didSet {
+            if let samples {
+                self.segments = Self.collateSegments(from: samples, disabled: disabled)
+            } else {
+                self.segments = nil
+            }
+        }
+    }
+
     public internal(set) var segments: [ItemSegment]?
+
+    // MARK: -
 
     public var id: String { base.id }
     public var isVisit: Bool { base.isVisit }
@@ -40,11 +52,11 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     
     public var debugShortId: String { String(id.split(separator: "-")[0]) }
 
-    // MARK: -
-
     public var coordinates: [CLLocationCoordinate2D]? {
         return samples?.compactMap { $0.coordinate }.filter { $0.isUsable }
     }
+
+    // MARK: -
 
     public var isValid: Bool {
         get throws {
@@ -180,13 +192,13 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
 
         do {
-            let samplesRequest = base.samples.order(Column("date").asc)
-            let fetchedSamples = try await Database.pool.read {
-                try samplesRequest.fetchAll($0)
+            let fetchedSamples = try await Database.pool.read { [base] in
+                try base.samples
+                    .order(Column("date").asc)
+                    .fetchAll($0)
             }
 
             self.samples = fetchedSamples
-            self.segments = Self.collateSegments(from: fetchedSamples, disabled: disabled)
 
             if samplesChanged {
                 await updateFrom(samples: fetchedSamples, classifySamples: classifySamples)
@@ -507,7 +519,9 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         visit = try container.decodeIfPresent(TimelineItemVisit.self, forKey: .visit)
         trip = try container.decodeIfPresent(TimelineItemTrip.self, forKey: .trip)
         samples = try container.decodeIfPresent([LocomotionSample].self, forKey: .samples)
-        segments = Self.collateSegments(from: samples ?? [], disabled: base.disabled)
+        if let samples {
+            segments = Self.collateSegments(from: samples, disabled: base.disabled)
+        }
     }
 
     // MARK: - Hashable

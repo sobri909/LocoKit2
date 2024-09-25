@@ -7,10 +7,10 @@
 
 import Foundation
 
-public struct ItemSegment: Sendable {
+public struct ItemSegment: Hashable, Sendable {
 
-    let samples: [LocomotionSample]
-    let dateRange: DateInterval
+    public let samples: [LocomotionSample]
+    public let dateRange: DateInterval
 
     init?(samples: [LocomotionSample]) {
         if samples.isEmpty {
