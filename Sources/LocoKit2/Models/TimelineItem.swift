@@ -27,6 +27,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var visit: TimelineItemVisit?
     public var trip: TimelineItemTrip?
     public internal(set) var samples: [LocomotionSample]?
+    public internal(set) var segments: [ItemSegment]?
 
     public var id: String { base.id }
     public var isVisit: Bool { base.isVisit }
@@ -154,6 +155,24 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // MARK: - Relationships
 
+    @TimelineActor
+    public func previousItem(in list: TimelineLinkedList) async -> TimelineItem? {
+        return await list.previousItem(for: self)
+    }
+
+    @TimelineActor
+    public func nextItem(in list: TimelineLinkedList) async -> TimelineItem? {
+        return await list.nextItem(for: self)
+    }
+
+    // TODO: the db does this now with triggers. bad form to do it here too?
+    public mutating func breakEdges() {
+        base.previousItemId = nil
+        base.nextItemId = nil
+    }
+
+    // MARK: - Sample fetching
+
     public mutating func fetchSamples(andClassify classifySamples: Bool = false) async {
         guard samplesChanged || samples == nil else {
             print("[\(debugShortId)] fetchSamples() skipping; no reason to fetch")
@@ -167,6 +186,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             }
 
             self.samples = fetchedSamples
+            self.segments = Self.collateSegments(from: fetchedSamples, disabled: disabled)
 
             if samplesChanged {
                 await updateFrom(samples: fetchedSamples, classifySamples: classifySamples)
@@ -177,19 +197,27 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
-    @TimelineActor
-    public func previousItem(in list: TimelineLinkedList) async -> TimelineItem? {
-        return await list.previousItem(for: self)
-    }
+    private static func collateSegments(from samples: [LocomotionSample], disabled: Bool) -> [ItemSegment] {
+        var segments: [ItemSegment] = []
+        var currentSamples: [LocomotionSample] = []
 
-    @TimelineActor
-    public func nextItem(in list: TimelineLinkedList) async -> TimelineItem? {
-        return await list.nextItem(for: self)
-    }
+        for sample in samples where sample.disabled == disabled {
+            if currentSamples.isEmpty || sample.activityType == currentSamples.first?.activityType {
+                currentSamples.append(sample)
+            } else {
+                if let segment = ItemSegment(samples: currentSamples) {
+                    segments.append(segment)
+                }
+                currentSamples = [sample]
+            }
+        }
 
-    public mutating func breakEdges() {
-        base.previousItemId = nil
-        base.nextItemId = nil
+        // add the last segment if there are any remaining samples
+        if !currentSamples.isEmpty, let segment = ItemSegment(samples: currentSamples) {
+            segments.append(segment)
+        }
+
+        return segments
     }
 
     // MARK: - Timeline processing
@@ -471,6 +499,15 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     enum CodingKeys: CodingKey {
         case base, visit, trip, samples
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        base = try container.decode(TimelineItemBase.self, forKey: .base)
+        visit = try container.decodeIfPresent(TimelineItemVisit.self, forKey: .visit)
+        trip = try container.decodeIfPresent(TimelineItemTrip.self, forKey: .trip)
+        samples = try container.decodeIfPresent([LocomotionSample].self, forKey: .samples)
+        segments = Self.collateSegments(from: samples ?? [], disabled: base.disabled)
     }
 
     // MARK: - Hashable

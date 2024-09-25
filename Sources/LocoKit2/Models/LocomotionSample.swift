@@ -37,6 +37,8 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     public var classifiedActivityType: ActivityType?
     public var confirmedActivityType: ActivityType?
 
+    public var activityType: ActivityType? { confirmedActivityType ?? classifiedActivityType }
+
     // motion sensor data
     public var stepHz: Double?
     public var xyAcceleration: Double?
