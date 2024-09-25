@@ -138,49 +138,6 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         }
     }
 
-    public init(row: Row) throws {
-        id = row["id"]
-        date = row["date"]
-        secondsFromGMT = row["secondsFromGMT"]
-        source = row["source"]
-        sourceVersion = row["sourceVersion"]
-        movingState = MovingState(rawValue: row["movingState"])!
-        recordingState = RecordingState(rawValue: row["recordingState"])!
-        disabled = row["disabled"]
-
-        timelineItemId = row["timelineItemId"]
-        
-        latitude = row["latitude"]
-        longitude = row["longitude"]
-        altitude = row["altitude"]
-        horizontalAccuracy = row["horizontalAccuracy"]
-        verticalAccuracy = row["verticalAccuracy"]
-        speed = row["speed"]
-        course = row["course"]
-
-        if let rawValue = row["classifiedActivityType"] as? Int {
-            classifiedActivityType = ActivityType(rawValue: rawValue)
-        }
-        if let rawValue = row["confirmedActivityType"] as? Int {
-            confirmedActivityType = ActivityType(rawValue: rawValue)
-        }
-
-        stepHz = row["stepHz"]
-        xyAcceleration = row["xyAcceleration"]
-        zAcceleration = row["zAcceleration"]
-
-        if let latitude, let longitude {
-            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-            location = CLLocation(
-                coordinate: coordinate, altitude: altitude!,
-                horizontalAccuracy: horizontalAccuracy ?? -1,
-                verticalAccuracy: verticalAccuracy ?? -1,
-                course: course ?? -1, speed: speed ?? -1,
-                timestamp: date
-            )
-        }
-    }
-
     // MARK: -
 
     public var classifierResults: ClassifierResults? {
