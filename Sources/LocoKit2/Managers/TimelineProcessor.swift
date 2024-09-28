@@ -72,6 +72,9 @@ public final class TimelineProcessor {
 
                 lastResult = await winningMerge.doIt()
 
+                // might've deleted current item
+                TimelineRecorder.highlander.updateCurrentItemId()
+
                 if let lastResult {
                     list.invalidate(itemId: lastResult.kept.id)
                     for killed in lastResult.killed {
