@@ -25,6 +25,12 @@ public struct ItemSegment: Hashable, Sendable {
         self.dateRange = DateInterval(start: startDate, end: endDate)
     }
 
+    // MARK: - ActivityTypes
+
+    public var activityType: ActivityType? {
+        return samples.first?.activityType
+    }
+
     public func confirmActivityType(_ confirmedType: ActivityType) async {
         print("confirmActivityType() confirmedType: \(confirmedType.displayName)")
         do {
