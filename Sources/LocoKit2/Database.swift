@@ -302,6 +302,22 @@ public final class Database: @unchecked Sendable {
                 END;
                 """)
 
+            // set samplesChanged if significant sample values change
+
+            try db.execute(sql: """
+                 CREATE TRIGGER LocomotionSample_AFTER_UPDATE_activityType_or_disabled
+                 AFTER UPDATE OF confirmedActivityType, classifiedActivityType, disabled ON LocomotionSample
+                 WHEN NEW.timelineItemId IS NOT NULL AND
+                     (OLD.confirmedActivityType != NEW.confirmedActivityType OR
+                     OLD.classifiedActivityType != NEW.classifiedActivityType OR
+                     OLD.disabled != NEW.disabled)
+                 BEGIN
+                     UPDATE TimelineItemBase
+                     SET samplesChanged = 1
+                     WHERE id = NEW.timelineItemId;
+                 END;
+                """)
+
             // MARK: - TimelineItemBase BEFORE INSERT / UPDATE triggers
 
             /** prevent setting previousItemId or nextItemId to a deleted item */
