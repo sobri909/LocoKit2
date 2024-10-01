@@ -47,6 +47,14 @@ extension Array where Element: AdditiveArithmetic {
     }
 }
 
+extension Array where Element: Hashable {
+    func mode() -> Element? {
+        return self.reduce(into: [:]) { counts, element in
+            counts[element, default: 0] += 1
+        }.max(by: { $0.value < $1.value })?.key
+    }
+}
+
 extension Comparable {
     mutating func clamp(min: Self, max: Self) {
         if self < min { self = min }

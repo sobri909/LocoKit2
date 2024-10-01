@@ -23,6 +23,10 @@ public final class TimelineSegment: Sendable {
     nonisolated(unsafe)
     private var changesTask: Task<Void, Never>?
 
+    @ObservationIgnored
+    nonisolated(unsafe)
+    private let updateDebouncer = Debouncer()
+
     public init(dateRange: DateInterval, shouldReprocessOnUpdate: Bool = false) {
         self.shouldReprocessOnUpdate = shouldReprocessOnUpdate
         self.dateRange = dateRange
@@ -38,10 +42,12 @@ public final class TimelineSegment: Sendable {
 
     private func setupObserver() {
         changesTask = Task { [weak self] in
-            guard let self else { return }
             for await changedRange in TimelineObserver.highlander.changesStream() {
+                guard let self else { return }
                 if self.dateRange.intersects(changedRange) {
-                    await self.fetchItems()
+                    self.updateDebouncer.debounce(duration: 1) { [weak self] in
+                        await self?.fetchItems()
+                    }
                 }
             }
         }
@@ -67,7 +73,7 @@ public final class TimelineSegment: Sendable {
     private func update(from updatedItems: [TimelineItem]) async {
         var mutableItems = updatedItems
 
-        // no classifying or reprocessing in the background
+        // no reprocessing in the background
         let doProcessing: Bool
         if shouldReprocessOnUpdate {
             doProcessing = await UIApplication.shared.applicationState == .active
@@ -78,7 +84,7 @@ public final class TimelineSegment: Sendable {
         for index in mutableItems.indices {
             let itemCopy = mutableItems[index]
             if itemCopy.samplesChanged {
-                await mutableItems[index].fetchSamples(andClassify: doProcessing)
+                await mutableItems[index].fetchSamples()
 
             } else {
                 // copy over existing samples if available
@@ -87,7 +93,7 @@ public final class TimelineSegment: Sendable {
                     mutableItems[index].samples = samples
 
                 } else { // need to fetch samples
-                    await mutableItems[index].fetchSamples(andClassify: doProcessing)
+                    await mutableItems[index].fetchSamples()
                 }
             }
         }

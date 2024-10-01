@@ -27,12 +27,6 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
 
     public var activityType: ActivityType? { confirmedActivityType ?? classifiedActivityType }
 
-    // TODO: would be good to keep modeActivityType and modeMovingActivityType
-    // or perhaps make sure classifiedActivityType always has a relatively up to date value,
-    // which would make modeActivityType unnecessary(?)
-    // and store a separate movingClassifiedActivityType at the same time,
-    // to make modeMovingActivityType also unnecessary
-
     // MARK: - Init
 
     init(itemId: String, samples: [LocomotionSample]) {
@@ -40,6 +34,7 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         let distance = Self.calculateDistance(from: samples)
         self.speed = Self.calculateSpeed(from: samples, distance: distance)
         self.distance = distance
+        self.classifiedActivityType = Self.calculateModeActivityType(from: samples)
     }
 
     // MARK: - Updating
@@ -47,6 +42,7 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     public mutating func update(from samples: [LocomotionSample]) async {
         self.distance = Self.calculateDistance(from: samples)
         self.speed = Self.calculateSpeed(from: samples, distance: distance)
+        self.classifiedActivityType = Self.calculateModeActivityType(from: samples)
     }
 
     private static func calculateDistance(from samples: [LocomotionSample]) -> CLLocationDistance {
@@ -65,6 +61,17 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         }
 
         return 0
+    }
+
+    private static func calculateModeActivityType(from samples: [LocomotionSample]) -> ActivityType? {
+        let activityTypes = samples.compactMap { $0.activityType }
+        let movingActivityTypes = activityTypes.filter(\.isMovingType)
+
+        if !movingActivityTypes.isEmpty { // prefer mode moving type
+            return movingActivityTypes.mode()
+        } else {
+            return activityTypes.filter(\.isMovingType).mode() ?? .stationary
+        }
     }
 
 }

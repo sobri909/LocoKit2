@@ -185,7 +185,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // MARK: - Sample fetching
 
-    public mutating func fetchSamples(andClassify classifySamples: Bool = false) async {
+    public mutating func fetchSamples() async {
         guard samplesChanged || samples == nil else {
             print("[\(debugShortId)] fetchSamples() skipping; no reason to fetch")
             return
@@ -201,7 +201,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             self.samples = fetchedSamples
 
             if samplesChanged {
-                await updateFrom(samples: fetchedSamples, classifySamples: classifySamples)
+                await updateFrom(samples: fetchedSamples)
             }
 
         } catch {
@@ -450,7 +450,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // MARK: - Updating Visit and Trip
 
-    private mutating func updateFrom(samples updatedSamples: [LocomotionSample], classifySamples: Bool) async {
+    private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
         guard samplesChanged else {
             print("[\(debugShortId)] updateFrom(samples:) skipping; no reason to update")
             return
@@ -460,45 +460,19 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         let oldTrip = trip
         let oldVisit = visit
 
-        var changedSampleTypes: [String: ActivityType] = [:]
-
         await visit?.update(from: updatedSamples)
         await trip?.update(from: updatedSamples)
-
-        if classifySamples {
-            if let results = await ActivityClassifier.highlander.results(for: updatedSamples) {
-                if isTrip, let bestMatch = results.combinedResults?.bestMatch {
-                    trip?.classifiedActivityType = bestMatch.activityType
-                }
-
-                for sample in updatedSamples {
-                    if let sampleResults = results.perSampleResults[sample.id] {
-                        if sampleResults.bestMatch.activityType != sample.classifiedActivityType {
-                            changedSampleTypes[sample.id] = sampleResults.bestMatch.activityType
-                        }
-                    }
-                }
-            }
-        }
 
         base.samplesChanged = false
 
         do {
-            try await Database.pool.write { [base, visit, trip, changedSampleTypes] db in
+            try await Database.pool.write { [base, visit, trip] db in
                 try base.updateChanges(db, from: oldBase)
                 if let oldVisit {
                     try visit?.updateChanges(db, from: oldVisit)
                 }
                 if let oldTrip {
                     try trip?.updateChanges(db, from: oldTrip)
-                }
-
-                for var sample in updatedSamples {
-                    if let newType = changedSampleTypes[sample.id] {
-                        try sample.updateChanges(db) {
-                            $0.classifiedActivityType = newType
-                        }
-                    }
                 }
             }
 

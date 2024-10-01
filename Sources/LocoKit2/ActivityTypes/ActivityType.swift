@@ -53,6 +53,12 @@ public enum ActivityType: Int, CaseIterable, Codable, Sendable {
     case surfing = 60
     case hiking = 61
 
+    // MARK: -
+
+    public var isMovingType: Bool {
+        !Self.nonMovingTypes.contains(self)
+    }
+
     // MARK: - Display names
 
     public var displayName: String {
@@ -125,6 +131,12 @@ public enum ActivityType: Int, CaseIterable, Codable, Sendable {
         .scooter, .metro, .cableCar, .funicular, .chairlift, .skiLift,
         .taxi, .swimming, .golf, .wheelchair, .rowing, .kayaking, .surfing, .hiking, .bogus
     ]
+
+    public static let nonMovingTypes: [ActivityType] = [.stationary, .bogus, .unknown]
+
+    public static var movingTypes: [ActivityType] {
+        allCases.filter(\.isMovingType)
+    }
 
     // activity types that can sensibly have related step counts
     public static let stepsTypes: [ActivityType] = [
