@@ -174,7 +174,7 @@ public final class Database: @unchecked Sendable {
                 // NOTE: indexing this column in old LocoKit made the query planner do dumb things
                 // make sure there's a composite index that includes it instead
                 // and make sure rtreeId IS NOT the first column in the composite index
-                // otherwise again the query planner will do dumb things
+                // otherwise again the query planner did dumb things
                 table.column("rtreeId", .integer)
 
                 table.column("date", .datetime).notNull().indexed()

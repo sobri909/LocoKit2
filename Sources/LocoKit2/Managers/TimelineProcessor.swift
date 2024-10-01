@@ -58,7 +58,8 @@ public final class TimelineProcessor {
                     } else {
                         do {
                             let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
-                            logger.info("Considering \(merges.count) merges:\n\(descriptions)")
+                            logger.info("Considering \(merges.count) merges")
+//                            logger.info("Considering \(merges.count) merges:\n\(descriptions)")
                         } catch {
                             logger.error(error, subsystem: .timeline)
                         }
