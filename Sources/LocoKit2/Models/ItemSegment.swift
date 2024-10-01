@@ -8,7 +8,6 @@
 import Foundation
 
 public struct ItemSegment: Hashable, Sendable {
-
     public let samples: [LocomotionSample]
     public let dateRange: DateInterval
 
@@ -26,4 +25,22 @@ public struct ItemSegment: Hashable, Sendable {
         self.dateRange = DateInterval(start: startDate, end: endDate)
     }
 
+    public func confirmActivityType(_ confirmedType: ActivityType) async {
+        print("confirmActivityType() confirmedType: \(confirmedType.displayName)")
+        do {
+            try await Database.pool.write { db in
+                for var sample in samples where sample.confirmedActivityType != confirmedType {
+                    try sample.updateChanges(db) {
+                        $0.confirmedActivityType = confirmedType
+                    }
+                    print("confirmActivityType() updated sample: \(sample.id)")
+                }
+            }
+
+            await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(samples)
+
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
+    }
 }

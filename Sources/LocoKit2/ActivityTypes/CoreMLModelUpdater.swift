@@ -22,9 +22,7 @@ public final class CoreMLModelUpdater {
 
     var backgroundTaskExpired = false
 
-    public func queueUpdatesForModelsContaining(_ timelineItem: TimelineItem) {
-        guard let samples = timelineItem.samples else { fatalError() }
-
+    public func queueUpdatesForModelsContaining(_ samples: [LocomotionSample]) {
         var lastD2Model: ActivityTypesModel?
         var models: Set<ActivityTypesModel> = []
 
@@ -48,31 +46,6 @@ public final class CoreMLModelUpdater {
             model.save()
         }
     }
-
-//    public func queueUpdatesForModelsContaining(_ segment: ItemSegment) {
-//        var lastD2Model: CoreMLModelWrapper?
-//        var models: Set<CoreMLModelWrapper> = []
-//
-//        for sample in segment.samples where sample.confirmedActivityType != nil {
-//            guard sample.hasUsableCoordinate, let coordinate = sample.location?.coordinate else { continue }
-//
-//            if let lastD2Model, lastD2Model.contains(coordinate: coordinate) {
-//                continue
-//            }
-//
-//            let d2model = CoreMLModelWrapper.fetchModelFor(coordinate: coordinate, depth: 2)
-//            models.insert(d2model)
-//            lastD2Model = d2model
-//
-//            models.insert(CoreMLModelWrapper.fetchModelFor(coordinate: coordinate, depth: 1))
-//            models.insert(CoreMLModelWrapper.fetchModelFor(coordinate: coordinate, depth: 0))
-//        }
-//
-//        for model in models {
-//            model.needsUpdate = true
-//            model.save()
-//        }
-//    }
 
     private var onUpdatesComplete: ((Bool) -> Void)?
 
@@ -325,6 +298,8 @@ public final class CoreMLModelUpdater {
 
         var samplesAdded = 0
         var includedTypes: Set<ActivityType> = []
+
+        print("exportCSV() CONSIDERING SAMPLES: \(samples.count)")
 
         // write the samples to file
         for sample in samples {
