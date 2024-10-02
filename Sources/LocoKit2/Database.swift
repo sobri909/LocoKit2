@@ -234,7 +234,9 @@ public final class Database: @unchecked Sendable {
                 table.column("longitudeMax", .double).notNull().indexed()
                 table.column("longitudeMin", .double).notNull().indexed()
             }
+        }
 
+        migrator.registerMigration("Initial triggers") { db in
             // MARK: - LocomotionSample AFTER INSERT / UPDATE triggers
 
             /** update startDate and endDate on sample insert */
