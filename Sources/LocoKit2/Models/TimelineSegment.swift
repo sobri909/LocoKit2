@@ -73,14 +73,6 @@ public final class TimelineSegment: Sendable {
     private func update(from updatedItems: [TimelineItem]) async {
         var mutableItems = updatedItems
 
-        // no reprocessing in the background
-        let doProcessing: Bool
-        if shouldReprocessOnUpdate {
-            doProcessing = await UIApplication.shared.applicationState == .active
-        } else {
-            doProcessing = false
-        }
-        
         for index in mutableItems.indices {
             let itemCopy = mutableItems[index]
             if itemCopy.samplesChanged {
@@ -102,27 +94,34 @@ public final class TimelineSegment: Sendable {
             self.timelineItems = mutableItems
         }
 
-        if doProcessing {
-            do {
-                try await reprocess()
-            } catch {
-                logger.error(error, subsystem: .timeline)
-            }
-        }
+        await reprocess(items: mutableItems)
     }
 
-    private func reprocess() async throws {
-        let workingItems = await timelineItems
-        let currentItemId = TimelineRecorder.highlander.currentItemId
-        let currentItem = await timelineItems.first { $0.id == currentItemId }
+    private func reprocess(items: [TimelineItem]) async {
+        guard shouldReprocessOnUpdate else { return }
 
-        // shouldn't do processing if currentItem is in the segment and isn't a keeper
-        // (TimelineRecorder should be the sole authority on processing those cases)
-        if let currentItem, try !currentItem.isWorthKeeping {
-            return
+        // no reprocessing in the background
+        guard await UIApplication.shared.applicationState == .active else { return }
+
+        do {
+            var mutableItems = items
+            let currentItemId = TimelineRecorder.highlander.currentItemId
+            let currentItem = mutableItems.first { $0.id == currentItemId }
+
+            // shouldn't do processing if currentItem is in the segment and isn't a keeper
+            if let currentItem, try !currentItem.isWorthKeeping {
+                return
+            }
+
+            for index in mutableItems.indices {
+                await mutableItems[index].classifySamples()
+            }
+
+            await TimelineProcessor.highlander.process(mutableItems)
+
+        } catch {
+            logger.error(error, subsystem: .timeline)
         }
-
-        await TimelineProcessor.highlander.process(workingItems)
     }
 
 }

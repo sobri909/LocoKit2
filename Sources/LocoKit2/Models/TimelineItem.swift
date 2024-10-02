@@ -232,6 +232,31 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return segments
     }
 
+    public mutating func classifySamples() async {
+        guard let samples else { return }
+        guard let results = await ActivityClassifier.highlander.results(for: samples) else { return }
+
+        do {
+            self.samples = try await Database.pool.write { db in
+                var updatedSamples: [LocomotionSample] = []
+                for var mutableSample in samples {
+                    if let result = results.perSampleResults[mutableSample.id] {
+                        if mutableSample.classifiedActivityType != result.bestMatch.activityType {
+                            try mutableSample.updateChanges(db) {
+                                $0.classifiedActivityType = result.bestMatch.activityType
+                            }
+                        }
+                    }
+                    updatedSamples.append(mutableSample)
+                }
+                return updatedSamples
+            }
+
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
+    }
+
     // MARK: - Timeline processing
 
     @TimelineActor
