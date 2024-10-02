@@ -32,14 +32,12 @@ public struct ItemSegment: Hashable, Sendable {
     }
 
     public func confirmActivityType(_ confirmedType: ActivityType) async {
-        print("confirmActivityType() confirmedType: \(confirmedType.displayName)")
         do {
             try await Database.pool.write { db in
                 for var sample in samples where sample.confirmedActivityType != confirmedType {
                     try sample.updateChanges(db) {
                         $0.confirmedActivityType = confirmedType
                     }
-                    print("confirmActivityType() updated sample: \(sample.id)")
                 }
             }
 
