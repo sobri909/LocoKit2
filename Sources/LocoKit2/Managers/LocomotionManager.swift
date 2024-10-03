@@ -215,7 +215,7 @@ public final class LocomotionManager: @unchecked Sendable {
     }
 
     // MARK: - State changes
-
+    @MainActor
     private func startSleeping() {
         if recordingState != .wakeup {
             logger.info("LocomotionManager.startSleeping()")
@@ -275,7 +275,7 @@ public final class LocomotionManager: @unchecked Sendable {
     }
 
     // MARK: - Incoming locations handling
-
+    @MainActor
     internal func add(location: CLLocation) async {
         // only accept locations when recording is supposed to be happening
         guard recordingState == .recording || recordingState == .wakeup else { return }
@@ -292,7 +292,7 @@ public final class LocomotionManager: @unchecked Sendable {
         lastRawLocation = location
         lastUpdated = .now
     }
-
+    @MainActor
     private func updateTheRecordingState() async {
         let sleepState = await sleepModeDetector.state
 
@@ -486,9 +486,13 @@ public final class LocomotionManager: @unchecked Sendable {
             }
         }
 
+
         func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
             print("locationManagerDidPauseLocationUpdates()")
-            parent.startSleeping()
+
+            Task { @MainActor in
+                self.parent.startSleeping()
+            }
         }
 
         func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
