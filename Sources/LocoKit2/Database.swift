@@ -265,7 +265,7 @@ public final class Database: @unchecked Sendable {
             try db.execute(sql: """
                 CREATE TRIGGER LocomotionSample_AFTER_UPDATE_timelineItemId_SET
                 AFTER UPDATE OF timelineItemId ON LocomotionSample
-                WHEN NEW.timelineItemId IS NOT NULL AND (OLD.timelineItemId IS NULL OR OLD.timelineItemId != NEW.timelineItemId)
+                WHEN NEW.timelineItemId IS NOT NULL AND OLD.timelineItemId IS NOT NEW.timelineItemId
                 BEGIN
                     UPDATE TimelineItemBase
                         SET startDate = CASE
@@ -286,7 +286,7 @@ public final class Database: @unchecked Sendable {
             try db.execute(sql: """
                 CREATE TRIGGER LocomotionSample_AFTER_UPDATE_timelineItemId_UNSET
                 AFTER UPDATE OF timelineItemId ON LocomotionSample
-                WHEN OLD.timelineItemId IS NOT NULL AND (NEW.timelineItemId IS NULL OR OLD.timelineItemId != NEW.timelineItemId)
+                WHEN OLD.timelineItemId IS NOT NULL AND OLD.timelineItemId IS NOT NEW.timelineItemId
                 BEGIN
                     UPDATE TimelineItemBase
                     SET startDate = (
@@ -310,8 +310,8 @@ public final class Database: @unchecked Sendable {
                  CREATE TRIGGER LocomotionSample_AFTER_UPDATE_activityType_or_disabled
                  AFTER UPDATE OF confirmedActivityType, classifiedActivityType, disabled ON LocomotionSample
                  WHEN NEW.timelineItemId IS NOT NULL AND
-                     (OLD.confirmedActivityType != NEW.confirmedActivityType OR
-                     OLD.classifiedActivityType != NEW.classifiedActivityType OR
+                     (OLD.confirmedActivityType IS NOT NEW.confirmedActivityType OR
+                     OLD.classifiedActivityType IS NOT NEW.classifiedActivityType OR
                      OLD.disabled != NEW.disabled)
                  BEGIN
                      UPDATE TimelineItemBase
@@ -339,7 +339,7 @@ public final class Database: @unchecked Sendable {
             try db.execute(sql: """
                 CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_previousItemId_SET
                 BEFORE UPDATE OF previousItemId ON TimelineItemBase
-                WHEN NEW.previousItemId IS NOT NULL AND (OLD.previousItemId IS NULL OR OLD.previousItemId != NEW.previousItemId)
+                WHEN NEW.previousItemId IS NOT NULL AND OLD.previousItemId IS NOT NEW.previousItemId
                 BEGIN
                     SELECT RAISE(ABORT, 'Cannot set previousItemId to a deleted item')
                     WHERE EXISTS (
@@ -363,7 +363,7 @@ public final class Database: @unchecked Sendable {
             try db.execute(sql: """
                 CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_nextItemId_SET
                 BEFORE UPDATE OF nextItemId ON TimelineItemBase
-                WHEN NEW.nextItemId IS NOT NULL AND (OLD.nextItemId IS NULL OR OLD.nextItemId != NEW.nextItemId)
+                WHEN NEW.nextItemId IS NOT NULL AND OLD.nextItemId IS NOT NEW.nextItemId
                 BEGIN
                     SELECT RAISE(ABORT, 'Cannot set nextItemId to a deleted item')
                     WHERE EXISTS (
