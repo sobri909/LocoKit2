@@ -40,7 +40,7 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
 
     public var previousItemId: String? {
         didSet {
-            // TODO: move this to SQL constraints?
+            // TODO: move this to SQL constraints
             if previousItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
@@ -49,7 +49,7 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
 
     public var nextItemId: String? {
         didSet {
-            // TODO: move this to SQL constraints?
+            // TODO: move this to SQL constraints
             if nextItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
@@ -66,10 +66,16 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
 
     // MARK: - Init
 
+    init(isVisit: Bool) {
+        self.isVisit = isVisit
+        self.startDate = nil
+        self.endDate = nil
+    }
+
     init(from sample: inout LocomotionSample) {
-        isVisit = sample.movingState == .stationary
-        startDate = sample.date
-        endDate = sample.date
+        self.isVisit = sample.movingState == .stationary
+        self.startDate = sample.date
+        self.endDate = sample.date
         sample.timelineItemId = id
     }
 

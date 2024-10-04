@@ -10,15 +10,10 @@ import CoreLocation
 import Combine
 @preconcurrency import GRDB
 
-public enum TimelineItemError: Error {
+public enum TimelineError: Error {
     case samplesNotLoaded
-
-    public var description: String {
-        switch self {
-        case .samplesNotLoaded:
-            return "TimelineItemError.samplesNotLoaded"
-        }
-    }
+    case itemNotFound
+    case noParentItem
 }
 
 public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
@@ -61,7 +56,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var isValid: Bool {
         get throws {
             guard let samples else {
-                throw TimelineItemError.samplesNotLoaded
+                throw TimelineError.samplesNotLoaded
             }
 
             guard let dateRange else { return false }
@@ -108,7 +103,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var isDataGap: Bool {
         get throws {
             guard let samples else {
-                throw TimelineItemError.samplesNotLoaded
+                throw TimelineError.samplesNotLoaded
             }
 
             if isVisit { return false }
@@ -121,7 +116,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var isNolo: Bool {
         get throws {
             guard let samples else {
-                throw TimelineItemError.samplesNotLoaded
+                throw TimelineError.samplesNotLoaded
             }
 
             if try isDataGap { return false }
@@ -181,6 +176,67 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public mutating func breakEdges() {
         base.previousItemId = nil
         base.nextItemId = nil
+    }
+
+    // MARK: - Item creation
+
+    public static func createItem(from samples: [LocomotionSample], isVisit: Bool) async throws -> TimelineItem {
+        let base = TimelineItemBase(isVisit: isVisit)
+        let visit: TimelineItemVisit?
+        let trip: TimelineItemTrip?
+
+        if isVisit {
+            visit = TimelineItemVisit(itemId: base.id, samples: samples)
+            trip = nil
+        } else {
+            trip = TimelineItemTrip(itemId: base.id, samples: samples)
+            visit = nil
+        }
+
+        let newItem = try await Database.pool.write { [base, visit, trip] in
+            try base.save($0)
+            try visit?.save($0)
+            try trip?.save($0)
+            for var sample in samples {
+                try sample.updateChanges($0) {
+                    $0.timelineItemId = base.id
+                }
+            }
+
+            return try TimelineItem
+                .itemRequest(includeSamples: false)
+                .filter(Column("id") == base.id)
+                .fetchOne($0)
+        }
+
+        guard let newItem else {
+            throw TimelineError.itemNotFound
+        }
+        
+        return newItem
+    }
+
+    // MARK: - Item fetching
+
+    public static func fetchItem(itemId: String, includeSamples: Bool) async throws -> TimelineItem? {
+        return try await Database.pool.read {
+            return try itemRequest(includeSamples: includeSamples)
+                .filter(Column("id") == itemId)
+                .fetchOne($0)
+        }
+    }
+
+    public static func itemRequest(includeSamples: Bool) -> QueryInterfaceRequest<TimelineItem> {
+        var request = TimelineItemBase
+            .including(optional: TimelineItemBase.visit)
+            .including(optional: TimelineItemBase.trip)
+
+        if includeSamples {
+            request = request.including(all: TimelineItemBase.samples)
+        }
+
+        return request
+            .asRequest(of: TimelineItem.self)
     }
 
     // MARK: - Sample fetching
@@ -369,7 +425,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         guard self.isTrip, otherItem.isTrip else { fatalError() }
 
         guard let samples, let otherSamples = otherItem.samples else {
-            throw TimelineItemError.samplesNotLoaded
+            throw TimelineError.samplesNotLoaded
         }
 
         guard let selfStart = dateRange?.start,
@@ -418,7 +474,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     // (old ArcPath has an overload for this)
     public func samplesInside(_ visit: TimelineItemVisit) throws -> [LocomotionSample] {
         guard let samples else {
-            throw TimelineItemError.samplesNotLoaded
+            throw TimelineError.samplesNotLoaded
         }
 
         return samples.filter { sample in
@@ -431,7 +487,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     public func percentInside(_ visit: TimelineItemVisit) throws -> Double {
         guard let samples else {
-            throw TimelineItemError.samplesNotLoaded
+            throw TimelineError.samplesNotLoaded
         }
 
         if samples.isEmpty { return 0 }
@@ -445,7 +501,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     public func edgeSample(withOtherItemId otherItemId: String) throws -> LocomotionSample? {
         guard let samples else {
-            throw TimelineItemError.samplesNotLoaded
+            throw TimelineError.samplesNotLoaded
         }
 
         if otherItemId == base.previousItemId {
@@ -460,7 +516,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     public func secondToEdgeSample(withOtherItemId otherItemId: String) throws -> LocomotionSample? {
         guard let samples else {
-            throw TimelineItemError.samplesNotLoaded
+            throw TimelineError.samplesNotLoaded
         }
 
         if otherItemId == base.previousItemId {

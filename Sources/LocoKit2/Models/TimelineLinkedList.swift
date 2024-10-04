@@ -16,20 +16,11 @@ public final class TimelineLinkedList: AsyncSequence {
 
     public init?(fromItemId seedItemId: String) async {
         do {
-            let seedItem = try await Database.pool.read {
-                try TimelineItemBase
-                    .including(optional: TimelineItemBase.visit)
-                    .including(optional: TimelineItemBase.trip)
-                    .including(all: TimelineItemBase.samples)
-                    .filter(Column("id") == seedItemId)
-                    .asRequest(of: TimelineItem.self)
-                    .fetchOne($0)
-            }
+            let seedItem = try await TimelineItem.fetchItem(itemId: seedItemId, includeSamples: true)
             if let seedItem {
                 self.seedItem = seedItem
                 timelineItems[seedItemId] = seedItem
                 observers[seedItemId] = addObserverFor(itemId: seedItemId)
-
             } else {
                 return nil
             }
@@ -55,19 +46,12 @@ public final class TimelineLinkedList: AsyncSequence {
         }
 
         do {
-            let item = try await Database.pool.read {
-                try TimelineItemBase
-                    .including(optional: TimelineItemBase.visit)
-                    .including(optional: TimelineItemBase.trip)
-                    .including(all: TimelineItemBase.samples)
-                    .filter(Column("id") == itemId)
-                    .asRequest(of: TimelineItem.self)
-                    .fetchOne($0)
-            }
-            if let item {
+            if let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) {
                 timelineItems[item.id] = item
+                return item
+            } else {
+                return nil
             }
-            return item
 
         } catch {
             logger.error(error, subsystem: .database)
@@ -110,14 +94,11 @@ public final class TimelineLinkedList: AsyncSequence {
     nonisolated
     private func addObserverFor(itemId: String) -> AnyCancellable {
         return ValueObservation
-            .trackingConstantRegion { db in
-                try TimelineItemBase
-                    .including(optional: TimelineItemBase.visit)
-                    .including(optional: TimelineItemBase.trip)
-                    .including(all: TimelineItemBase.samples)
+            .trackingConstantRegion {
+                try TimelineItem
+                    .itemRequest(includeSamples: true)
                     .filter(Column("id") == itemId)
-                    .asRequest(of: TimelineItem.self)
-                    .fetchOne(db)
+                    .fetchOne($0)
             }
             .shared(in: Database.pool, scheduling: .async(onQueue: TimelineActor.queue))
             .publisher()
