@@ -18,10 +18,10 @@ public final class TimelineProcessor {
     
     public static let maximumModeShiftSpeed = CLLocationSpeed(kmh: 2)
 
-    private let maxProcessingListSize = 21
-    private let maximumPotentialMergesInProcessingLoop = 10
+    private static let maxProcessingListSize = 21
+    private static let maximumPotentialMergesInProcessingLoop = 10
 
-    public func processFrom(itemId: String) async {
+    public static func processFrom(itemId: String) async {
         print("TimelineProcessor.processFrom(itemId:)")
 
         do {
@@ -35,19 +35,19 @@ public final class TimelineProcessor {
     }
 
     @discardableResult
-    public func process(_ items: [TimelineItem]) async -> MergeResult? {
+    public static func process(_ items: [TimelineItem]) async -> MergeResult? {
         let list = TimelineLinkedList(fromItems: items)
         return await process(list)
     }
 
     @discardableResult
-    public func process(_ list: TimelineLinkedList) async -> MergeResult? {
+    public static func process(_ list: TimelineLinkedList) async -> MergeResult? {
         print("TimelineProcessor.process(list:)")
 
         var lastResult: MergeResult?
         do {
             while true {
-                try await sanitiseEdges(for: list)
+                try await highlander.sanitiseEdges(for: list)
 
                 let merges = try await collectPotentialMerges(for: list)
                     .sorted { $0.score.rawValue > $1.score.rawValue }
@@ -96,7 +96,7 @@ public final class TimelineProcessor {
 
     private init() {}
 
-    private func processingList(fromItemId: String) async throws -> TimelineLinkedList? {
+    private static func processingList(fromItemId: String) async throws -> TimelineLinkedList? {
         guard let list = await TimelineLinkedList(fromItemId: fromItemId) else { return nil }
         guard let seedItem = list.seedItem else { return nil }
 
@@ -121,7 +121,7 @@ public final class TimelineProcessor {
 
     // MARK: - Merge collating
 
-    private func collectPotentialMerges(for list: TimelineLinkedList) async throws -> [Merge] {
+    private static func collectPotentialMerges(for list: TimelineLinkedList) async throws -> [Merge] {
         var merges: Set<Merge> = []
 
         for await workingItem in list where !workingItem.deleted {
@@ -137,12 +137,12 @@ public final class TimelineProcessor {
         return Array(merges)
     }
 
-    private func shouldStopCollecting(_ merges: Set<Merge>) -> Bool {
+    private static func shouldStopCollecting(_ merges: Set<Merge>) -> Bool {
         let validMerges = merges.count { $0.score != .impossible }
         return validMerges >= maximumPotentialMergesInProcessingLoop
     }
 
-    private func collectAdjacentMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async {
+    private static func collectAdjacentMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async {
         if let next = await item.nextItem(in: list) {
             merges.insert(await Merge(keeper: item, deadman: next, in: list))
             merges.insert(await Merge(keeper: next, deadman: item, in: list))
@@ -154,7 +154,7 @@ public final class TimelineProcessor {
         }
     }
 
-    private func collectBetweenerMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async throws {
+    private static func collectBetweenerMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async throws {
         if let next = await item.nextItem(in: list), try !item.isDataGap, try next.keepnessScore < item.keepnessScore {
             if let nextNext = await next.nextItem(in: list), try !nextNext.isDataGap, try nextNext.keepnessScore > next.keepnessScore {
                 merges.insert(await Merge(keeper: item, betweener: next, deadman: nextNext, in: list))
@@ -170,7 +170,7 @@ public final class TimelineProcessor {
         }
     }
 
-    private func collectBridgeMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async throws {
+    private static func collectBridgeMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async throws {
         guard let previous = await item.previousItem(in: list),
               let next = await item.nextItem(in: list),
               previous.source == item.source,

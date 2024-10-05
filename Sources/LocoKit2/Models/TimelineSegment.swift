@@ -117,7 +117,7 @@ public final class TimelineSegment: Sendable {
                 await mutableItems[index].classifySamples()
             }
 
-            await TimelineProcessor.highlander.process(mutableItems)
+            await TimelineProcessor.process(mutableItems)
 
         } catch {
             logger.error(error, subsystem: .timeline)
