@@ -39,12 +39,11 @@ public final class TimelineRecorder: @unchecked Sendable {
     public func currentItem() -> TimelineItem? {
         guard let currentItemId else { return nil }
         return try? Database.pool.read {
-            let request = TimelineItemBase
-                .including(optional: TimelineItemBase.visit)
-                .including(optional: TimelineItemBase.trip)
-                .filter(Column("id") == currentItemId)
+            return try TimelineItem
+                .itemRequest(includeSamples: false)
                 .filter(Column("deleted") == false && Column("disabled") == false)
-            return try TimelineItem.fetchOne($0, request)
+                .filter(Column("id") == currentItemId)
+                .fetchOne($0)
         }
     }
 
