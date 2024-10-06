@@ -237,7 +237,8 @@ public final class Database: @unchecked Sendable {
         }
 
         migrator.registerMigration("Initial triggers") { db in
-            // MARK: - LocomotionSample AFTER INSERT / UPDATE triggers
+
+            // MARK: - AFTER INSERT LocomotionSample
 
             /** update startDate and endDate on sample insert */
 
@@ -259,6 +260,8 @@ public final class Database: @unchecked Sendable {
                     WHERE id = NEW.timelineItemId;
                 END;
                 """)
+
+            // MARK: - AFTER UPDATE LocomotionSample
 
             /** update startDate and endDate on sample assign */
 
@@ -320,7 +323,7 @@ public final class Database: @unchecked Sendable {
                  END;
                 """)
 
-            // MARK: - TimelineItemBase BEFORE INSERT / UPDATE triggers
+            // MARK: - BEFORE INSERT TimelineItemBase
 
             /** prevent setting previousItemId or nextItemId to a deleted item */
 
@@ -328,18 +331,6 @@ public final class Database: @unchecked Sendable {
                 CREATE TRIGGER TimelineItemBase_BEFORE_INSERT_previousItemId_SET
                 BEFORE INSERT ON TimelineItemBase
                 WHEN NEW.previousItemId IS NOT NULL
-                BEGIN
-                    SELECT RAISE(ABORT, 'Cannot set previousItemId to a deleted item')
-                    WHERE EXISTS (
-                        SELECT 1 FROM TimelineItemBase WHERE id = NEW.previousItemId AND deleted = 1
-                    );
-                END;
-                """)
-
-            try db.execute(sql: """
-                CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_previousItemId_SET
-                BEFORE UPDATE OF previousItemId ON TimelineItemBase
-                WHEN NEW.previousItemId IS NOT NULL AND OLD.previousItemId IS NOT NEW.previousItemId
                 BEGIN
                     SELECT RAISE(ABORT, 'Cannot set previousItemId to a deleted item')
                     WHERE EXISTS (
@@ -360,6 +351,22 @@ public final class Database: @unchecked Sendable {
                 END;
                 """)
 
+            // MARK: - BEFORE UPDATE TimelineItemBase
+
+            /** prevent setting previousItemId or nextItemId to a deleted item */
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_previousItemId_SET
+                BEFORE UPDATE OF previousItemId ON TimelineItemBase
+                WHEN NEW.previousItemId IS NOT NULL AND OLD.previousItemId IS NOT NEW.previousItemId
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot set previousItemId to a deleted item')
+                    WHERE EXISTS (
+                        SELECT 1 FROM TimelineItemBase WHERE id = NEW.previousItemId AND deleted = 1
+                    );
+                END;
+                """)
+
             try db.execute(sql: """
                 CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_nextItemId_SET
                 BEFORE UPDATE OF nextItemId ON TimelineItemBase
@@ -372,7 +379,7 @@ public final class Database: @unchecked Sendable {
                 END;
                 """)
 
-            // MARK: - TimelineItemBase AFTER INSERT / UPDATE triggers
+            // MARK: - AFTER INSERT TimelineItemBase
 
             /** keep nextItemId and previousItemId links correct */
 
@@ -398,6 +405,10 @@ public final class Database: @unchecked Sendable {
                 END;
                 """)
 
+            // MARK: - AFTER UPDATE TimelineItemBase
+
+            /** keep nextItemId and previousItemId links correct */
+
             try db.execute(sql: """
                 CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_previousItemId
                 AFTER UPDATE OF previousItemId ON TimelineItemBase
@@ -408,7 +419,7 @@ public final class Database: @unchecked Sendable {
                     
                     UPDATE TimelineItemBase
                     SET nextItemId = NULL
-                    WHERE nextItemId = NEW.id AND id != NEW.previousItemId;
+                    WHERE nextItemId = NEW.id AND id IS NOT NEW.previousItemId;
                 END;
                 """)
 
@@ -422,7 +433,7 @@ public final class Database: @unchecked Sendable {
                     
                     UPDATE TimelineItemBase
                     SET previousItemId = NULL
-                    WHERE previousItemId = NEW.id AND id != NEW.nextItemId;
+                    WHERE previousItemId = NEW.id AND id IS NOT NEW.nextItemId;
                 END;
                 """)
 
@@ -433,8 +444,7 @@ public final class Database: @unchecked Sendable {
                 AFTER UPDATE OF deleted ON TimelineItemBase
                 WHEN NEW.deleted = 1 AND NEW.deleted != OLD.deleted
                 BEGIN
-                    UPDATE TimelineItemBase SET nextItemId = NULL WHERE nextItemId = OLD.id;
-                    UPDATE TimelineItemBase SET previousItemId = NULL WHERE previousItemId = OLD.id;
+                    UPDATE TimelineItemBase SET nextItemId = NULL, previousItemId = NULL WHERE id = NEW.id;
                 END;
                 """)
 
@@ -443,8 +453,7 @@ public final class Database: @unchecked Sendable {
                 AFTER UPDATE OF disabled ON TimelineItemBase
                 WHEN NEW.disabled = 1 AND NEW.disabled != OLD.disabled
                 BEGIN
-                    UPDATE TimelineItemBase SET nextItemId = NULL WHERE nextItemId = OLD.id;
-                    UPDATE TimelineItemBase SET previousItemId = NULL WHERE previousItemId = OLD.id;
+                    UPDATE TimelineItemBase SET nextItemId = NULL, previousItemId = NULL WHERE id = NEW.id;
                 END;
                 """)
         }
