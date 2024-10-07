@@ -334,8 +334,6 @@ public final class TimelineProcessor {
 
     @discardableResult
     public static func extractItem(for segment: ItemSegment, isVisit: Bool) async throws -> TimelineItem? {
-        print("TimelineProcessor.extractItem()")
-
         guard try await segment.validateIsContiguous() else {
             throw TimelineError.invalidSegment("Segment fails validateIsContiguous()")
         }
@@ -350,12 +348,10 @@ public final class TimelineProcessor {
                 .fetchAll(db)
         }
 
-        print("TimelineProcessor.extractItem() overlappers: \(overlappers.count)")
-
         var prevEdgesToBreak: [TimelineItem] = []
         var nextEdgesToBreak: [TimelineItem] = []
         var itemsToDelete: [TimelineItem] = []
-        var itemsToHeal = overlappers
+        var itemsToHeal = overlappers.map { $0.id }
 
         // process overlapping items
         for item in overlappers {
@@ -363,36 +359,32 @@ public final class TimelineProcessor {
 
             // if item is entirely inside the segment (or identical to), delete the item
             if segment.dateRange.contains(itemRange) {
-                print("TimelineProcessor.extractItem() itemsToDelete.append(item)")
                 itemsToDelete.append(item)
                 continue
             }
 
             // break prev edges inside the segment's range
             if segment.dateRange.contains(itemRange.start) {
-                print("TimelineProcessor.extractItem() prevEdgesToBreak.append(item)")
                 prevEdgesToBreak.append(item)
             }
 
             // break next edges inside the segment's range
             if segment.dateRange.contains(itemRange.end) {
-                print("TimelineProcessor.extractItem() nextEdgesToBreak.append(item)")
                 nextEdgesToBreak.append(item)
             }
 
             // if segment is entirely inside the item (and not identical to), split the item
             if itemRange.start < segment.dateRange.start && itemRange.end > segment.dateRange.end {
-                print("TimelineProcessor.extractItem() SPLITTING ITEM")
                 let afterSamples = itemSamples.filter { $0.date > segment.dateRange.end }
                 nextEdgesToBreak.append(item)
                 let afterItem = try await TimelineItem.createItem(from: afterSamples, isVisit: item.isVisit)
-                itemsToHeal.append(afterItem)
+                itemsToHeal.append(afterItem.id)
             }
         }
 
         // create the new item
         let newItem = try await TimelineItem.createItem(from: segment.samples, isVisit: isVisit)
-        itemsToHeal.append(newItem)
+        itemsToHeal.append(newItem.id)
 
         // perform database operations
         try await Database.pool.write { [prevEdgesToBreak, nextEdgesToBreak, itemsToDelete] db in
@@ -417,8 +409,8 @@ public final class TimelineProcessor {
         TimelineRecorder.highlander.updateCurrentItemId()
 
         // heal edges
-        for item in itemsToHeal {
-            try await healEdges(of: item)
+        for itemId in itemsToHeal {
+            try await healEdges(itemId: itemId)
         }
 
         return newItem
@@ -428,7 +420,16 @@ public final class TimelineProcessor {
 
     private static let edgeHealingThreshold: TimeInterval = .minutes(15)
 
-    static func healEdges(of item: TimelineItem) async throws {
+    // TODO: probably shouldn't throw. just log the errors internally
+    static func healEdges(itemId: String) async throws {
+        guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: false) else {
+            return
+        }
+
+        if item.deleted || item.disabled {
+            return
+        }
+
         guard let dateRange = item.dateRange else {
             throw TimelineError.invalidItem("Item has nil dateRange")
         }
