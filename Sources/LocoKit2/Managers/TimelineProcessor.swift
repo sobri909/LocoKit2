@@ -334,10 +334,10 @@ public final class TimelineProcessor {
 
     @discardableResult
     public static func extractItem(for segment: ItemSegment, isVisit: Bool) async throws -> TimelineItem? {
-        print("extractItem()")
+        print("TimelineProcessor.extractItem()")
 
         guard try await segment.validateIsContiguous() else {
-            throw TimelineError.invalidSegment
+            throw TimelineError.invalidSegment("Segment fails validateIsContiguous()")
         }
 
         // get overlapping items
@@ -350,7 +350,7 @@ public final class TimelineProcessor {
                 .fetchAll(db)
         }
 
-        print("extractItem() overlappers: \(overlappers.count)")
+        print("TimelineProcessor.extractItem() overlappers: \(overlappers.count)")
 
         var prevEdgesToBreak: [TimelineItem] = []
         var nextEdgesToBreak: [TimelineItem] = []
@@ -363,23 +363,26 @@ public final class TimelineProcessor {
 
             // if item is entirely inside the segment (or identical to), delete the item
             if segment.dateRange.contains(itemRange) {
-                print("extractItem() itemsToDelete.append(item)")
+                print("TimelineProcessor.extractItem() itemsToDelete.append(item)")
                 itemsToDelete.append(item)
                 continue
             }
 
             // break prev edges inside the segment's range
             if segment.dateRange.contains(itemRange.start) {
+                print("TimelineProcessor.extractItem() prevEdgesToBreak.append(item)")
                 prevEdgesToBreak.append(item)
             }
 
             // break next edges inside the segment's range
             if segment.dateRange.contains(itemRange.end) {
+                print("TimelineProcessor.extractItem() nextEdgesToBreak.append(item)")
                 nextEdgesToBreak.append(item)
             }
 
             // if segment is entirely inside the item (and not identical to), split the item
             if itemRange.start < segment.dateRange.start && itemRange.end > segment.dateRange.end {
+                print("TimelineProcessor.extractItem() SPLITTING ITEM")
                 let afterSamples = itemSamples.filter { $0.date > segment.dateRange.end }
                 nextEdgesToBreak.append(item)
                 let afterItem = try await TimelineItem.createItem(from: afterSamples, isVisit: item.isVisit)
@@ -410,15 +413,151 @@ public final class TimelineProcessor {
             }
         }
 
-        // heal edges
-        for item in itemsToHeal {
-            // try await healEdges(of: item)
-        }
-
         // update current item if necessary
         TimelineRecorder.highlander.updateCurrentItemId()
 
+        // heal edges
+        for item in itemsToHeal {
+            try await healEdges(of: item)
+        }
+
         return newItem
+    }
+
+    // MARK: - Edge healing
+
+    private static let edgeHealingThreshold: TimeInterval = .minutes(15)
+
+    static func healEdges(of item: TimelineItem) async throws {
+        guard let dateRange = item.dateRange else {
+            throw TimelineError.invalidItem("Item has nil dateRange")
+        }
+
+        // Check for full containment by another item first
+        let container = try await Database.pool.read { db in
+            try TimelineItem
+                .itemRequest(includeSamples: false)
+                .filter(Column("startDate") <= dateRange.start)
+                .filter(Column("endDate") >= dateRange.end)
+                .filter(Column("deleted") == false && Column("disabled") == false)
+                .filter(Column("id") != item.id)
+                .fetchOne(db)
+        }
+
+        // we're not here to deal with fully overlapping items
+        if let container {
+            throw TimelineError.itemContained(containerId: container.id)
+        }
+
+        if item.base.previousItemId == nil {
+            try await healPreviousEdge(of: item)
+        }
+
+        if item.base.nextItemId == nil {
+            try await healNextEdge(of: item)
+        }
+    }
+
+    private static func healPreviousEdge(of item: TimelineItem) async throws {
+        guard let dateRange = item.dateRange else {
+            throw TimelineError.invalidItem("Item has nil dateRange")
+        }
+
+        // Check for overlapping items
+        let overlapper = try await Database.pool.read { db in
+            try TimelineItem.itemRequest(includeSamples: false)
+                .filter(Column("endDate") > dateRange.start)
+                .filter(Column("startDate") < dateRange.start)
+                .filter(Column("deleted") == false && Column("disabled") == false)
+                .filter(Column("id") != item.id)
+                .fetchOne(db)
+        }
+
+        if let overlapper {
+            throw TimelineError.itemOverlap(overlapItemId: overlapper.id)
+        }
+
+        // Find nearest previous item
+        let nearest = try await Database.pool.read { db in
+            try TimelineItem.itemRequest(includeSamples: false)
+                .filter(Column("endDate") <= dateRange.start)
+                .filter(Column("deleted") == false && Column("disabled") == false)
+                .filter(Column("nextItemId") == nil)
+                .filter(Column("id") != item.id)
+                .order(Column("endDate").desc)
+                .fetchOne(db)
+        }
+
+        if let nearest, let nearestEndDate = nearest.dateRange?.end {
+            let gap = dateRange.start.timeIntervalSince(nearestEndDate)
+
+            if gap <= edgeHealingThreshold { // can heal the edge
+                try await Database.pool.write { db in
+                    var mutableItem = item
+                    try mutableItem.base.updateChanges(db) {
+                        $0.previousItemId = nearest.id
+                    }
+                    var mutableNearest = nearest
+                    try mutableNearest.base.updateChanges(db) {
+                        $0.nextItemId = item.id
+                    }
+                }
+
+            } else { // can't heal the edge
+                throw TimelineError.gapTooLarge(gap: gap, threshold: edgeHealingThreshold)
+            }
+        }
+    }
+
+    private static func healNextEdge(of item: TimelineItem) async throws {
+        guard let dateRange = item.dateRange else {
+            throw TimelineError.invalidItem("Item has nil dateRange")
+        }
+
+        // Check for overlapping items
+        let overlapper = try await Database.pool.read { db in
+            try TimelineItem.itemRequest(includeSamples: false)
+                .filter(Column("startDate") < dateRange.end)
+                .filter(Column("endDate") > dateRange.end)
+                .filter(Column("deleted") == false && Column("disabled") == false)
+                .filter(Column("id") != item.id)
+                .fetchOne(db)
+        }
+
+        if let overlapper {
+            throw TimelineError.itemOverlap(overlapItemId: overlapper.id)
+        }
+
+        // Find nearest next item
+        let nearest = try await Database.pool.read { db in
+            try TimelineItem.itemRequest(includeSamples: false)
+                .filter(Column("startDate") >= dateRange.end)
+                .filter(Column("deleted") == false && Column("disabled") == false)
+                .filter(Column("previousItemId") == nil)
+                .filter(Column("id") != item.id)
+                .order(Column("startDate").asc)
+                .fetchOne(db)
+        }
+
+        if let nearest, let nearestStartDate = nearest.dateRange?.start {
+            let gap = nearestStartDate.timeIntervalSince(dateRange.end)
+
+            if gap <= edgeHealingThreshold { // can heal the edge
+                try await Database.pool.write { db in
+                    var mutableItem = item
+                    try mutableItem.base.updateChanges(db) {
+                        $0.nextItemId = nearest.id
+                    }
+                    var mutableNearest = nearest
+                    try mutableNearest.base.updateChanges(db) {
+                        $0.previousItemId = item.id
+                    }
+                }
+
+            } else { // can't heal the edge
+                throw TimelineError.gapTooLarge(gap: gap, threshold: edgeHealingThreshold)
+            }
+        }
     }
 
 }

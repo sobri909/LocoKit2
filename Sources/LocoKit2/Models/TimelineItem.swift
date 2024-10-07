@@ -13,7 +13,11 @@ import Combine
 public enum TimelineError: Error {
     case samplesNotLoaded
     case itemNotFound
-    case invalidSegment
+    case invalidItem(String)
+    case invalidSegment(String)
+    case itemContained(containerId: String)
+    case itemOverlap(overlapItemId: String)
+    case gapTooLarge(gap: TimeInterval, threshold: TimeInterval)
 }
 
 public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
@@ -62,13 +66,14 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             guard let dateRange else { return false }
 
             if isVisit {
-                // Visit-specific validity logic
+                // Visit specific validity logic
                 if samples.isEmpty { return false }
                 if try isNolo { return false }
                 if dateRange.duration < TimelineItemVisit.minimumValidDuration { return false }
                 return true
+                
             } else {
-                // Path-specific validity logic
+                // Trip specific validity logic
                 if samples.count < TimelineItemTrip.minimumValidSamples { return false }
                 if dateRange.duration < TimelineItemTrip.minimumValidDuration { return false }
                 if let distance = trip?.distance, distance < TimelineItemTrip.minimumValidDistance { return false }
