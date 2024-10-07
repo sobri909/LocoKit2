@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import GRDB
 
 public struct ItemSegment: Hashable, Sendable {
     public let samples: [LocomotionSample]
@@ -21,8 +22,22 @@ public struct ItemSegment: Hashable, Sendable {
             return nil
         }
 
-        self.samples = samples
+        self.samples = samples.sorted { $0.date < $1.date }
         self.dateRange = DateInterval(start: startDate, end: endDate)
+    }
+
+    // MARK: - Validity
+
+    // there's no extra samples either in segment or db for the segment's dateRange
+    public func validateIsContiguous() async throws -> Bool {
+        let dbSampleIds = try await Database.pool.read { db in
+            let request = LocomotionSample
+                .select(Column("id"))
+                .filter(dateRange.range.contains(Column("date")))
+            return try String.fetchSet(db, request)
+        }
+
+        return dbSampleIds == Set(samples.map { $0.id })
     }
 
     // MARK: - ActivityTypes
