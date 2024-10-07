@@ -410,7 +410,11 @@ public final class TimelineProcessor {
 
         // heal edges
         for itemId in itemsToHeal {
-            try await healEdges(itemId: itemId)
+            do {
+                try await healEdges(itemId: itemId)
+            } catch {
+                logger.error(error, subsystem: .database)
+            }
         }
 
         return newItem
@@ -420,7 +424,6 @@ public final class TimelineProcessor {
 
     private static let edgeHealingThreshold: TimeInterval = .minutes(15)
 
-    // TODO: probably shouldn't throw. just log the errors internally
     static func healEdges(itemId: String) async throws {
         guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: false) else {
             return
@@ -431,7 +434,7 @@ public final class TimelineProcessor {
         }
 
         guard let dateRange = item.dateRange else {
-            throw TimelineError.invalidItem("Item has nil dateRange")
+            return
         }
 
         // Check for full containment by another item first
@@ -446,8 +449,9 @@ public final class TimelineProcessor {
         }
 
         // we're not here to deal with fully overlapping items
-        if let container {
-            throw TimelineError.itemContained(containerId: container.id)
+        if container != nil {
+            logger.error("healEdges() Item is fully contained by another item", subsystem: .timeline)
+            return
         }
 
         if item.base.previousItemId == nil {
@@ -461,7 +465,7 @@ public final class TimelineProcessor {
 
     private static func healPreviousEdge(of item: TimelineItem) async throws {
         guard let dateRange = item.dateRange else {
-            throw TimelineError.invalidItem("Item has nil dateRange")
+            return
         }
 
         // Check for overlapping items
@@ -474,8 +478,9 @@ public final class TimelineProcessor {
                 .fetchOne(db)
         }
 
-        if let overlapper {
-            throw TimelineError.itemOverlap(overlapItemId: overlapper.id)
+        if overlapper != nil {
+            logger.error("healPreviousEdge() Overlapping item found", subsystem: .timeline)
+            return
         }
 
         // Find nearest previous item
@@ -505,14 +510,14 @@ public final class TimelineProcessor {
                 }
 
             } else { // can't heal the edge
-                throw TimelineError.gapTooLarge(gap: gap, threshold: edgeHealingThreshold)
+                logger.info("healPreviousEdge() Gap too large: \(gap) seconds", subsystem: .timeline)
             }
         }
     }
 
     private static func healNextEdge(of item: TimelineItem) async throws {
         guard let dateRange = item.dateRange else {
-            throw TimelineError.invalidItem("Item has nil dateRange")
+            return
         }
 
         // Check for overlapping items
@@ -525,8 +530,9 @@ public final class TimelineProcessor {
                 .fetchOne(db)
         }
 
-        if let overlapper {
-            throw TimelineError.itemOverlap(overlapItemId: overlapper.id)
+        if overlapper != nil {
+            logger.error("healNextEdge() Overlapping item found", subsystem: .timeline)
+            return
         }
 
         // Find nearest next item
@@ -556,7 +562,7 @@ public final class TimelineProcessor {
                 }
 
             } else { // can't heal the edge
-                throw TimelineError.gapTooLarge(gap: gap, threshold: edgeHealingThreshold)
+                logger.info("healNextEdge() Gap too large: \(gap) seconds", subsystem: .timeline)
             }
         }
     }

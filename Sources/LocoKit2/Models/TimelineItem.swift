@@ -15,9 +15,6 @@ public enum TimelineError: Error {
     case itemNotFound
     case invalidItem(String)
     case invalidSegment(String)
-    case itemContained(containerId: String)
-    case itemOverlap(overlapItemId: String)
-    case gapTooLarge(gap: TimeInterval, threshold: TimeInterval)
 }
 
 public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
