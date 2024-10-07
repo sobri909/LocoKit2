@@ -13,7 +13,7 @@ import Combine
 public enum TimelineError: Error {
     case samplesNotLoaded
     case itemNotFound
-    case noParentItem
+    case invalidSegment
 }
 
 public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {

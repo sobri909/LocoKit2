@@ -51,4 +51,5 @@ public extension Calendar {
 
 extension DateInterval {
     var range: ClosedRange<Date> { start...end }
+    func contains(_ other: DateInterval) -> Bool { self.start <= other.start && self.end >= other.end }
 }

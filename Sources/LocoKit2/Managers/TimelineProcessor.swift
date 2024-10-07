@@ -330,4 +330,95 @@ public final class TimelineProcessor {
         }
     }
 
+    // MARK: - Item extraction
+
+    @discardableResult
+    public static func extractItem(for segment: ItemSegment, isVisit: Bool) async throws -> TimelineItem? {
+        print("extractItem()")
+
+        guard try await segment.validateIsContiguous() else {
+            throw TimelineError.invalidSegment
+        }
+
+        // get overlapping items
+        let overlappers = try await Database.pool.read { db in
+            try TimelineItem
+                .itemRequest(includeSamples: true)
+                .filter(Column("deleted") == false && Column("disabled") == false)
+                .filter(Column("endDate") > segment.dateRange.start && Column("startDate") < segment.dateRange.end)
+                .order(Column("startDate").asc)
+                .fetchAll(db)
+        }
+
+        print("extractItem() overlappers: \(overlappers.count)")
+
+        var prevEdgesToBreak: [TimelineItem] = []
+        var nextEdgesToBreak: [TimelineItem] = []
+        var itemsToDelete: [TimelineItem] = []
+        var itemsToHeal = overlappers
+
+        // process overlapping items
+        for item in overlappers {
+            guard let itemRange = item.dateRange, let itemSamples = item.samples else { continue }
+
+            // if item is entirely inside the segment (or identical to), delete the item
+            if segment.dateRange.contains(itemRange) {
+                print("extractItem() itemsToDelete.append(item)")
+                itemsToDelete.append(item)
+                continue
+            }
+
+            // break prev edges inside the segment's range
+            if segment.dateRange.contains(itemRange.start) {
+                prevEdgesToBreak.append(item)
+            }
+
+            // break next edges inside the segment's range
+            if segment.dateRange.contains(itemRange.end) {
+                nextEdgesToBreak.append(item)
+            }
+
+            // if segment is entirely inside the item (and not identical to), split the item
+            if itemRange.start < segment.dateRange.start && itemRange.end > segment.dateRange.end {
+                let afterSamples = itemSamples.filter { $0.date > segment.dateRange.end }
+                nextEdgesToBreak.append(item)
+                let afterItem = try await TimelineItem.createItem(from: afterSamples, isVisit: item.isVisit)
+                itemsToHeal.append(afterItem)
+            }
+        }
+
+        // create the new item
+        let newItem = try await TimelineItem.createItem(from: segment.samples, isVisit: isVisit)
+        itemsToHeal.append(newItem)
+
+        // perform database operations
+        try await Database.pool.write { [prevEdgesToBreak, nextEdgesToBreak, itemsToDelete] db in
+            for var item in itemsToDelete {
+                try item.base.updateChanges(db) {
+                    $0.deleted = true
+                }
+            }
+            for var item in prevEdgesToBreak {
+                try item.base.updateChanges(db) {
+                    $0.previousItemId = nil
+                }
+            }
+            for var item in nextEdgesToBreak {
+                try item.base.updateChanges(db) {
+                    $0.nextItemId = nil
+                }
+            }
+        }
+
+        // heal edges
+        for item in itemsToHeal {
+            // try await healEdges(of: item)
+        }
+
+        // update current item if necessary
+        TimelineRecorder.highlander.updateCurrentItemId()
+
+        return newItem
+    }
+
 }
