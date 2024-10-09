@@ -156,7 +156,9 @@ public final class LocomotionManager: @unchecked Sendable {
             recordingState: recordingState,
             location: location
         )
-        sample.stepHz = stepHz
+
+        // store nil as zero, because CMPedometer returns nil while stationary
+        sample.stepHz = stepHz ?? 0
 
         if let wiggles = accelerometerSampler.currentAccelerationData() {
             sample.xyAcceleration = wiggles.xyMean + (wiggles.xySD * 3)
