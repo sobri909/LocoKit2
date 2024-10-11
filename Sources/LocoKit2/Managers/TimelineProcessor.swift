@@ -12,8 +12,6 @@ import GRDB
 @TimelineActor
 public final class TimelineProcessor {
 
-    public static let highlander = TimelineProcessor()
-
     public static let debugLogging = true
     
     public static let maximumModeShiftSpeed = CLLocationSpeed(kmh: 2)
@@ -47,7 +45,7 @@ public final class TimelineProcessor {
         var lastResult: MergeResult?
         do {
             while true {
-                try await highlander.sanitiseEdges(for: list)
+                try await sanitiseEdges(for: list)
 
                 let merges = try await collectPotentialMerges(for: list)
                     .sorted { $0.score.rawValue > $1.score.rawValue }
@@ -189,32 +187,28 @@ public final class TimelineProcessor {
 
     // MARK: - Edge cleansing
 
-    private var alreadyMovedSamples: Set<LocomotionSample> = []
-
-    private func sanitiseEdges(for list: TimelineLinkedList) async throws {
+    private static func sanitiseEdges(for list: TimelineLinkedList) async throws {
         print("TimelineProcessor.sanitiseEdges(for:)")
 
-        var allMoved: Set<LocomotionSample> = []
+        var alreadyMoved: Set<LocomotionSample> = []
         var processedItemIds = Set<String>()
 
         for itemId in list.itemIds {
             if processedItemIds.contains(itemId) { continue }
 
-            let moved = try await sanitiseEdges(forItemId: itemId, in: list, excluding: alreadyMovedSamples)
+            let moved = try await sanitiseEdges(forItemId: itemId, in: list, excluding: alreadyMoved)
 
-            allMoved.formUnion(moved)
+            alreadyMoved.formUnion(moved)
             processedItemIds.insert(itemId)
         }
 
-        if TimelineProcessor.debugLogging, !allMoved.isEmpty {
-            logger.info("sanitiseEdges() moved \(allMoved.count) samples")
+        if TimelineProcessor.debugLogging, !alreadyMoved.isEmpty {
+            logger.info("sanitiseEdges() moved \(alreadyMoved.count) samples")
         }
-
-        alreadyMovedSamples = allMoved
     }
 
-    private func sanitiseEdges(forItemId itemId: String, in list: TimelineLinkedList,
-                               excluding: Set<LocomotionSample> = []) async throws -> Set<LocomotionSample> {
+    private static func sanitiseEdges(forItemId itemId: String, in list: TimelineLinkedList,
+                                      excluding: Set<LocomotionSample> = []) async throws -> Set<LocomotionSample> {
         var allMoved: Set<LocomotionSample> = []
         let maximumEdgeSteals = 30
 
@@ -243,8 +237,8 @@ public final class TimelineProcessor {
         return allMoved
     }
 
-    private func edgeSteal(forItemId itemId: String, otherItemId: String, in list: TimelineLinkedList,
-                             excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
+    private static func edgeSteal(forItemId itemId: String, otherItemId: String, in list: TimelineLinkedList,
+                                  excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard let item = await list.itemFor(itemId: itemId),
               let otherItem = await list.itemFor(itemId: otherItemId) else {
             return nil
@@ -265,8 +259,8 @@ public final class TimelineProcessor {
         }
     }
 
-    private func edgeSteal(forTripItem tripItem: TimelineItem, otherTrip: TimelineItem, in list: TimelineLinkedList,
-                                 excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
+    private static func edgeSteal(forTripItem tripItem: TimelineItem, otherTrip: TimelineItem, in list: TimelineLinkedList,
+                                  excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard let trip = tripItem.trip, otherTrip.isTrip else { return nil }
 
         guard let activityType = trip.activityType,
@@ -291,8 +285,8 @@ public final class TimelineProcessor {
         return nil
     }
 
-    private func edgeSteal(forVisitItem visitItem: TimelineItem, tripItem: TimelineItem, in list: TimelineLinkedList,
-                             excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
+    private static func edgeSteal(forVisitItem visitItem: TimelineItem, tripItem: TimelineItem, in list: TimelineLinkedList,
+                                  excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard let visit = visitItem.visit, tripItem.isTrip else { return nil }
 
         guard let visitEdge = try visitItem.edgeSample(withOtherItemId: tripItem.id),
@@ -321,7 +315,7 @@ public final class TimelineProcessor {
         return nil
     }
 
-    private func moveSample(_ sample: LocomotionSample, to destinationItemId: String) async throws {
+    private static func moveSample(_ sample: LocomotionSample, to destinationItemId: String) async throws {
         try await Database.pool.write { db in
             var mutableSample = sample
             try mutableSample.updateChanges(db) {
