@@ -106,7 +106,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         self.radiusSD = radius.sd
     }
 
-    private static func calculateBoundedRadius(of locations: [CLLocation], from center: CLLocation) -> Radius {
+    internal static func calculateBoundedRadius(of locations: [CLLocation], from center: CLLocation) -> Radius {
         let radius = locations.radius(from: center)
         let boundedMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
         let boundedSD = min(radius.sd, Self.maxRadius)

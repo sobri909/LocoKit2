@@ -6,13 +6,17 @@
 //
 
 import Foundation
+import CoreLocation
 import GRDB
 
-public struct ItemSegment: Hashable, Sendable {
+public struct ItemSegment: Hashable, Identifiable, Sendable {
+    public let id = UUID()
     public let samples: [LocomotionSample]
     public let dateRange: DateInterval
 
-    init?(samples: [LocomotionSample]) {
+    // MARK: - Init
+
+    public init?(samples: [LocomotionSample]) {
         if samples.isEmpty {
             return nil
         }
@@ -24,6 +28,24 @@ public struct ItemSegment: Hashable, Sendable {
 
         self.samples = samples.sorted { $0.date < $1.date }
         self.dateRange = DateInterval(start: startDate, end: endDate)
+    }
+
+    // MARK: - Computed properties
+
+    public var coordinates: [CLLocationCoordinate2D] {
+        return samples.compactMap { $0.coordinate }.filter { $0.isUsable }
+    }
+
+    public var center: CLLocationCoordinate2D? {
+        let usableLocations = samples.compactMap { $0.location }.usableLocations()
+        return usableLocations.weightedCenter()
+    }
+
+    public var radius: Radius? {
+        guard let center else { return nil }
+        let usableLocations = samples.compactMap { $0.location }.usableLocations()
+        let location = CLLocation(latitude: center.latitude, longitude: center.longitude)
+        return TimelineItemVisit.calculateBoundedRadius(of: usableLocations, from: location)
     }
 
     // MARK: - Validity
