@@ -10,13 +10,6 @@ import CoreLocation
 import Combine
 @preconcurrency import GRDB
 
-public enum TimelineError: Error {
-    case samplesNotLoaded
-    case itemNotFound
-    case invalidItem(String)
-    case invalidSegment(String)
-}
-
 public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
 
     public var base: TimelineItemBase
