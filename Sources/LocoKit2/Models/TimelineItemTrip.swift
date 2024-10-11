@@ -67,11 +67,8 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         let activityTypes = samples.compactMap { $0.activityType }
         let movingActivityTypes = activityTypes.filter(\.isMovingType)
 
-        if !movingActivityTypes.isEmpty { // prefer mode moving type
-            return movingActivityTypes.mode()
-        } else {
-            return activityTypes.filter(\.isMovingType).mode() ?? .stationary
-        }
+        // prefer mode moving type
+        return movingActivityTypes.mode() ?? activityTypes.mode()
     }
 
 }
