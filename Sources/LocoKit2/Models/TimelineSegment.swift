@@ -56,12 +56,12 @@ public final class TimelineSegment: Sendable {
     private func fetchItems() async {
         do {
             let items = try await Database.pool.read { [dateRange] in
-                let request = TimelineItemBase
-                    .including(optional: TimelineItemBase.visit)
-                    .including(optional: TimelineItemBase.trip)
+                return try TimelineItem
+                    .itemRequest(includeSamples: false)
+                    .filter(Column("deleted") == false && Column("disabled") == false)
                     .filter(Column("endDate") > dateRange.start && Column("startDate") < dateRange.end)
                     .order(Column("endDate").desc)
-                return try TimelineItem.fetchAll($0, request)
+                    .fetchAll($0)
             }
             await update(from: items)
 
