@@ -87,7 +87,8 @@ internal final class Merge: Hashable, Sendable {
                     mutableKeeper.base.nextItemId = mutableDeadman.base.nextItemId
 
                 } else {
-                    fatalError()
+                    logger.error("Merge no longer valid", subsystem: .timeline)
+                    return nil
                 }
 
                 /** deal with a betweener **/
