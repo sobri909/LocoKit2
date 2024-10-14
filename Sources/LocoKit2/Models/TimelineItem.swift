@@ -45,6 +45,32 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return samples?.compactMap { $0.coordinate }.filter { $0.isUsable }
     }
 
+    public var startTimeZone: TimeZone? {
+        return samples?.first?.localTimeZone
+    }
+
+    public var endTimeZone: TimeZone? {
+        return samples?.last?.localTimeZone
+    }
+
+    // MARK: - Relationships
+
+    @TimelineActor
+    public func previousItem(in list: TimelineLinkedList) async -> TimelineItem? {
+        return await list.previousItem(for: self)
+    }
+
+    @TimelineActor
+    public func nextItem(in list: TimelineLinkedList) async -> TimelineItem? {
+        return await list.nextItem(for: self)
+    }
+
+    // TODO: the db does this now with triggers. bad form to do it here too?
+    public mutating func breakEdges() {
+        base.previousItemId = nil
+        base.nextItemId = nil
+    }
+
     // MARK: -
 
     public var isValid: Bool {
@@ -119,6 +145,8 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
+    // MARK: - Display strings
+
     public var typeString: String {
         get throws {
             if try isDataGap { return "datagap" }
@@ -155,23 +183,38 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
-    // MARK: - Relationships
-
-    @TimelineActor
-    public func previousItem(in list: TimelineLinkedList) async -> TimelineItem? {
-        return await list.previousItem(for: self)
+    public func startString(dateStyle: DateFormatter.Style = .none, timeStyle: DateFormatter.Style = .short, relative: Bool = false) -> String? {
+        guard let startDate = dateRange?.start else { return nil }
+        return Self.dateString(
+            for: startDate,
+            timeZone: startTimeZone ?? TimeZone.current,
+            dateStyle: dateStyle,
+            timeStyle: timeStyle,
+            relative: relative
+        )
     }
 
-    @TimelineActor
-    public func nextItem(in list: TimelineLinkedList) async -> TimelineItem? {
-        return await list.nextItem(for: self)
+    public func endString(dateStyle: DateFormatter.Style = .none, timeStyle: DateFormatter.Style = .short, relative: Bool = false) -> String? {
+        guard let endDate = dateRange?.end else { return nil }
+        return Self.dateString(
+            for: endDate,
+            timeZone: endTimeZone ?? TimeZone.current,
+            dateStyle: dateStyle,
+            timeStyle: timeStyle,
+            relative: relative
+        )
     }
 
-    // TODO: the db does this now with triggers. bad form to do it here too?
-    public mutating func breakEdges() {
-        base.previousItemId = nil
-        base.nextItemId = nil
+    public static func dateString(for date: Date, timeZone: TimeZone = TimeZone.current, dateStyle: DateFormatter.Style = .none,
+                    timeStyle: DateFormatter.Style = .short, relative: Bool = false) -> String? {
+        dateFormatter.timeZone = timeZone
+        dateFormatter.doesRelativeDateFormatting = relative
+        dateFormatter.dateStyle = dateStyle
+        dateFormatter.timeStyle = timeStyle
+        return dateFormatter.string(from: date)
     }
+
+    static let dateFormatter = DateFormatter()
 
     // MARK: - Item creation
 
@@ -308,7 +351,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
-    // MARK: - Timeline processing
+    // MARK: - Timeline processing helpers
 
     @TimelineActor
     public func scoreForConsuming(_ item: TimelineItem) -> ConsumptionScore {

@@ -59,6 +59,10 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     // TODO: needs to us correct calendar based on secondsFromGMT
     public var timeOfDay: TimeInterval { date.sinceStartOfDay() }
 
+    public var localTimeZone: TimeZone? { TimeZone(secondsFromGMT: secondsFromGMT) }
+
+    // MARK: -
+
     internal var coreMLFeatureProvider: CoreMLFeatureProvider {
         return CoreMLFeatureProvider(
             stepHz: stepHz,
