@@ -11,10 +11,11 @@ import GRDB
 
 public struct ItemSegment: Hashable, Identifiable, Sendable {
     
-    public let id = UUID()
     public let samples: [LocomotionSample]
     public let dateRange: DateInterval
     public var manualActivityType: ActivityType?
+
+    public var id: String { samples.first!.id }
 
     // MARK: - Init
 
