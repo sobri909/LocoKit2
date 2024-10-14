@@ -4,7 +4,7 @@
 //  Created by Matt Greenfield on 12/10/17.
 //
 
-public enum ActivityType: Int, CaseIterable, Codable, Sendable {
+public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
 
     // MARK: - Special types
 
