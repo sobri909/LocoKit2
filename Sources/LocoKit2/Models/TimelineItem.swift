@@ -65,12 +65,6 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return await list.nextItem(for: self)
     }
 
-    // TODO: the db does this now with triggers. bad form to do it here too?
-    public mutating func breakEdges() {
-        base.previousItemId = nil
-        base.nextItemId = nil
-    }
-
     // MARK: -
 
     public var isValid: Bool {

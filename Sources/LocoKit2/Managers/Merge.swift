@@ -36,6 +36,7 @@ internal final class Merge: Hashable, Sendable {
 
     private static func isValid(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> Bool {
         if keeper.deleted || deadman.deleted || betweener?.deleted == true { return false }
+        if keeper.disabled || deadman.disabled || betweener?.disabled == true { return false }
 
         if let betweener {
             // keeper -> betweener -> deadman
@@ -62,85 +63,60 @@ internal final class Merge: Hashable, Sendable {
             }
         }
 
+        var mutableKeeper = keeper
         let keeperPrevious = await keeper.previousItem(in: list)
         let keeperNext = await keeper.nextItem(in: list)
         guard let deadmanSamples = deadman.samples else { fatalError() }
 
         if let betweener {
-            keeper.willConsume(betweener)
+            mutableKeeper.willConsume(betweener)
         }
-        keeper.willConsume(deadman)
+        mutableKeeper.willConsume(deadman)
+
+        var samplesToMove: Set<LocomotionSample> = []
+        var itemsToDelete: Set<TimelineItem> = []
+
+        // deadman is previous
+        if keeperPrevious == self.deadman || (betweener != nil && keeperPrevious == betweener) {
+            mutableKeeper.base.previousItemId = deadman.base.previousItemId
+
+            // deadman is next
+        } else if keeperNext == self.deadman || (betweener != nil && keeperNext == betweener) {
+            mutableKeeper.base.nextItemId = deadman.base.nextItemId
+
+        } else {
+            logger.error("Merge no longer valid", subsystem: .timeline)
+            return nil
+        }
+
+        /** deal with a betweener **/
+
+        if let betweener, let betweenerSamples = betweener.samples {
+            samplesToMove.formUnion(betweenerSamples)
+            itemsToDelete.insert(betweener)
+        }
+
+        /** deal with the deadman **/
+
+        samplesToMove.formUnion(deadmanSamples)
+        itemsToDelete.insert(deadman)
 
         do {
-            return try await Database.pool.write {
-                var mutableKeeper = self.keeper
-                var mutableBetweener = self.betweener
-                var mutableDeadman = self.deadman
-                var samplesToMove: Set<LocomotionSample> = []
-
-                // deadman is previous
-                if keeperPrevious == self.deadman || (mutableBetweener != nil && keeperPrevious == mutableBetweener) {
-                    mutableKeeper.base.previousItemId = mutableDeadman.base.previousItemId
-
-                    // deadman is next
-                } else if keeperNext == self.deadman || (mutableBetweener != nil && keeperNext == mutableBetweener) {
-                    mutableKeeper.base.nextItemId = mutableDeadman.base.nextItemId
-
-                } else {
-                    logger.error("Merge no longer valid", subsystem: .timeline)
-                    return nil
-                }
-
-                /** deal with a betweener **/
-
-                if let betweenerSamples = mutableBetweener?.samples {
-
-                    // reassign betweener samples
-                    for sample in betweenerSamples where !sample.disabled {
-                        samplesToMove.insert(sample)
-                    }
-
-                    // TODO: move to the updateChanges below?
-                    if betweenerSamples.contains(where: { $0.disabled }) {
-                        mutableBetweener?.base.disabled = true
-                    } else {
-                        mutableBetweener?.base.deleted = true
-                    }
-
-                    mutableBetweener?.breakEdges()
-                }
-
-                /** deal with the deadman **/
-
-                // reassign deadman samples
-                for sample in deadmanSamples where !sample.disabled {
-                    samplesToMove.insert(sample)
-                }
-
-                if deadmanSamples.contains(where: { $0.disabled }) {
-                    mutableDeadman.base.disabled = true
-                } else {
-                    mutableDeadman.base.deleted = true
-                }
-                mutableDeadman.breakEdges()
-
-                /** save the updated values **/
-
-                try mutableKeeper.base.updateChanges($0, from: self.keeper.base)
-                try mutableBetweener?.base.updateChanges($0, from: self.betweener!.base)
-                try mutableDeadman.base.updateChanges($0, from: self.deadman.base)
+            try await Database.pool.write { [mutableKeeper, samplesToMove, itemsToDelete] db in
+                try mutableKeeper.base.updateChanges(db, from: self.keeper.base)
                 for var sample in samplesToMove {
-                    try sample.updateChanges($0) {
+                    try sample.updateChanges(db) {
                         $0.timelineItemId = self.keeper.id
                     }
                 }
-
-                if let mutableBetweener {
-                    return (kept: mutableKeeper, killed: [mutableDeadman, mutableBetweener])
-                } else {
-                    return (kept: mutableKeeper, killed: [mutableDeadman])
+                for var item in itemsToDelete {
+                    try item.base.updateChanges(db) {
+                        $0.deleted = true
+                    }
                 }
             }
+
+            return (kept: mutableKeeper, killed: [deadman, betweener].compactMap { $0 })
 
         } catch {
             logger.error(error, subsystem: .database)
