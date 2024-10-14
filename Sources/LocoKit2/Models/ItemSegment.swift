@@ -10,13 +10,15 @@ import CoreLocation
 import GRDB
 
 public struct ItemSegment: Hashable, Identifiable, Sendable {
+    
     public let id = UUID()
     public let samples: [LocomotionSample]
     public let dateRange: DateInterval
+    public var manualActivityType: ActivityType?
 
     // MARK: - Init
 
-    public init?(samples: [LocomotionSample]) {
+    public init?(samples: [LocomotionSample], manualActivityType: ActivityType? = nil) {
         if samples.isEmpty {
             return nil
         }
@@ -28,6 +30,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
 
         self.samples = samples.sorted { $0.date < $1.date }
         self.dateRange = DateInterval(start: startDate, end: endDate)
+        self.manualActivityType = manualActivityType
     }
 
     // MARK: - Computed properties
@@ -65,7 +68,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
     // MARK: - ActivityTypes
 
     public var activityType: ActivityType? {
-        return samples.first?.activityType
+        return manualActivityType ?? samples.first?.activityType
     }
 
     public func confirmActivityType(_ confirmedType: ActivityType) async {
@@ -84,4 +87,5 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
             logger.error(error, subsystem: .database)
         }
     }
+
 }
