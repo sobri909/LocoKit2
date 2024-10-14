@@ -377,6 +377,20 @@ public final class Database: @unchecked Sendable {
                 END;
                 """)
 
+            // prevent deletion of items that still have samples
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_deleted_SET
+                BEFORE UPDATE OF deleted ON TimelineItemBase
+                WHEN NEW.deleted = 1 AND OLD.deleted = 0
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot delete TimelineItem with existing samples')
+                    WHERE EXISTS (
+                        SELECT 1 FROM LocomotionSample WHERE timelineItemId = OLD.id
+                    );
+                END;
+                """)
+
             // MARK: - AFTER INSERT TimelineItemBase
 
             /** keep nextItemId and previousItemId links correct */
