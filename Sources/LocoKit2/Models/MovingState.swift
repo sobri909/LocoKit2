@@ -14,11 +14,7 @@ public enum MovingState: Int, Codable, Sendable {
     case moving     = 1
 
     public var stringValue: String {
-        switch self {
-        case .uncertain:  return "uncertain"
-        case .stationary: return "stationary"
-        case .moving:     return "moving"
-        }
+        String(describing: self)
     }
 }
 
