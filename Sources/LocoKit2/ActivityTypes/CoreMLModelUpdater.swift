@@ -318,7 +318,7 @@ public final class CoreMLModelUpdater {
             includedTypes.insert(sample.confirmedActivityType!)
 
             var line = ""
-            line += "\(confirmedActivityType),\(stepHz),\(xyAcceleration),\(zAcceleration),\(sample.movingState.rawValue),"
+            line += "\(confirmedActivityType.rawValue),\(stepHz),\(xyAcceleration),\(zAcceleration),\(sample.movingState.rawValue),"
             line += "\(location.verticalAccuracy),\(location.horizontalAccuracy),\(location.speed),\(location.course),"
             line += "\(location.coordinate.latitude),\(location.coordinate.longitude),\(location.altitude),"
             line += "\(sample.timeOfDay),\(sample.sinceVisitStart)"
