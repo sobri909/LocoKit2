@@ -264,11 +264,15 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
             return ClassifierResults(resultItems: [])
         }
         let input = sample.coreMLFeatureProvider
-        let output = try? model.prediction(from: input, options: MLPredictionOptions())
-        if let output {
+
+        do {
+            let output = try model.prediction(from: input, options: MLPredictionOptions())
             return results(for: output)
+
+        } catch {
+            logger.error(error, subsystem: .activitytypes)
+            return ClassifierResults(resultItems: [])
         }
-        return ClassifierResults(resultItems: [])
     }
 
     public func contains(coordinate: CLLocationCoordinate2D) -> Bool {
