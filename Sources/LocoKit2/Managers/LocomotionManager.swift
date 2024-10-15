@@ -69,7 +69,7 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Recording states
 
     public func startRecording() {
-        if recordingState.isCurrentRecorder { return }
+        if recordingState == .recording { return }
 
         logger.info("LocomotionManager.startRecording()")
 
