@@ -14,10 +14,9 @@ class CoreMLFeatureProvider: MLFeatureProvider {
     var stepHz: Double?
     var xyAcceleration: Double?
     var zAcceleration: Double?
-    var movingState: String
+    var movingState: Int
     var verticalAccuracy: Double?
     var horizontalAccuracy: Double?
-    var courseVariance: Double?
     var speed: Double?
     var course: Double?
     var latitude: Double?
@@ -31,7 +30,7 @@ class CoreMLFeatureProvider: MLFeatureProvider {
             return [
                 "stepHz", "xyAcceleration", "zAcceleration", "movingState",
                 "verticalAccuracy", "horizontalAccuracy",
-                "courseVariance", "speed", "course",
+                "speed", "course",
                 "latitude", "longitude", "altitude",
                 "timeOfDay", "sinceVisitStart"
             ]
@@ -49,16 +48,13 @@ class CoreMLFeatureProvider: MLFeatureProvider {
             return MLFeatureValue(double: zAcceleration ?? -1)
         }
         if (featureName == "movingState") {
-            return MLFeatureValue(string: movingState)
+            return MLFeatureValue(int64: Int64(movingState))
         }
         if (featureName == "verticalAccuracy") {
             return MLFeatureValue(double: verticalAccuracy ?? -1)
         }
         if (featureName == "horizontalAccuracy") {
             return MLFeatureValue(double: horizontalAccuracy ?? -1)
-        }
-        if (featureName == "courseVariance") {
-            return MLFeatureValue(double: courseVariance ?? -1)
         }
         if (featureName == "speed") {
             return MLFeatureValue(double: speed ?? -1)
@@ -85,9 +81,9 @@ class CoreMLFeatureProvider: MLFeatureProvider {
     }
 
     init(
-        stepHz: Double?, xyAcceleration: Double?, zAcceleration: Double?, movingState: String,
+        stepHz: Double?, xyAcceleration: Double?, zAcceleration: Double?, movingState: Int,
         verticalAccuracy: Double?, horizontalAccuracy: Double?,
-        courseVariance: Double?, speed: Double?, course: Double?,
+        speed: Double?, course: Double?,
         latitude: Double?, longitude: Double?, altitude: Double?,
         timeOfDay: Double, sinceVisitStart: Double
     ) {
@@ -97,7 +93,6 @@ class CoreMLFeatureProvider: MLFeatureProvider {
         self.movingState = movingState
         self.verticalAccuracy = verticalAccuracy
         self.horizontalAccuracy = horizontalAccuracy
-        self.courseVariance = courseVariance
         self.speed = speed
         self.course = course
         self.latitude = latitude
