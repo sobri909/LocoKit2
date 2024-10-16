@@ -102,6 +102,18 @@ public final class Database: @unchecked Sendable {
                 table.column("longitude", .double).notNull()
                 table.column("radiusMean", .double).notNull()
                 table.column("radiusSD", .double).notNull()
+                table.column("secondsFromGMT", .integer).notNull()
+                table.column("name", .text).notNull().indexed()
+
+                table.column("mapboxPlaceId", .text).indexed()
+                table.column("mapboxCategory", .text)
+                table.column("mapboxMakiIcon", .text)
+
+                table.column("googlePlaceId", .text).indexed()
+                table.column("googlePrimaryType", .text)
+
+                table.column("foursquarePlaceId", .text).indexed()
+                table.column("foursquareCategoryId", .integer)
             }
 
             try db.create(
