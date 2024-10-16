@@ -54,13 +54,13 @@ public final class TimelineProcessor {
                     if merges.isEmpty {
                         logger.info("Considering 0 merges")
                     } else {
-                        do {
-                            let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
-                            logger.info("Considering \(merges.count) merges")
+                        logger.info("Considering \(merges.count) merges")
+//                        do {
+//                            let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
 //                            logger.info("Considering \(merges.count) merges:\n\(descriptions)")
-                        } catch {
-                            logger.error(error, subsystem: .timeline)
-                        }
+//                        } catch {
+//                            logger.error(error, subsystem: .timeline)
+//                        }
                     }
                 }
 
