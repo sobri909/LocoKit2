@@ -561,6 +561,69 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return nil
     }
 
+    // MARK: - Activity type
+
+    public mutating func changeActivityType(to confirmedType: ActivityType) async throws {
+        guard let samples else {
+            throw TimelineError.samplesNotLoaded
+        }
+
+        var samplesToConfirm: [LocomotionSample] = []
+
+        for sample in samples {
+            // let confident stationary samples survive
+            if sample.hasUsableCoordinate, sample.activityType == .stationary {
+                if let typeScore = await sample.classifierResults?[.stationary]?.score, typeScore > 0.5 {
+                    continue
+                }
+            }
+
+            // let manual bogus samples survive
+            if sample.confirmedActivityType == .bogus { continue }
+
+            samplesToConfirm.append(sample)
+        }
+
+        if !samplesToConfirm.isEmpty {
+            do {
+                try await Database.pool.write { [samplesToConfirm] db in
+                    for var sample in samplesToConfirm {
+                        try sample.updateChanges(db) {
+                            $0.confirmedActivityType = confirmedType
+                        }
+                    }
+                }
+
+            } catch {
+                logger.error(error, subsystem: .database)
+                return
+            }
+
+            // queue updates for the ML models
+            await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(samplesToConfirm)
+
+            // samples have changed yo
+            await fetchSamples()
+        }
+
+        // if we're forcing it to stationary, extract all the stationary segments
+        if confirmedType == .stationary, let segments {
+            var newItems: [TimelineItem] = []
+            for segment in segments where segment.activityType == .stationary {
+                if let newItem = try await TimelineProcessor.extractItem(for: segment, isVisit: true) {
+                    newItems.append(newItem)
+                }
+            }
+
+            // cleanup after all that damage
+            await TimelineProcessor.process(newItems)
+
+        } else {
+            // need to reprocess from self after the changes
+            await TimelineProcessor.processFrom(itemId: self.id)
+        }
+    }
+
     // MARK: - Updating Visit and Trip
 
     private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
