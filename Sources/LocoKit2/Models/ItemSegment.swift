@@ -49,7 +49,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
         guard let center else { return nil }
         let usableLocations = samples.compactMap { $0.location }.usableLocations()
         let location = CLLocation(latitude: center.latitude, longitude: center.longitude)
-        return TimelineItemVisit.calculateBoundedRadius(of: usableLocations, from: location)
+        return usableLocations.radius(from: location)
     }
 
     // MARK: - Validity
