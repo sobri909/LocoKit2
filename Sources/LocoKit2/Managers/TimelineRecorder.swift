@@ -190,9 +190,8 @@ public final class TimelineRecorder: @unchecked Sendable {
         var sample = await loco.createASample()
 
         do {
-            let sampleCopy = sample
-            try await Database.pool.write {
-                try sampleCopy.save($0)
+            try await Database.pool.write { [sample] in
+                try sample.save($0)
             }
             
             await processSample(&sample)
