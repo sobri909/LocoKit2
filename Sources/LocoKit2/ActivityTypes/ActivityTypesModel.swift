@@ -68,6 +68,13 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         }
 
         if let model = try? Database.pool.read({ try request.fetchOne($0) }) {
+
+            // TODO: this shouldn't be here
+            if model.needsUpdate {
+                let geoKey = model.geoKey
+                Task { await CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
+            }
+
             return model
         }
 
