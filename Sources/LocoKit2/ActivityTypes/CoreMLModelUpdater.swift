@@ -41,7 +41,10 @@ public final class CoreMLModelUpdater {
             models.insert(ActivityTypesModel.fetchModelFor(coordinate: coordinate, depth: 0))
         }
 
+        print("queueUpdatesForModelsContaining(samples:) models: \(models.count)")
+
         for model in models {
+            print("queueUpdatesForModelsContaining(samples:) model: \(model.geoKey)")
             model.needsUpdate = true
             model.save()
         }
