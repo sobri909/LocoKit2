@@ -74,15 +74,18 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
 
     public func confirmActivityType(_ confirmedType: ActivityType) async {
         do {
-            try await Database.pool.write { db in
+            let changedSamples = try await Database.pool.write { db in
+                var changed: [LocomotionSample] = []
                 for var sample in samples where sample.confirmedActivityType != confirmedType {
                     try sample.updateChanges(db) {
                         $0.confirmedActivityType = confirmedType
                     }
+                    changed.append(sample)
                 }
+                return changed
             }
 
-            await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(samples)
+            await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(changedSamples)
 
         } catch {
             logger.error(error, subsystem: .database)

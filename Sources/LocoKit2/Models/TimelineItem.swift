@@ -273,8 +273,8 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // MARK: - Sample fetching
 
-    public mutating func fetchSamples() async {
-        guard samplesChanged || samples == nil else {
+    public mutating func fetchSamples(forceFetch: Bool = false) async {
+        guard forceFetch || samplesChanged || samples == nil else {
             print("[\(debugShortId)] fetchSamples() skipping; no reason to fetch")
             return
         }
@@ -370,24 +370,27 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
         if !samplesToConfirm.isEmpty {
             do {
-                try await Database.pool.write { [samplesToConfirm] db in
-                    for var sample in samplesToConfirm {
+                let changedSamples = try await Database.pool.write { [samplesToConfirm] db in
+                    var changed: [LocomotionSample] = []
+                    for var sample in samplesToConfirm where sample.confirmedActivityType != confirmedType {
                         try sample.updateChanges(db) {
                             $0.confirmedActivityType = confirmedType
                         }
+                        changed.append(sample)
                     }
+                    return changed
                 }
+
+                // queue updates for the ML models
+                await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(changedSamples)
+
+                // samples have changed yo
+                await fetchSamples(forceFetch: true)
 
             } catch {
                 logger.error(error, subsystem: .database)
                 return
             }
-
-            // queue updates for the ML models
-            await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(samplesToConfirm)
-
-            // samples have changed yo
-            await fetchSamples()
         }
 
         // if we're forcing it to stationary, extract all the stationary segments
