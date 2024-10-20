@@ -206,6 +206,8 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         case stepHz
         case xyAcceleration
         case zAcceleration
+
+        case rtreeId
     }
 
 }
