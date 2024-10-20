@@ -101,8 +101,8 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
     internal convenience init(coordinate: CLLocationCoordinate2D, depth: Int) {
         self.init(
             depth: depth,
-            latitudeRange: Self.latitudeRangeFor(depth: 0, coordinate: coordinate),
-            longitudeRange: Self.longitudeRangeFor(depth: 0, coordinate: coordinate)
+            latitudeRange: Self.latitudeRangeFor(depth: depth, coordinate: coordinate),
+            longitudeRange: Self.longitudeRangeFor(depth: depth, coordinate: coordinate)
         )
     }
 
