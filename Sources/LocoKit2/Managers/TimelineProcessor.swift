@@ -52,9 +52,9 @@ public final class TimelineProcessor {
 
                 if TimelineProcessor.debugLogging {
                     if merges.isEmpty {
-                        logger.info("Considering 0 merges")
+                        logger.info("Considering 0 merges", subsystem: .timeline)
                     } else {
-                        logger.info("Considering \(merges.count) merges")
+                        logger.info("Considering \(merges.count) merges", subsystem: .timeline)
 //                        do {
 //                            let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
 //                            logger.info("Considering \(merges.count) merges:\n\(descriptions)")
@@ -203,7 +203,7 @@ public final class TimelineProcessor {
         }
 
         if TimelineProcessor.debugLogging, !alreadyMoved.isEmpty {
-            logger.info("sanitiseEdges() moved \(alreadyMoved.count) samples")
+            logger.info("sanitiseEdges() moved \(alreadyMoved.count) samples", subsystem: .timeline)
         }
     }
 

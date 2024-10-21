@@ -184,9 +184,9 @@ public final class AppGroup: @unchecked Sendable {
         LocomotionManager.highlander.startStandby()
 
         if let activeRecorder {
-            logger.info("concededRecording to \(activeRecorder)", subsystem: .misc)
+            logger.info("concededRecording to \(activeRecorder)", subsystem: .timeline)
         } else {
-            logger.info("concededRecording", subsystem: .misc)
+            logger.info("concededRecording", subsystem: .timeline)
         }
     }
 

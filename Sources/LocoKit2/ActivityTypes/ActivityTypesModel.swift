@@ -80,7 +80,7 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
 
         // create if missing
         let model = ActivityTypesModel(coordinate: coordinate, depth: depth)
-        logger.info("NEW CORE ML MODEL: [\(model.geoKey)]")
+        logger.info("New Core ML model: [\(model.geoKey)]", subsystem: .activitytypes)
         model.needsUpdate = true
         model.save()
 
@@ -173,7 +173,7 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
             if !needsUpdate {
                 needsUpdate = true
                 save()
-                logger.info("[\(self.geoKey)] Queued update, because missing model file")
+                print("[\(self.geoKey)] Queued update, because missing model file")
             }
             return nil
         }

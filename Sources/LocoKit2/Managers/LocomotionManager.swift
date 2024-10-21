@@ -71,7 +71,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func startRecording() {
         if recordingState == .recording { return }
 
-        logger.info("LocomotionManager.startRecording()")
+        print("LocomotionManager.startRecording()")
 
         recordingState = .recording
 
@@ -89,7 +89,7 @@ public final class LocomotionManager: @unchecked Sendable {
     }
 
     public func stopRecording() {
-        logger.info("LocomotionManager.stopRecording()")
+        print("LocomotionManager.stopRecording()")
 
         locationManager.stopUpdatingLocation()
         locationManager.stopMonitoringSignificantLocationChanges()
@@ -125,12 +125,10 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Authorisation
 
     public func requestLocationAuthorization() {
-        logger.info("LocomotionManager.requestLocationAuthorization()")
         locationManager.requestAlwaysAuthorization()
     }
 
     public func requestMotionAuthorization() async {
-        logger.info("LocomotionManager.requestMotionAuthorization()")
         await withCheckedContinuation { continuation in
             motionAuthPedometer.queryPedometerData(from: .now - .hours(1), to: .now) { data, error in
                 if let error { logger.error(error, subsystem: .misc) }
@@ -220,7 +218,7 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func startSleeping() {
         if recordingState != .wakeup {
-            logger.info("LocomotionManager.startSleeping()")
+            print("LocomotionManager.startSleeping()")
         }
 
         stopCoreMotion()
@@ -260,7 +258,7 @@ public final class LocomotionManager: @unchecked Sendable {
         guard let appGroup else { return }
         if appGroup.isAnActiveRecorder { return }
         startRecording()
-        logger.info("tookOverRecording", subsystem: .misc)
+        logger.info("tookOverRecording", subsystem: .timeline)
         appGroup.becameCurrentRecorder()
     }
 

@@ -59,7 +59,7 @@ internal final class Merge: Hashable, Sendable {
     func doIt() async -> MergeResult? {
         if TimelineProcessor.debugLogging {
             if let description = try? description {
-                logger.info("Doing:\n\(description)")
+                logger.info("Doing:\n\(description)", subsystem: .timeline)
             }
         }
 
