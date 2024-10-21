@@ -46,7 +46,7 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     }
 
     private static func calculateDistance(from samples: [LocomotionSample]) -> CLLocationDistance {
-        return samples.compactMap { $0.location }.distance() ?? 0
+        return samples.usableLocations().distance() ?? 0
     }
 
     private static func calculateSpeed(from samples: [LocomotionSample], distance: Double) -> CLLocationSpeed {

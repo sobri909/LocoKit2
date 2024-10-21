@@ -43,7 +43,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     // MARK: - Init
 
     init?(itemId: String, samples: [LocomotionSample]) {
-        let usableLocations = samples.compactMap { $0.location }.usableLocations()
+        let usableLocations = samples.usableLocations()
 
         guard let coordinate = usableLocations.weightedCenter() else {
             return nil
@@ -90,7 +90,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     // MARK: - Updating
 
     public mutating func update(from samples: [LocomotionSample]) async {
-        let usableLocations = samples.compactMap { $0.location }.usableLocations()
+        let usableLocations = samples.usableLocations()
 
         guard let coordinate = usableLocations.weightedCenter() else {
             return

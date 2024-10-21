@@ -46,7 +46,11 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     public private(set) var location: CLLocation? = nil
     public var coordinate: CLLocationCoordinate2D? { location?.coordinate }
-    public var hasUsableCoordinate: Bool { location?.hasUsableCoordinate ?? false }
+
+    public var hasUsableCoordinate: Bool {
+        if activityType == .bogus { return false }
+        return location?.hasUsableCoordinate ?? false
+    }
 
     // TODO: hook this up
     public var sinceVisitStart: Double { return 0 }
@@ -225,5 +229,9 @@ public extension Array where Element == LocomotionSample {
             return nil
         }
         return DateInterval(start: start, end: end)
+    }
+
+    func usableLocations() -> [CLLocation] {
+        return filter { $0.hasUsableCoordinate }.compactMap { $0.location }
     }
 }
