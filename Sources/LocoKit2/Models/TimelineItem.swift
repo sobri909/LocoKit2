@@ -411,6 +411,117 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
+    public func cleanupSamples() async {
+        if isVisit {
+            await cleanupVisitSamples()
+        } else {
+            await cleanupTripSamples()
+        }
+    }
+
+    private func cleanupTripSamples() async {
+        guard isTrip, let tripActivityType = trip?.activityType else { return }
+
+        do {
+            let samplesForCleanup = try await tripSamplesForCleanup
+
+            let updatedSamples = try await Database.pool.write { db in
+                var updated: [LocomotionSample] = []
+                for var sample in samplesForCleanup {
+                    try sample.updateChanges(db) {
+                        $0.confirmedActivityType = tripActivityType
+                    }
+                    updated.append(sample)
+                }
+                return updated
+            }
+
+            if !updatedSamples.isEmpty {
+                await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(updatedSamples)
+            }
+
+        } catch {
+            logger.error(error, subsystem: .activitytypes)
+        }
+    }
+
+    private func cleanupVisitSamples() async {
+        guard isVisit, let visit else { return }
+
+        // TODO: if there's a place, use contains() on that instead
+
+        do {
+            let samplesForCleanup = try visitSamplesForCleanup
+
+            let updatedSamples = try await Database.pool.write { db in
+                var updated: [LocomotionSample] = []
+                for var sample in samplesForCleanup {
+                    try sample.updateChanges(db) { sample in
+                        if let location = sample.location {
+                            if visit.contains(location, sd: 3) { // inside radius = stationary
+                                sample.confirmedActivityType = .stationary
+                            } else { // outside place radius = bogus
+                                sample.confirmedActivityType = .bogus
+                            }
+                        } else { // treat nolos as inside the place radius
+                            sample.confirmedActivityType = .stationary
+                        }
+                    }
+                    updated.append(sample)
+                }
+                return updated
+            }
+
+            if !updatedSamples.isEmpty {
+                await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(updatedSamples)
+            }
+
+        } catch {
+            logger.error(error, subsystem: .timeline)
+        }
+    }
+
+    private var tripSamplesForCleanup: [LocomotionSample] {
+        get async throws {
+            guard let samples else {
+                throw TimelineError.samplesNotLoaded
+            }
+
+            guard isTrip, let tripActivityType = trip?.activityType else { return [] }
+
+            var filteredSamples: [LocomotionSample] = []
+            for sample in samples {
+                if sample.confirmedActivityType != nil { continue } // don't mess with already confirmed
+                if sample.activityType == tripActivityType { continue } // don't mess with already matching
+
+                // let confident stationary samples survive
+                if sample.hasUsableCoordinate, sample.activityType == .stationary {
+                    if let typeScore = await sample.classifierResults?[.stationary]?.score, typeScore > 0.5 {
+                        continue
+                    }
+                }
+
+                filteredSamples.append(sample)
+            }
+
+            return filteredSamples
+        }
+    }
+
+    private var visitSamplesForCleanup: [LocomotionSample] {
+        get throws {
+            guard let samples else {
+                throw TimelineError.samplesNotLoaded
+            }
+
+            return samples.filter {
+                if $0.confirmedActivityType != nil { return false } // don't mess with already confirmed
+                if $0.activityType == .stationary { return false } // don't mess with already stationary
+                return true
+            }
+        }
+    }
+
     // MARK: - Updating Visit and Trip
 
     private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
