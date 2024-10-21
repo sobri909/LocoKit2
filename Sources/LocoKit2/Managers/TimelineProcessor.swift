@@ -52,12 +52,12 @@ public final class TimelineProcessor {
 
                 if TimelineProcessor.debugLogging {
                     if merges.isEmpty {
-                        logger.info("Considering 0 merges", subsystem: .timeline)
+                        print("Considering 0 merges")
                     } else {
-                        logger.info("Considering \(merges.count) merges", subsystem: .timeline)
+                        print("Considering \(merges.count) merges")
 //                        do {
 //                            let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
-//                            logger.info("Considering \(merges.count) merges:\n\(descriptions)")
+//                            print("Considering \(merges.count) merges:\n\(descriptions)")
 //                        } catch {
 //                            logger.error(error, subsystem: .timeline)
 //                        }
@@ -188,8 +188,6 @@ public final class TimelineProcessor {
     // MARK: - Edge cleansing
 
     private static func sanitiseEdges(for list: TimelineLinkedList) async throws {
-        print("TimelineProcessor.sanitiseEdges(for:)")
-
         var alreadyMoved: Set<LocomotionSample> = []
         var processedItemIds = Set<String>()
 
@@ -203,7 +201,7 @@ public final class TimelineProcessor {
         }
 
         if TimelineProcessor.debugLogging, !alreadyMoved.isEmpty {
-            logger.info("sanitiseEdges() moved \(alreadyMoved.count) samples", subsystem: .timeline)
+            print("TimelineProcessor.sanitiseEdges(for:) moved \(alreadyMoved.count) samples")
         }
     }
 
