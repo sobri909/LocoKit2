@@ -42,7 +42,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var debugShortId: String { String(id.split(separator: "-")[0]) }
 
     public var coordinates: [CLLocationCoordinate2D]? {
-        return samples?.compactMap { $0.coordinate }.filter { $0.isUsable }
+        return samples?.usableLocations().compactMap { $0.coordinate }
     }
 
     public var startTimeZone: TimeZone? {
