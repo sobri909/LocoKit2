@@ -51,6 +51,19 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
         return samples.usableLocations().radius(from: location)
     }
 
+    public var distance: CLLocationDistance {
+        return samples.usableLocations().distance() ?? 0
+    }
+
+    public var isDataGap: Bool {
+        return !samples.contains { $0.recordingState != .off }
+    }
+
+    public var isNolo: Bool {
+        if activityType == .bogus { return false }
+        return !samples.haveAnyUsableCoordinates()
+    }
+
     // MARK: - Validity
 
     // there's no extra samples either in segment or db for the segment's dateRange
