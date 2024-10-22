@@ -234,4 +234,9 @@ public extension Array where Element == LocomotionSample {
     func usableLocations() -> [CLLocation] {
         return filter { $0.hasUsableCoordinate }.compactMap { $0.location }
     }
+
+    func haveAnyUsableCoordinates() -> Bool {
+        return contains { $0.hasUsableCoordinate }
+    }
+
 }
