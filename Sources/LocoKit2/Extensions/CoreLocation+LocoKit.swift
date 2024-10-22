@@ -34,6 +34,10 @@ public extension CLLocation {
         )
     }
 
+    convenience init(coordinate: CLLocationCoordinate2D) {
+        self.init(latitude: coordinate.latitude, longitude: coordinate.longitude)
+    }
+
     var codable: CodableLocation {
         return CodableLocation(self)
     }
@@ -51,6 +55,7 @@ public extension CLLocationCoordinate2D {
     var isUsable: Bool { !isNullIsland && isValid }
     var isNullIsland: Bool { latitude == 0 && longitude == 0 }
     var isValid: Bool { CLLocationCoordinate2DIsValid(self) }
+    var location: CLLocation { CLLocation(latitude: latitude, longitude: longitude) }
 }
 
 public struct CodableLocation: Codable {

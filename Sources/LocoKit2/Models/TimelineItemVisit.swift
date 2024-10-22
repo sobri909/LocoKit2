@@ -53,7 +53,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
-        let center = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let center = CLLocation(coordinate: coordinate)
         let radius = Self.calculateBoundedRadius(of: usableLocations, from: center)
 
         self.radiusMean = radius.mean
@@ -99,8 +99,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
-        let center = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let radius = Self.calculateBoundedRadius(of: usableLocations, from: center)
+        let radius = Self.calculateBoundedRadius(of: usableLocations, from: coordinate.location)
 
         self.radiusMean = radius.mean
         self.radiusSD = radius.sd

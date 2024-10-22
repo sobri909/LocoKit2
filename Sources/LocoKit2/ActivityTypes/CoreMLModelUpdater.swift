@@ -177,13 +177,11 @@ public final class CoreMLModelUpdater {
                 print("UPDATING: \(model.geoKey), ADDING FAKE STATIONARY SAMPLE")
 
                 // create a fake stationary sample
-                let coord = model.centerCoordinate
-                let location = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
                 var fakeSample = LocomotionSample(
                     date: .now,
                     movingState: .stationary,
                     recordingState: .recording,
-                    location: location
+                    location: model.centerCoordinate.location
                 )
                 fakeSample.confirmedActivityType = .stationary
                 fakeSample.xyAcceleration = 0

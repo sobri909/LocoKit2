@@ -124,7 +124,7 @@ actor SleepModeDetector {
 
     private func isWithinGeofence(_ location: CLLocation) -> Bool {
         guard let center = state.geofenceCenter else { return false }
-        let distance = location.distance(from: CLLocation(latitude: center.latitude, longitude: center.longitude))
+        let distance = location.distance(from: center.location)
         return distance <= state.geofenceRadius
     }
 

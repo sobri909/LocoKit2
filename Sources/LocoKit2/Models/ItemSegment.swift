@@ -47,8 +47,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
 
     public var radius: Radius? {
         guard let center else { return nil }
-        let location = CLLocation(latitude: center.latitude, longitude: center.longitude)
-        return samples.usableLocations().radius(from: location)
+        return samples.usableLocations().radius(from: center.location)
     }
 
     public var distance: CLLocationDistance {
