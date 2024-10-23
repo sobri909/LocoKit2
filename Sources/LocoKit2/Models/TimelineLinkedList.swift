@@ -100,7 +100,7 @@ public final class TimelineLinkedList: AsyncSequence {
                     .filter(Column("id") == itemId)
                     .fetchOne($0)
             }
-            .shared(in: Database.pool, scheduling: .async(onQueue: TimelineActor.queue))
+            .shared(in: Database.pool)
             .publisher()
             .sink { completion in
                 if case .failure(let error) = completion {
