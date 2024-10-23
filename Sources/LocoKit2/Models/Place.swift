@@ -22,31 +22,24 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public var radiusMean: CLLocationDistance = Place.minimumNewPlaceRadius
     public var radiusSD: CLLocationDistance = 0
     public var secondsFromGMT: Int?
-
     public var name: String
     public var streetAddress: String?
+    public var rtreeId: Int64?
+    public var isStale = true
 
     public var mapboxPlaceId: String?
     public var mapboxCategory: String?
     public var mapboxMakiIcon: String?
-
     public var googlePlaceId: String?
     public var googlePrimaryType: String?
-
     public var foursquarePlaceId: String?
     public var foursquareCategoryId: Int?
-
-    public var rtreeId: Int64?
-
-    public var isStale = false
 
     // MARK: - Computed properties
 
     public var localTimeZone: TimeZone? {
-        if let secondsFromGMT {
-            return TimeZone(secondsFromGMT: secondsFromGMT)
-        }
-        return nil
+        guard let secondsFromGMT else { return nil }
+        return TimeZone(secondsFromGMT: secondsFromGMT)
     }
 
     public var center: CLLocationCoordinate2D {
@@ -125,7 +118,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
         self.foursquarePlaceId = foursquarePlaceId
         self.foursquareCategoryId = foursquareCategoryId
-        self.isStale = true
     }
 
 }
