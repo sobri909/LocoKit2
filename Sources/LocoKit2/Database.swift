@@ -104,6 +104,7 @@ public final class Database: @unchecked Sendable {
                 table.column("radiusSD", .double).notNull()
                 table.column("secondsFromGMT", .integer).notNull()
                 table.column("name", .text).notNull().indexed()
+                table.column("streetAddress", .text)
 
                 table.column("mapboxPlaceId", .text).indexed()
                 table.column("mapboxCategory", .text)
