@@ -58,7 +58,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     // rtree
     public var rtreeId: Int64?
 
-    static let rtree = belongsTo(SampleRTree.self, using: ForeignKey(["rtreeId"]))
+    public static let rtree = belongsTo(SampleRTree.self, using: ForeignKey(["rtreeId"]))
 
     // TODO: needs to us correct calendar based on secondsFromGMT
     public var timeOfDay: TimeInterval { date.sinceStartOfDay() }

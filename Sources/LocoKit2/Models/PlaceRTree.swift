@@ -1,14 +1,14 @@
 //
-//  SampleRTree.swift
-//  LocoKit
+//  PlaceRTree.swift
+//  LocoKit2
 //
-//  Created by Matt Greenfield on 16/11/22.
+//  Created by Matt Greenfield on 2024-10-25.
 //
 
 import Foundation
 import GRDB
 
-public struct SampleRTree: MutablePersistableRecord, Codable, Sendable {
+public struct PlaceRTree: MutablePersistableRecord, Codable, Sendable {
     public var id: Int64?
     public var latMin: Double
     public var latMax: Double

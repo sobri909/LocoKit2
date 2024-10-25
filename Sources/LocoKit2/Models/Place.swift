@@ -7,7 +7,7 @@
 
 import Foundation
 import CoreLocation
-import GRDB
+@preconcurrency import GRDB
 
 public enum PlaceSource { case google, foursquare, mapbox }
 
@@ -24,7 +24,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public var secondsFromGMT: Int?
     public var name: String
     public var streetAddress: String?
-    public var rtreeId: Int64?
     public var isStale = true
 
     public var mapboxPlaceId: String?
@@ -34,6 +33,10 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public var googlePrimaryType: String?
     public var foursquarePlaceId: String?
     public var foursquareCategoryId: Int?
+
+    public var rtreeId: Int64?
+    
+    public static let rtree = belongsTo(PlaceRTree.self, using: ForeignKey(["rtreeId"]))
 
     // MARK: - Computed properties
 
@@ -50,14 +53,13 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         return Radius(mean: radiusMean, sd: radiusSD)
     }
 
-    var sourceDatabases: [PlaceSource] {
+    public var sourceDatabases: [PlaceSource] {
         var sources: [PlaceSource] = []
         if mapboxPlaceId != nil { sources.append(.mapbox) }
         if googlePlaceId != nil { sources.append(.google) }
         if foursquarePlaceId != nil { sources.append(.foursquare) }
         return sources
     }
-
 
     // MARK: - Overlaps
 
@@ -88,6 +90,42 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     public func distance(from otherPlace: Place) -> CLLocationDistance {
         return center.location.distance(from: otherPlace.center.location) - radius.with3sd - otherPlace.radius.with3sd
+    }
+
+    // MARK: - RTree
+
+    public mutating func updateRTree() async {
+        do {
+            if let rtreeId {
+                let rtree = PlaceRTree(
+                    id: rtreeId,
+                    latMin: center.latitude, latMax: center.latitude,
+                    lonMin: center.longitude, lonMax: center.longitude
+                )
+                try await Database.pool.write {
+                    try rtree.update($0)
+                }
+
+            } else {
+                rtreeId = try await Database.pool.write { [self] db in
+                    var rtree = PlaceRTree(
+                        latMin: center.latitude, latMax: center.latitude,
+                        lonMin: center.longitude, lonMax: center.longitude
+                    )
+                    try rtree.insert(db)
+
+                    var mutableSelf = self
+                    try mutableSelf.updateChanges(db) {
+                        $0.rtreeId = rtree.id
+                        print("Place.updateRTree() rtreeId: \($0.rtreeId)")
+                    }
+                    return rtree.id
+                }
+            }
+
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
     }
 
     // MARK: - Init
