@@ -102,7 +102,7 @@ public final class Database: @unchecked Sendable {
                 table.column("longitude", .double).notNull()
                 table.column("radiusMean", .double).notNull()
                 table.column("radiusSD", .double).notNull()
-                table.column("secondsFromGMT", .integer).notNull()
+                table.column("secondsFromGMT", .integer)
                 table.column("name", .text).notNull().indexed()
                 table.column("streetAddress", .text)
 
