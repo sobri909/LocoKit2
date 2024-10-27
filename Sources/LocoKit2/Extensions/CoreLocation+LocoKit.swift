@@ -7,13 +7,13 @@ import CoreLocation
 import CoreMotion
 import simd
 
-typealias Radians = Double
+public typealias Radians = Double
 
-extension Radians {
+public extension Radians {
     var degrees: CLLocationDegrees { self * 180.0 / .pi }
 }
 
-extension CLLocationDegrees {
+public extension CLLocationDegrees {
     var radians: Radians { self * .pi / 180.0 }
 }
 
