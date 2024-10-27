@@ -57,7 +57,7 @@ public final class TimelineSegment: Sendable {
         do {
             let items = try await Database.pool.read { [dateRange] in
                 return try TimelineItem
-                    .itemRequest(includeSamples: false)
+                    .itemRequest(includeSamples: false, includePlaces: true)
                     .filter(Column("deleted") == false && Column("disabled") == false)
                     .filter(Column("endDate") > dateRange.start && Column("startDate") < dateRange.end)
                     .order(Column("endDate").desc)

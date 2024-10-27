@@ -16,7 +16,7 @@ public final class TimelineLinkedList: AsyncSequence {
 
     public init?(fromItemId seedItemId: String) async {
         do {
-            let seedItem = try await TimelineItem.fetchItem(itemId: seedItemId, includeSamples: true)
+            let seedItem = try await TimelineItem.fetchItem(itemId: seedItemId, includeSamples: true, includePlace: true)
             if let seedItem {
                 self.seedItem = seedItem
                 timelineItems[seedItemId] = seedItem
@@ -46,7 +46,7 @@ public final class TimelineLinkedList: AsyncSequence {
         }
 
         do {
-            if let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) {
+            if let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true, includePlace: true) {
                 timelineItems[item.id] = item
                 return item
             } else {
@@ -96,7 +96,7 @@ public final class TimelineLinkedList: AsyncSequence {
         return ValueObservation
             .trackingConstantRegion {
                 try TimelineItem
-                    .itemRequest(includeSamples: true)
+                    .itemRequest(includeSamples: true, includePlaces: true)
                     .filter(Column("id") == itemId)
                     .fetchOne($0)
             }

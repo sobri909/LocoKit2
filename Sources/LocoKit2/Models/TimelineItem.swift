@@ -15,6 +15,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     public var base: TimelineItemBase
     public var visit: TimelineItemVisit?
     public var trip: TimelineItemTrip?
+    public var place: Place?
 
     public internal(set) var samples: [LocomotionSample]? {
         didSet {
@@ -164,9 +165,14 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             }
 
             // must be a visit
+            if let place {
+                return place.name
+            }
+
             if try isWorthKeeping {
                 return "Unknown Place"
             }
+
             return "Brief Stop"
         }
     }
@@ -250,25 +256,29 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // MARK: - Item fetching
 
-    public static func fetchItem(itemId: String, includeSamples: Bool) async throws -> TimelineItem? {
+    public static func fetchItem(itemId: String, includeSamples: Bool, includePlace: Bool = false) async throws -> TimelineItem? {
         return try await Database.pool.read {
-            return try itemRequest(includeSamples: includeSamples)
+            return try itemRequest(includeSamples: includeSamples, includePlaces: includePlace)
                 .filter(Column("id") == itemId)
                 .fetchOne($0)
         }
     }
 
-    public static func itemRequest(includeSamples: Bool) -> QueryInterfaceRequest<TimelineItem> {
+    public static func itemRequest(includeSamples: Bool, includePlaces: Bool = false) -> QueryInterfaceRequest<TimelineItem> {
         var request = TimelineItemBase
-            .including(optional: TimelineItemBase.visit)
             .including(optional: TimelineItemBase.trip)
+
+        if includePlaces {
+            request = request.including(optional: TimelineItemBase.visit.including(optional: TimelineItemVisit.place))
+        } else {
+            request = request.including(optional: TimelineItemBase.visit)
+        }
 
         if includeSamples {
             request = request.including(all: TimelineItemBase.samples)
         }
 
-        return request
-            .asRequest(of: TimelineItem.self)
+        return request.asRequest(of: TimelineItem.self)
     }
 
     // MARK: - Sample fetching
@@ -558,7 +568,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     // MARK: - Codable
 
     enum CodingKeys: CodingKey {
-        case base, visit, trip, samples
+        case base, visit, trip, place, samples
     }
 
     public init(from decoder: Decoder) throws {
@@ -566,6 +576,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         base = try container.decode(TimelineItemBase.self, forKey: .base)
         visit = try container.decodeIfPresent(TimelineItemVisit.self, forKey: .visit)
         trip = try container.decodeIfPresent(TimelineItemTrip.self, forKey: .trip)
+        place = try container.decodeIfPresent(Place.self, forKey: .place)
         samples = try container.decodeIfPresent([LocomotionSample].self, forKey: .samples)
         if let samples {
             segments = Self.collateSegments(from: samples, disabled: base.disabled)

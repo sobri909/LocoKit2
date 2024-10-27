@@ -7,7 +7,7 @@
 
 import Foundation
 import CoreLocation
-import GRDB
+@preconcurrency import GRDB
 
 public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
@@ -25,6 +25,8 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     public var placeId: String?
     public var confirmedPlace = false
+    
+    public static let place = belongsTo(Place.self, using: ForeignKey(["placeId"]))
 
     public var id: String { itemId }
 
@@ -81,6 +83,39 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     public func contains(_ otherLocation: CLLocation, sd: Double = 4) -> Bool {
         let testRadius = radius.withSD(sd).clamped(min: Self.minRadius, max: Self.maxRadius)
         return otherLocation.distance(from: center.location) <= testRadius
+    }
+
+    // MARK: - Place
+
+    public func assignPlace(_ place: Place, confirm: Bool = false) async {
+        // don't overwrite a confirmed assignment with an unconfirmed one
+        if !confirm, confirmedPlace, placeId != nil { return }
+
+        let previousPlaceId = placeId
+
+        do {
+            try await Database.pool.write { db in
+                var mutableSelf = self
+                try mutableSelf.updateChanges(db) {
+                    $0.placeId = place.id
+                    $0.confirmedPlace = confirm
+                    // $0.customTitle = nil
+                }
+                var mutablePlace = place
+                try mutablePlace.updateChanges(db) {
+                    $0.isStale = true
+                }
+                if let previousPlaceId {
+                    var previousPlace = try Place.fetchOne(db, id: previousPlaceId)
+                    try previousPlace?.updateChanges(db) {
+                        $0.isStale = true
+                    }
+                }
+            }
+            
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
     }
 
     // MARK: - Updating
