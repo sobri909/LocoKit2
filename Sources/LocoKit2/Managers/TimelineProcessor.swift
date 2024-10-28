@@ -502,7 +502,7 @@ public final class TimelineProcessor {
                 }
 
             } else { // can't heal the edge
-                logger.info("healPreviousEdge() Gap too large: \(gap) seconds", subsystem: .timeline)
+                logger.info("healNextEdge() Gap too large: \(String(format: "%.f2", gap / 60)) minutes", subsystem: .timeline)
             }
         }
     }
@@ -554,7 +554,7 @@ public final class TimelineProcessor {
                 }
 
             } else { // can't heal the edge
-                logger.info("healNextEdge() Gap too large: \(gap) seconds", subsystem: .timeline)
+                logger.info("healNextEdge() Gap too large: \(String(format: "%.f2", gap / 60)) minutes", subsystem: .timeline)
             }
         }
     }
