@@ -35,6 +35,13 @@ public final class Database: @unchecked Sendable {
         config.busyMode = .timeout(30)
         config.defaultTransactionKind = .immediate
         config.maximumReaderCount = 12
+
+//        config.prepareDatabase { db in
+//            db.trace { event in
+//                print("SQL: \(event.expandedDescription)")
+//            }
+//        }
+
         return config
     }()
 
