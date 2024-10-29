@@ -41,8 +41,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
     }
 
     public var center: CLLocationCoordinate2D? {
-        let usableLocations = samples.compactMap { $0.location }.usableLocations()
-        return usableLocations.weightedCenter()
+        return samples.weightedCenter()
     }
 
     public var radius: Radius? {

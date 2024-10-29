@@ -219,6 +219,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 // MARK: - Arrays
 
 public extension Array where Element == LocomotionSample {
+    
     func radius(from center: CLLocation) -> Radius {
         return compactMap { $0.location }.radius(from: center)
     }
@@ -237,6 +238,52 @@ public extension Array where Element == LocomotionSample {
 
     func haveAnyUsableCoordinates() -> Bool {
         return contains { $0.hasUsableCoordinate }
+    }
+
+    func weightedCenter() -> CLLocationCoordinate2D? {
+        let usableSamples = self.filter { $0.hasUsableCoordinate }
+
+        if usableSamples.isEmpty { return nil }
+        if usableSamples.count == 1, let location = usableSamples.first?.location {
+            return location.coordinate
+        }
+
+        var sumX: Double = 0
+        var sumY: Double = 0
+        var sumZ: Double = 0
+        var totalWeight: Double = 0
+
+        for sample in usableSamples {
+            guard let location = sample.location else { continue }
+
+            let latitude = location.coordinate.latitude.radians
+            let longitude = location.coordinate.longitude.radians
+
+            // base weight from location accuracy
+            let baseWeight = 1 / (location.horizontalAccuracy * location.horizontalAccuracy)
+
+            // multiply weight for stationary samples
+            let weight = sample.activityType == .stationary ? baseWeight * 3.0 : baseWeight
+
+            let cosLatitude = cos(latitude)
+            let sinLatitude = sin(latitude)
+            let cosLongitude = cos(longitude)
+            let sinLongitude = sin(longitude)
+
+            sumX += cosLatitude * cosLongitude * weight
+            sumY += cosLatitude * sinLongitude * weight
+            sumZ += sinLatitude * weight
+            totalWeight += weight
+        }
+
+        let averageX = sumX / totalWeight
+        let averageY = sumY / totalWeight
+        let averageZ = sumZ / totalWeight
+
+        let averageLatitude = atan2(averageZ, sqrt(averageX * averageX + averageY * averageY)).degrees
+        let averageLongitude = atan2(averageY, averageX).degrees
+
+        return CLLocationCoordinate2D(latitude: averageLatitude, longitude: averageLongitude)
     }
 
 }

@@ -43,7 +43,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     init?(itemId: String, samples: [LocomotionSample]) {
         let usableLocations = samples.usableLocations()
 
-        guard let coordinate = usableLocations.weightedCenter() else {
+        guard let coordinate = samples.weightedCenter() else {
             return nil
         }
 
@@ -130,16 +130,14 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     // MARK: - Updating
 
     public mutating func update(from samples: [LocomotionSample]) async {
-        let usableLocations = samples.usableLocations()
-
-        guard let coordinate = usableLocations.weightedCenter() else {
+        guard let coordinate = samples.weightedCenter() else {
             return
         }
 
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
-        let radius = Self.calculateBoundedRadius(of: usableLocations, from: coordinate.location)
+        let radius = Self.calculateBoundedRadius(of: samples.usableLocations(), from: coordinate.location)
 
         self.radiusMean = radius.mean
         self.radiusSD = radius.sd
