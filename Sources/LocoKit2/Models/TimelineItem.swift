@@ -547,6 +547,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         await visit?.update(from: updatedSamples)
         await trip?.update(from: updatedSamples)
 
+        // TODO: this triggers db observers. would be nice if it didn't
         base.samplesChanged = false
 
         do {
