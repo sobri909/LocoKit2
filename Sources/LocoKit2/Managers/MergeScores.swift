@@ -187,9 +187,36 @@ public final class MergeScores {
     private static func consumptionScoreFor(visit consumer: TimelineItem, toConsumeVisit consumee: TimelineItem) -> ConsumptionScore {
         guard consumer.isVisit, consumee.isVisit else { fatalError() }
         guard let consumerVisit = consumer.visit, let consumeeVisit = consumee.visit else { fatalError() }
+        guard let consumerRange = consumer.dateRange, let consumeeRange = consumee.dateRange else { return .impossible }
 
-        // overlapping visits
-        if let consumerRange = consumer.dateRange, let consumeeRange = consumee.dateRange, consumerVisit.overlaps(consumeeVisit) {
+        // both have confirmed places?
+        if consumerVisit.hasConfirmedPlace && consumeeVisit.hasConfirmedPlace {
+
+            // same confirmed place
+            if consumerVisit.hasSamePlaceAs(consumeeVisit) {
+
+                // favour the one with longer duration
+                return consumerRange.duration > consumeeRange.duration ? .perfect : .high
+
+            } else { // different confirmed places - no merge
+                return .impossible
+            }
+        }
+
+        // overlapping visits with different/unconfirmed places
+        if consumerVisit.overlaps(consumeeVisit) {
+
+            // consumer has confirmed place, consumee doesn't
+            if consumerVisit.hasConfirmedPlace && !consumeeVisit.hasConfirmedPlace {
+                return .perfect // consumer wins
+            }
+
+            // consumee has confirmed place, consumer doesn't
+            if !consumerVisit.hasConfirmedPlace && consumeeVisit.hasConfirmedPlace {
+                return .impossible // no merge
+            }
+
+            // neither have confirmed places - the longer duration wins
             return consumerRange.duration > consumeeRange.duration ? .perfect : .high
         }
         

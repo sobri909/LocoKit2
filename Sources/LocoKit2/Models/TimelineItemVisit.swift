@@ -118,6 +118,15 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         }
     }
 
+    var hasConfirmedPlace: Bool { placeId != nil && confirmedPlace }
+
+    func hasSamePlaceAs(_ other: TimelineItemVisit) -> Bool {
+        guard let placeId = self.placeId, let otherPlaceId = other.placeId else {
+            return false
+        }
+        return placeId == otherPlaceId
+    }
+    
     // MARK: - Updating
 
     public mutating func update(from samples: [LocomotionSample]) async {
