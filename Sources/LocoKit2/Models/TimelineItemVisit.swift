@@ -25,7 +25,10 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     public var placeId: String?
     public var confirmedPlace = false
-    
+
+    public var customTitle: String?
+    public var streetAddress: String?
+
     public static let place = belongsTo(Place.self, using: ForeignKey(["placeId"]))
 
     public var id: String { itemId }
@@ -99,7 +102,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
                 try mutableSelf.updateChanges(db) {
                     $0.placeId = place.id
                     $0.confirmedPlace = confirm
-                    // $0.customTitle = nil
+                    $0.customTitle = nil
                 }
                 var mutablePlace = place
                 try mutablePlace.updateChanges(db) {

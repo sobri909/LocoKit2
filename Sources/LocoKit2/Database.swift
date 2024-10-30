@@ -172,6 +172,9 @@ public final class Database: @unchecked Sendable {
                     .references("Place", onDelete: .setNull, deferred: true)
 
                 table.column("confirmedPlace", .boolean).notNull()
+
+                table.column("customTitle", .text).indexed()
+                table.column("streetAddress", .text).indexed()
             }
 
             try db.create(table: "TimelineItemTrip") { table in
