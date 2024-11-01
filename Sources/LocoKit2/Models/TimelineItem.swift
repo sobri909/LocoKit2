@@ -275,7 +275,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
 
         if includeSamples {
-            request = request.including(all: TimelineItemBase.samples)
+            request = request.including(all: TimelineItemBase.samples.order(Column("date").asc))
         }
 
         return request.asRequest(of: TimelineItem.self)
