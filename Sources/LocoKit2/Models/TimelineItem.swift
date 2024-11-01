@@ -532,6 +532,55 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
+    // MARK: - Sample pruning
+
+    public func pruneTripSamples() async throws {
+        guard isTrip, let trip = trip, let samples else {
+            throw TimelineError.invalidItem("Can only prune Trips with samples")
+        }
+        guard let activityType = trip.activityType else {
+            throw TimelineError.invalidItem("Trip requires activityType for pruning")
+        }
+
+        let maxInterval: TimeInterval
+        if ActivityType.workoutTypes.contains(activityType) {
+            maxInterval = 2.0
+        } else if activityType == .airplane {
+            maxInterval = 15.0
+        } else {
+            maxInterval = 6.0
+        }
+
+        let epsilon: CLLocationDistance
+        if activityType == .airplane {
+            epsilon = 100
+        } else if ActivityType.workoutTypes.contains(activityType) {
+            epsilon = 5 // all human-powered modes
+        } else {
+            epsilon = 25 // vehicles
+        }
+        
+        let sortedSamples = samples.sorted { $0.date < $1.date }
+        let points = sortedSamples.enumerated().compactMap { index, sample -> (coordinate: CLLocationCoordinate2D, date: Date, index: Int)? in
+            guard let coordinate = sample.coordinate, coordinate.isUsable else { return nil }
+            return (coordinate, sample.date, index)
+        }
+
+        guard points.count > 2 else { return }
+
+        let keepIndices = RamerDouglasPeucker.simplifyDebug(coordinates: points, maxInterval: maxInterval, epsilon: epsilon)
+
+        print("pruneTripSamples() maxInterval: \(maxInterval), epsilon: \(epsilon), points: \(points.count), keepIndices: \(keepIndices.count)")
+
+//        try await Database.pool.write { db in
+//            for (index, sample) in sortedSamples.enumerated() {
+//                if !keepIndices.contains(index) {
+//                    try sample.delete(db)
+//                }
+//            }
+//        }
+    }
+    
     // MARK: - Updating Visit and Trip
 
     private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {

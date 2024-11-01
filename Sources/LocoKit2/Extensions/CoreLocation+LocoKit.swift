@@ -56,6 +56,38 @@ public extension CLLocationCoordinate2D {
     var isNullIsland: Bool { latitude == 0 && longitude == 0 }
     var isValid: Bool { CLLocationCoordinate2DIsValid(self) }
     var location: CLLocation { CLLocation(latitude: latitude, longitude: longitude) }
+
+    func perpendicularDistance(to line: (CLLocationCoordinate2D, CLLocationCoordinate2D)) -> CLLocationDistance {
+        let lat = self.latitude.radians
+        let lon = self.longitude.radians
+        let lat1 = line.0.latitude.radians
+        let lon1 = line.0.longitude.radians
+        let lat2 = line.1.latitude.radians
+        let lon2 = line.1.longitude.radians
+
+        // Cross track distance formula
+        let earthRadius: CLLocationDistance = 6371000
+
+        // Initial bearing from start to end
+        let theta12 = atan2(
+            sin(lon2 - lon1) * cos(lat2),
+            cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lon2 - lon1)
+        )
+
+        // Angular distance from start to point
+        let sigma13 = acos(sin(lat1) * sin(lat) + cos(lat1) * cos(lat) * cos(lon - lon1))
+
+        // Initial bearing from start to point
+        let theta13 = atan2(
+            sin(lon - lon1) * cos(lat),
+            cos(lat1) * sin(lat) - sin(lat1) * cos(lat) * cos(lon - lon1)
+        )
+
+        // Cross track distance angle
+        let crossTrackAngle = asin(sin(sigma13) * sin(theta13 - theta12))
+
+        return abs(earthRadius * crossTrackAngle)
+    }
 }
 
 public struct CodableLocation: Codable {
