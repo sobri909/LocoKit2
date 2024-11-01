@@ -572,13 +572,13 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
         print("pruneTripSamples() maxInterval: \(maxInterval), epsilon: \(epsilon), points: \(points.count), keepIndices: \(keepIndices.count)")
 
-//        try await Database.pool.write { db in
-//            for (index, sample) in sortedSamples.enumerated() {
-//                if !keepIndices.contains(index) {
-//                    try sample.delete(db)
-//                }
-//            }
-//        }
+        try await Database.pool.write { db in
+            for (index, sample) in sortedSamples.enumerated() {
+                if !keepIndices.contains(index) {
+                    try sample.delete(db)
+                }
+            }
+        }
     }
     
     // MARK: - Updating Visit and Trip
