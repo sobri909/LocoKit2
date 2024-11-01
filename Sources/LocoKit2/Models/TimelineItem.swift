@@ -534,6 +534,14 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // MARK: - Sample pruning
 
+    public func pruneSamples() async throws {
+        if isVisit {
+            try await pruneVisitSamples()
+        } else {
+            try await pruneTripSamples()
+        }
+    }
+
     public func pruneTripSamples() async throws {
         guard isTrip, let trip = trip, let samples else {
             throw TimelineError.invalidItem("Can only prune Trips with samples")
@@ -580,7 +588,104 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             }
         }
     }
-    
+
+    func pruneVisitSamples() async throws {
+        guard isVisit, let dateRange = dateRange, let samples else {
+            throw TimelineError.invalidItem("Can only prune Visits with samples")
+        }
+
+        print("pruneVisitSamples() starting with \(samples.count) samples")
+
+        let startEdgeEnd = dateRange.start + .minutes(30)
+        let endEdgeStart = dateRange.end - .minutes(30)
+
+        var keepSamples: Set<String> = []
+        var currentWindow: [LocomotionSample] = []
+        let windowDuration: TimeInterval = .minutes(2)
+
+        var edgeCount = 0
+        var nonStationaryCount = 0
+        var middleWindowCount = 0
+
+        for sample in samples {
+            // Always keep non-stationary samples
+            if sample.activityType != .stationary {
+                keepSamples.insert(sample.id)
+                nonStationaryCount += 1
+                currentWindow.removeAll()
+                continue
+            }
+
+            // Keep edge samples
+            if sample.date <= startEdgeEnd || sample.date >= endEdgeStart {
+                keepSamples.insert(sample.id)
+                edgeCount += 1
+                currentWindow.removeAll()
+                continue
+            }
+
+            // Build up window of candidates
+            currentWindow.append(sample)
+
+            // When window is full, pick the best sample
+            if let windowStart = currentWindow.first?.date,
+               sample.date >= windowStart + windowDuration {
+                if let bestSample = chooseBestSample(from: currentWindow) {
+                    keepSamples.insert(bestSample.id)
+                    middleWindowCount += 1
+                }
+                currentWindow.removeAll()
+            }
+        }
+
+        // Handle any remaining samples in final window
+        if !currentWindow.isEmpty {
+            if let bestSample = chooseBestSample(from: currentWindow) {
+                keepSamples.insert(bestSample.id)
+                middleWindowCount += 1
+            }
+        }
+
+        print("""
+            pruneVisitSamples() results:
+            - Total samples: \(samples.count)
+            - Keeping \(keepSamples.count) samples (\(Int((Double(keepSamples.count) / Double(samples.count)) * 100))%)
+            - Edge samples: \(edgeCount)
+            - Non-stationary: \(nonStationaryCount)
+            - Middle windows: \(middleWindowCount)
+            """)
+
+        try await Database.pool.write { [keepSamples] db in
+            for sample in samples {
+                if !keepSamples.contains(sample.id) {
+                    try sample.delete(db)
+                }
+            }
+        }
+    }
+
+    private func chooseBestSample(from candidates: [LocomotionSample]) -> LocomotionSample? {
+        guard !candidates.isEmpty else { return nil }
+
+        // If only one candidate, that's our winner
+        if candidates.count == 1 { return candidates[0] }
+
+        // Score each candidate based on location quality
+        let scored = candidates.compactMap { sample -> (sample: LocomotionSample, score: Double)? in
+            guard let location = sample.location else { return nil }
+
+            // Base score purely on horizontal accuracy
+            let score: Double = location.horizontalAccuracy > 0
+                ? 1.0 / location.horizontalAccuracy
+                : 0
+
+            return (sample, score)
+        }
+
+        // Return highest scoring sample (most accurate)
+        return scored.max(by: { $0.score < $1.score })?.sample ?? candidates[0]
+    }
+
     // MARK: - Updating Visit and Trip
 
     private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
