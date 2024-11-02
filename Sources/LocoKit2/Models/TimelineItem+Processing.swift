@@ -174,7 +174,7 @@ extension TimelineItem {
 
         return samples.filter { sample in
             if let location = sample.location {
-                return visit.contains(location)
+                return visit.contains(location, sd: 1)
             }
             return false
         }

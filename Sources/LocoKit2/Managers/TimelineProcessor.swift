@@ -294,8 +294,8 @@ public final class TimelineProcessor {
               let tripEdgeLocation = tripEdge.location,
               let tripEdgeNextLocation = tripEdgeNext.location else { return nil }
 
-        let tripEdgeIsInside = visit.contains(tripEdgeLocation)
-        let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation)
+        let tripEdgeIsInside = visit.contains(tripEdgeLocation, sd: 1)
+        let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: 1)
 
         if !excluding.contains(tripEdge), tripEdgeIsInside && tripEdgeNextIsInside {
             try await moveSample(tripEdge, to: visitItem.id)
