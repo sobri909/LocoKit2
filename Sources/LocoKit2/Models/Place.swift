@@ -38,6 +38,9 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     
     public static let rtree = belongsTo(PlaceRTree.self, using: ForeignKey(["rtreeId"]))
 
+    public var arrivalTimes: Histogram?
+    public var visitDurations: Histogram?
+
     // MARK: - Computed properties
 
     public var localTimeZone: TimeZone? {
@@ -90,6 +93,31 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     public func distance(from otherPlace: Place) -> CLLocationDistance {
         return center.location.distance(from: otherPlace.center.location) - radius.with3sd - otherPlace.radius.with3sd
+    }
+
+    // MARK: - Stats
+
+    @PlacesActor
+    public mutating func calculateHistograms() async throws {
+        // get all confirmed visits assigned to this place
+        let visits = try await Database.pool.read { [id] db in
+            try TimelineItem
+                .itemRequest(includeSamples: false, includePlaces: true)
+                .filter(sql: "visit.placeId = ? AND visit.confirmedPlace = 1", arguments: [id])
+                .fetchAll(db)
+        }
+
+        // gather arrival times and durations
+        let arrivalTimes: [Date] = visits.compactMap { visit in
+            return visit.dateRange?.start
+        }
+
+        let durations: [TimeInterval] = visits.compactMap { visit in
+            return visit.dateRange?.duration
+        }
+
+        self.arrivalTimes = Histogram.forTimeOfDay(dates: arrivalTimes, timeZone: localTimeZone ?? .current)
+        self.visitDurations = Histogram.forDurations(intervals: durations)
     }
 
     // MARK: - RTree
@@ -156,6 +184,30 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
         self.foursquarePlaceId = foursquarePlaceId
         self.foursquareCategoryId = foursquareCategoryId
+    }
+
+    // MARK: - Codable
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case latitude
+        case longitude
+        case radiusMean
+        case radiusSD
+        case secondsFromGMT
+        case name
+        case streetAddress
+        case isStale
+
+        case rtreeId
+
+        case mapboxPlaceId
+        case mapboxCategory
+        case mapboxMakiIcon
+        case googlePlaceId
+        case googlePrimaryType
+        case foursquarePlaceId
+        case foursquareCategoryId
     }
 
 }
