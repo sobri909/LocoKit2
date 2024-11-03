@@ -269,9 +269,16 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             .including(optional: TimelineItemBase.trip)
 
         if includePlaces {
-            request = request.including(optional: TimelineItemBase.visit.including(optional: TimelineItemVisit.place))
+            request = request.including(
+                optional: TimelineItemBase.visit
+                    .aliased(TableAlias(name: "visit"))
+                    .including(
+                        optional: TimelineItemVisit.place
+                            .aliased(TableAlias(name: "place"))
+                    )
+            )
         } else {
-            request = request.including(optional: TimelineItemBase.visit)
+            request = request.including(optional: TimelineItemBase.visit.aliased(TableAlias(name: "visit")))
         }
 
         if includeSamples {
