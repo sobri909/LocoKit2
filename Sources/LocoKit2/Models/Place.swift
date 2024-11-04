@@ -43,11 +43,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     // MARK: - Computed properties
 
-    public var localTimeZone: TimeZone? {
-        guard let secondsFromGMT else { return nil }
-        return TimeZone(secondsFromGMT: secondsFromGMT)
-    }
-
     public var center: CLLocationCoordinate2D {
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
@@ -93,6 +88,40 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     public func distance(from otherPlace: Place) -> CLLocationDistance {
         return center.location.distance(from: otherPlace.center.location) - radius.with3sd - otherPlace.radius.with3sd
+    }
+
+    // MARK: - Timezone
+
+    public var localTimeZone: TimeZone? {
+        guard let secondsFromGMT else { return nil }
+        return TimeZone(secondsFromGMT: secondsFromGMT)
+    }
+
+    @PlacesActor
+    public mutating func fetchLocalTimezone() async {
+        if secondsFromGMT != nil { return }
+
+        do {
+            guard let timeZone = try await CLGeocoder().reverseGeocodeLocation(center.location).first?.timeZone else {
+                return
+            }
+
+            do {
+                try await Database.pool.write { [self] db in
+                    var mutableSelf = self
+                    try mutableSelf.updateChanges(db) {
+                        $0.secondsFromGMT = timeZone.secondsFromGMT()
+                    }
+                }
+                self.secondsFromGMT = timeZone.secondsFromGMT()
+
+            } catch {
+                logger.error(error, subsystem: .database)
+            }
+
+        } catch {
+            logger.error(error, subsystem: .places)
+        }
     }
 
     // MARK: - Stats
@@ -145,7 +174,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                     var mutableSelf = self
                     try mutableSelf.updateChanges(db) {
                         $0.rtreeId = rtree.id
-                        print("Place.updateRTree() rtreeId: \($0.rtreeId)")
                     }
                     return rtree.id
                 }
@@ -162,6 +190,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         coordinate: CLLocationCoordinate2D,
         name: String,
         streetAddress: String? = nil,
+        secondsFromGMT: Int? = nil,
         mapboxPlaceId: String? = nil,
         mapboxCategory: String? = nil,
         mapboxMakiIcon: String? = nil,
@@ -174,6 +203,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         self.longitude = coordinate.longitude
         self.name = name
         self.streetAddress = streetAddress
+        self.secondsFromGMT = secondsFromGMT
 
         self.mapboxPlaceId = mapboxPlaceId
         self.mapboxCategory = mapboxCategory
