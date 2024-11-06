@@ -30,9 +30,12 @@ public final class LocomotionManager: @unchecked Sendable {
     public private(set) var recordingState: RecordingState = .off {
         didSet {
             appGroup?.save()
-            stateContinuation?.yield(recordingState)
+            for continuation in stateContinuations.values {
+                continuation.yield(recordingState)
+            }
         }
     }
+
     public internal(set) var locationAuthorizationStatus: CLAuthorizationStatus = .notDetermined
     public internal(set) var motionAuthorizationStatus: CMAuthorizationStatus = {
         CMMotionActivityManager.authorizationStatus()
@@ -60,11 +63,15 @@ public final class LocomotionManager: @unchecked Sendable {
 
     public func stateUpdates() -> AsyncStream<RecordingState> {
         AsyncStream { continuation in
-            self.stateContinuation = continuation
+            let id = UUID()
+            stateContinuations[id] = continuation
+            continuation.onTermination = { @Sendable _ in
+                self.stateContinuations.removeValue(forKey: id)
+            }
         }
     }
 
-    private var stateContinuation: AsyncStream<RecordingState>.Continuation?
+    private var stateContinuations: [UUID: AsyncStream<RecordingState>.Continuation] = [:]
 
     // MARK: - Recording states
 
@@ -275,6 +282,7 @@ public final class LocomotionManager: @unchecked Sendable {
     }
 
     // MARK: - Incoming locations handling
+    
     @MainActor
     internal func add(location: CLLocation) async {
         // only accept locations when recording is supposed to be happening
@@ -292,6 +300,7 @@ public final class LocomotionManager: @unchecked Sendable {
         lastRawLocation = location
         lastUpdated = .now
     }
+
     @MainActor
     private func updateTheRecordingState() async {
         let sleepState = await sleepModeDetector.state
