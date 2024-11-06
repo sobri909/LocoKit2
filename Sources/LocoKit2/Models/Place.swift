@@ -133,13 +133,10 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         let visits = try await Database.pool.read { [id] db in
             try TimelineItem
                 .itemRequest(includeSamples: false, includePlaces: true)
-                .filter(Column("deleted") == false)
                 .filter(sql: "visit.placeId = ?", arguments: [id])
+                .filter(Column("deleted") == false)
                 .fetchAll(db)
         }
-
-        // count total visits
-        self.visitCount = visits.count
 
         // count unique visit days using place's timezone
         var calendar = Calendar.current
@@ -148,8 +145,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         let uniqueDays = Set<Date>(visits.compactMap {
             return $0.dateRange?.start.startOfDay(in: calendar)
         })
-
-        self.visitDays = uniqueDays.count
 
         // for histograms, only use confirmed visits for higher confidence in patterns
         let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
@@ -162,10 +157,15 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         try await Database.pool.write { [self] db in
             var mutablePlace = self
             try mutablePlace.updateChanges(db) {
-                $0.visitCount = self.visitCount
-                $0.visitDays = self.visitDays
+                $0.visitCount = visits.count
+                $0.visitDays = uniqueDays.count
+                $0.isStale = false
             }
         }
+
+        self.visitCount = visits.count
+        self.visitDays = uniqueDays.count
+        self.isStale = false
     }
 
     // MARK: - RTree
