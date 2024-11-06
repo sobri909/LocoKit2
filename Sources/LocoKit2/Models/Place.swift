@@ -41,6 +41,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public var visitCount: Int = 0
     public var visitDays: Int = 0
     public var arrivalTimes: Histogram?
+    public var leavingTimes: Histogram?
     public var visitDurations: Histogram?
 
     // MARK: - Computed properties
@@ -148,11 +149,13 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
         // for histograms, only use confirmed visits for higher confidence in patterns
         let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
-        let arrivalTimes = confirmedVisits.compactMap { $0.dateRange?.start }
-        let durations = confirmedVisits.compactMap { $0.dateRange?.duration }
+        let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
+        let visitEnds = confirmedVisits.compactMap { $0.dateRange?.end }
+        let visitDurations = confirmedVisits.compactMap { $0.dateRange?.duration }
 
-        self.arrivalTimes = Histogram.forTimeOfDay(dates: arrivalTimes, timeZone: localTimeZone ?? .current)
-        self.visitDurations = Histogram.forDurations(intervals: durations)
+        self.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
+        self.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
+        self.visitDurations = Histogram.forDurations(intervals: visitDurations)
 
         try await Database.pool.write { [self] db in
             var mutablePlace = self
