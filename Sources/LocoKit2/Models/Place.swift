@@ -133,6 +133,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         let visits = try await Database.pool.read { [id] db in
             try TimelineItem
                 .itemRequest(includeSamples: false, includePlaces: true)
+                .filter(Column("deleted") == false)
                 .filter(sql: "visit.placeId = ?", arguments: [id])
                 .fetchAll(db)
         }
