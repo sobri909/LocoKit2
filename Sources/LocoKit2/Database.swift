@@ -122,6 +122,9 @@ public final class Database: @unchecked Sendable {
 
                 table.column("foursquarePlaceId", .text).indexed()
                 table.column("foursquareCategoryId", .integer)
+
+                table.column("visitCount", .integer).notNull()
+                table.column("visitDays", .integer).notNull()
             }
 
             try db.create(

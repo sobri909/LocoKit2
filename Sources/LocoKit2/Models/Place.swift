@@ -38,6 +38,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     
     public static let rtree = belongsTo(PlaceRTree.self, using: ForeignKey(["rtreeId"]))
 
+    public var visitCount: Int = 0
+    public var visitDays: Int = 0
     public var arrivalTimes: Histogram?
     public var visitDurations: Histogram?
 
@@ -127,26 +129,42 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     // MARK: - Stats
 
     @PlacesActor
-    public mutating func calculateHistograms() async throws {
-        // get all confirmed visits assigned to this place
+    public mutating func updateVisitStats() async throws {
         let visits = try await Database.pool.read { [id] db in
             try TimelineItem
                 .itemRequest(includeSamples: false, includePlaces: true)
-                .filter(sql: "visit.placeId = ? AND visit.confirmedPlace = 1", arguments: [id])
+                .filter(sql: "visit.placeId = ?", arguments: [id])
                 .fetchAll(db)
         }
 
-        // gather arrival times and durations
-        let arrivalTimes: [Date] = visits.compactMap { visit in
-            return visit.dateRange?.start
-        }
+        // count total visits
+        self.visitCount = visits.count
 
-        let durations: [TimeInterval] = visits.compactMap { visit in
-            return visit.dateRange?.duration
-        }
+        // count unique visit days using place's timezone
+        var calendar = Calendar.current
+        calendar.timeZone = localTimeZone ?? .current
+
+        let uniqueDays = Set<Date>(visits.compactMap {
+            return $0.dateRange?.start.startOfDay(in: calendar)
+        })
+
+        self.visitDays = uniqueDays.count
+
+        // for histograms, only use confirmed visits for higher confidence in patterns
+        let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
+        let arrivalTimes = confirmedVisits.compactMap { $0.dateRange?.start }
+        let durations = confirmedVisits.compactMap { $0.dateRange?.duration }
 
         self.arrivalTimes = Histogram.forTimeOfDay(dates: arrivalTimes, timeZone: localTimeZone ?? .current)
         self.visitDurations = Histogram.forDurations(intervals: durations)
+
+        try await Database.pool.write { [self] db in
+            var mutablePlace = self
+            try mutablePlace.updateChanges(db) {
+                $0.visitCount = self.visitCount
+                $0.visitDays = self.visitDays
+            }
+        }
     }
 
     // MARK: - RTree
@@ -238,6 +256,9 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         case googlePrimaryType
         case foursquarePlaceId
         case foursquareCategoryId
+
+        case visitCount
+        case visitDays
     }
 
 }
