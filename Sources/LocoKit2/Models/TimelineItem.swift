@@ -721,23 +721,22 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     private func chooseBestSample(from candidates: [LocomotionSample]) -> LocomotionSample? {
         guard !candidates.isEmpty else { return nil }
 
-        // If only one candidate, that's our winner
-        if candidates.count == 1 { return candidates[0] }
+        // Sort by accuracy (higher accuracy = lower number = better)
+        // For equal accuracies, prefer newer samples
+        // Samples without horizontalAccuracy go last
+        return candidates
+            .sorted { lhs, rhs in
+                // if either lacks accuracy, it loses
+                guard let lhsAccuracy = lhs.horizontalAccuracy else { return false }
+                guard let rhsAccuracy = rhs.horizontalAccuracy else { return true } // rhs has no accuracy, lhs wins
 
-        // Score each candidate based on location quality
-        let scored = candidates.compactMap { sample -> (sample: LocomotionSample, score: Double)? in
-            guard let location = sample.location else { return nil }
-
-            // Base score purely on horizontal accuracy
-            let score: Double = location.horizontalAccuracy > 0
-                ? 1.0 / location.horizontalAccuracy
-                : 0
-
-            return (sample, score)
-        }
-
-        // Return highest scoring sample (most accurate)
-        return scored.max(by: { $0.score < $1.score })?.sample ?? candidates[0]
+                // both have accuracy - compare
+                if lhsAccuracy == rhsAccuracy {
+                    return lhs.date > rhs.date // newer samples first
+                }
+                return lhsAccuracy < rhsAccuracy
+            }
+            .first
     }
 
     // MARK: - Updating Visit and Trip
