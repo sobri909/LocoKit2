@@ -498,6 +498,21 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
+    public var haveSamplesForCleanup: Bool {
+        get async {
+            do {
+                if isVisit {
+                    return try !visitSamplesForCleanup.isEmpty
+                } else {
+                    return try await !tripSamplesForCleanup.isEmpty
+                }
+            } catch {
+                logger.error(error, subsystem: .timeline)
+                return false
+            }
+        }
+    }
+
     private var tripSamplesForCleanup: [LocomotionSample] {
         get async throws {
             guard let samples else {
