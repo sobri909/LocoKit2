@@ -184,8 +184,14 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     // MARK: -
 
+    private var lastRecordSampleCall: Date?
+
     private func recordSample() async {
         guard isRecording else { return }
+
+        // minimum 1 second between samples plz
+        if let lastRecordSampleCall, lastRecordSampleCall.age < 1 { return }
+        lastRecordSampleCall = .now
 
         var sample = await loco.createASample()
 
@@ -277,6 +283,10 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     private func recordLegacySample() async {
         guard isRecording else { return }
+
+        // minimum 1 second between samples plz
+        if let lastRecordSampleCall, lastRecordSampleCall.age < 1 { return }
+        lastRecordSampleCall = .now
 
         var sample = await loco.createALegacySample()
 
