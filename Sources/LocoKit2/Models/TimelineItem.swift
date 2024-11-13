@@ -465,8 +465,6 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     private func cleanupVisitSamples() async {
         guard isVisit, let visit else { return }
 
-        // TODO: if there's a place, use contains() on that instead
-
         do {
             let samplesForCleanup = try visitSamplesForCleanup
 
@@ -475,12 +473,18 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
                 for var sample in samplesForCleanup {
                     try sample.updateChanges(db) { sample in
                         if let location = sample.location {
-                            if visit.contains(location, sd: 3) { // inside radius = stationary
+                            let isInside = if let place = self.place {
+                                place.contains(location, sd: 3)
+                            } else {
+                                visit.contains(location, sd: 3)
+                            }
+
+                            if isInside { // inside radius = stationary
                                 sample.confirmedActivityType = .stationary
-                            } else { // outside place radius = bogus
+                            } else { // outside radius = bogus
                                 sample.confirmedActivityType = .bogus
                             }
-                        } else { // treat nolos as inside the place radius
+                        } else { // treat nolos as inside the radius
                             sample.confirmedActivityType = .stationary
                         }
                     }

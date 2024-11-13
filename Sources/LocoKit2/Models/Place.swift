@@ -62,7 +62,11 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         return sources
     }
 
-    // MARK: - Overlaps
+    // MARK: - Overlaps etc
+
+    public func contains(_ location: CLLocation, sd: Double) -> Bool {
+        return location.distance(from: center.location) <= radius.withSD(sd)
+    }
 
     public func overlaps(_ visit: TimelineItemVisit) -> Bool {
         return distance(from: visit) < 0
