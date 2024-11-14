@@ -83,9 +83,9 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         return nil
     }
 
-    public func contains(_ otherLocation: CLLocation, sd: Double) -> Bool {
+    public func contains(_ location: CLLocation, sd: Double) -> Bool {
         let testRadius = radius.withSD(sd).clamped(min: Self.minRadius, max: Self.maxRadius)
-        return otherLocation.distance(from: center.location) <= testRadius
+        return location.distance(from: center.location) <= testRadius
     }
 
     // MARK: - Place
