@@ -14,12 +14,13 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
     public let samples: [LocomotionSample]
     public let dateRange: DateInterval
     public var manualActivityType: ActivityType?
+    public var tag: Int?
 
     public var id: String { samples.first!.id }
 
     // MARK: - Init
 
-    public init?(samples: [LocomotionSample], manualActivityType: ActivityType? = nil) {
+    public init?(samples: [LocomotionSample], manualActivityType: ActivityType? = nil, tag: Int? = nil) {
         if samples.isEmpty {
             return nil
         }
@@ -32,6 +33,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
         self.samples = samples.sorted { $0.date < $1.date }
         self.dateRange = DateInterval(start: startDate, end: endDate)
         self.manualActivityType = manualActivityType
+        self.tag = tag
     }
 
     // MARK: - Computed properties
