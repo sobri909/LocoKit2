@@ -80,6 +80,10 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
                 // Visit specific validity logic
                 if samples.isEmpty { return false }
                 if try isNolo { return false }
+                if let visit {
+                    if visit.hasConfirmedPlace { return true }
+                    if let customTitle = visit.customTitle, !customTitle.isEmpty { return true }
+                }
                 if dateRange.duration < TimelineItemVisit.minimumValidDuration { return false }
                 return true
                 
@@ -104,11 +108,14 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             guard let dateRange else { return false }
 
             if isVisit {
-                // Visit-specific worth keeping logic
+                if let visit {
+                    if visit.hasConfirmedPlace { return true }
+                    if let customTitle = visit.customTitle, !customTitle.isEmpty { return true }
+                }
                 if dateRange.duration < TimelineItemVisit.minimumKeeperDuration { return false }
                 return true
-            } else {
-                // Trip-specific worth keeping logic
+
+            } else { // Trips
                 if dateRange.duration < TimelineItemTrip.minimumKeeperDuration { return false }
                 if let distance = trip?.distance, distance < TimelineItemTrip.minimumKeeperDistance { return false }
                 return true
