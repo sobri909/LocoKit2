@@ -14,6 +14,7 @@ public enum PlaceSource { case google, foursquare, mapbox }
 public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
     public static let minimumPlaceRadius: CLLocationDistance = 8
+    public static let maximumPlaceRadius: CLLocationDistance = 2000
     public static let minimumNewPlaceRadius: CLLocationDistance = 60
 
     public var id: String = UUID().uuidString
@@ -134,45 +135,60 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     // MARK: - Stats
 
     @PlacesActor
-    public mutating func updateVisitStats() async throws {
-        let visits = try await Database.pool.read { [id] db in
-            try TimelineItem
-                .itemRequest(includeSamples: false, includePlaces: true)
-                .filter(sql: "visit.placeId = ?", arguments: [id])
-                .filter(Column("deleted") == false)
-                .fetchAll(db)
-        }
-
-        // count unique visit days using place's timezone
-        var calendar = Calendar.current
-        calendar.timeZone = localTimeZone ?? .current
-
-        let uniqueDays = Set<Date>(visits.compactMap {
-            return $0.dateRange?.start.startOfDay(in: calendar)
-        })
-
-        // for histograms, only use confirmed visits for higher confidence in patterns
-        let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
-        let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
-        let visitEnds = confirmedVisits.compactMap { $0.dateRange?.end }
-        let visitDurations = confirmedVisits.compactMap { $0.dateRange?.duration }
-
-        self.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
-        self.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
-        self.visitDurations = Histogram.forDurations(intervals: visitDurations)
-
-        try await Database.pool.write { [self] db in
-            var mutablePlace = self
-            try mutablePlace.updateChanges(db) {
-                $0.visitCount = visits.count
-                $0.visitDays = uniqueDays.count
-                $0.isStale = false
+    public mutating func updateVisitStats() async {
+        do {
+            let visits = try await Database.pool.read { [id] db in
+                try TimelineItem
+                    .itemRequest(includeSamples: true, includePlaces: true)
+                    .filter(sql: "visit.placeId = ?", arguments: [id])
+                    .filter(Column("deleted") == false)
+                    .fetchAll(db)
             }
-        }
 
-        self.visitCount = visits.count
-        self.visitDays = uniqueDays.count
-        self.isStale = false
+            // count unique visit days using place's timezone
+            var calendar = Calendar.current
+            calendar.timeZone = localTimeZone ?? .current
+
+            let uniqueDays = Set<Date>(visits.compactMap {
+                return $0.dateRange?.start.startOfDay(in: calendar)
+            })
+
+            let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
+            let samples = confirmedVisits.flatMap { $0.samples ?? [] }
+
+            // Only update if we have valid data to update with
+            if let center = samples.weightedCenter() {
+                let radius = samples.radius(from: center.location)
+
+                let boundedMean = radius.mean.clamped(min: Place.minimumPlaceRadius, max: Place.maximumPlaceRadius)
+                let boundedSD = radius.sd.clamped(min: 0, max: Place.maximumPlaceRadius)
+
+                try await Database.pool.write { [self] db in
+                    var mutableSelf = self
+                    try mutableSelf.updateChanges(db) {
+                        $0.visitCount = visits.count
+                        $0.visitDays = uniqueDays.count
+                        $0.latitude = center.latitude
+                        $0.longitude = center.longitude
+                        $0.radiusMean = boundedMean
+                        $0.radiusSD = boundedSD
+                        $0.isStale = false
+                    }
+                }
+            }
+
+            // keep histogram updates until we persist them
+            let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
+            let visitEnds = confirmedVisits.compactMap { $0.dateRange?.end }
+            let visitDurations = confirmedVisits.compactMap { $0.dateRange?.duration }
+
+            self.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
+            self.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
+            self.visitDurations = Histogram.forDurations(intervals: visitDurations)
+
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
     }
 
     // MARK: - RTree
