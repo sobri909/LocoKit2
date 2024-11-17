@@ -221,7 +221,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 public extension Array where Element == LocomotionSample {
     
     func radius(from center: CLLocation) -> Radius {
-        return compactMap { $0.location }.radius(from: center)
+        return usableLocations().radius(from: center)
     }
 
     func dateRange() -> DateInterval? {
