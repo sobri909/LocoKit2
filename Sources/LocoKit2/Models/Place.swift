@@ -145,6 +145,18 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                     .fetchAll(db)
             }
 
+            if visits.isEmpty {
+                try await Database.pool.write { [self] db in
+                    var mutableSelf = self
+                    try mutableSelf.updateChanges(db) {
+                        $0.visitCount = 0
+                        $0.visitDays = 0
+                        $0.isStale = false
+                    }
+                }
+                return
+            }
+
             // count unique visit days using place's timezone
             var calendar = Calendar.current
             calendar.timeZone = localTimeZone ?? .current
