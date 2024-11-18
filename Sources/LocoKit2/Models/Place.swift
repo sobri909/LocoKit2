@@ -106,7 +106,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     }
 
     @PlacesActor
-    public mutating func fetchLocalTimezone() async {
+    public func fetchLocalTimezone() async {
         if secondsFromGMT != nil { return }
 
         do {
@@ -121,7 +121,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                         $0.secondsFromGMT = timeZone.secondsFromGMT()
                     }
                 }
-                self.secondsFromGMT = timeZone.secondsFromGMT()
 
             } catch {
                 logger.error(error, subsystem: .database)
@@ -205,7 +204,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     // MARK: - RTree
 
-    public mutating func updateRTree() async {
+    public func updateRTree() async {
         do {
             if let rtreeId {
                 let rtree = PlaceRTree(
@@ -218,7 +217,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                 }
 
             } else {
-                rtreeId = try await Database.pool.write { [self] db in
+                try await Database.pool.write { [self] db in
                     var rtree = PlaceRTree(
                         latMin: center.latitude, latMax: center.latitude,
                         lonMin: center.longitude, lonMax: center.longitude
@@ -229,7 +228,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                     try mutableSelf.updateChanges(db) {
                         $0.rtreeId = rtree.id
                     }
-                    return rtree.id
                 }
             }
 
