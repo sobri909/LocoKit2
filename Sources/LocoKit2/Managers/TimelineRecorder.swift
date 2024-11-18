@@ -39,7 +39,7 @@ public final class TimelineRecorder: @unchecked Sendable {
     public func currentItem() -> TimelineItem? {
         guard let currentItemId else { return nil }
         return try? Database.pool.read {
-            return try TimelineItem
+            try TimelineItem
                 .itemRequest(includeSamples: false)
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .filter(Column("id") == currentItemId)
@@ -47,7 +47,14 @@ public final class TimelineRecorder: @unchecked Sendable {
         }
     }
 
-    public private(set) var latestSample: LocomotionSample?
+    public private(set) var latestSampleId: String?
+
+    public var latestSample: LocomotionSample? {
+        guard let latestSampleId else { return nil }
+        return try? Database.pool.read {
+            try LocomotionSample.fetchOne($0, id: latestSampleId)
+        }
+    }
 
     // MARK: -
 
@@ -209,7 +216,7 @@ public final class TimelineRecorder: @unchecked Sendable {
 
         let sampleCopy = sample
         await MainActor.run {
-            latestSample = sampleCopy
+            latestSampleId = sampleCopy.id
         }
     }
 

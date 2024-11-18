@@ -157,12 +157,12 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     // MARK: -
 
-    internal mutating func saveRTree() async {
+    internal func saveRTree() async {
         guard let coordinate = location?.coordinate, coordinate.isUsable else { return }
         guard rtreeId == nil else { return }
 
         do {
-            rtreeId = try await Database.pool.write { [self] db in
+            try await Database.pool.write { [self] db in
                 var rtree = SampleRTree(
                     latMin: coordinate.latitude, latMax: coordinate.latitude,
                     lonMin: coordinate.longitude, lonMax: coordinate.longitude
@@ -173,8 +173,6 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
                 try mutableSelf.updateChanges(db) { sample in
                     sample.rtreeId = rtree.id
                 }
-
-                return rtree.id
             }
 
         } catch {
