@@ -371,7 +371,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
     
     // MARK: - Activity type
 
-    public mutating func changeActivityType(to confirmedType: ActivityType) async throws {
+    public func changeActivityType(to confirmedType: ActivityType) async throws {
         guard let samples else {
             throw TimelineError.samplesNotLoaded
         }
@@ -407,9 +407,6 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
                 // queue updates for the ML models
                 await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(changedSamples)
-
-                // samples have changed yo
-                await fetchSamples(forceFetch: true)
 
             } catch {
                 logger.error(error, subsystem: .database)
