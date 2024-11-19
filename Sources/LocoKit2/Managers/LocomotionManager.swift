@@ -29,7 +29,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
     public private(set) var recordingState: RecordingState = .off {
         didSet {
-            appGroup?.save()
+            Task { await appGroup?.save() }
             for continuation in stateContinuations.values {
                 continuation.yield(recordingState)
             }
@@ -239,7 +239,7 @@ public final class LocomotionManager: @unchecked Sendable {
         restartTheWakeupTimer()
     }
 
-    private func startWakeup() {
+    private func startWakeup() async {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
 
@@ -248,7 +248,7 @@ public final class LocomotionManager: @unchecked Sendable {
         // if in standby, do standby specific checks then exit early
         if recordingState == .standby {
             if let appGroup, appGroup.shouldBeTheRecorder {
-                becomeTheActiveRecorder()
+                await becomeTheActiveRecorder()
             } else {
                 startStandby()
             }
@@ -261,12 +261,12 @@ public final class LocomotionManager: @unchecked Sendable {
         recordingState = .wakeup
     }
 
-    public func becomeTheActiveRecorder() {
+    public func becomeTheActiveRecorder() async {
         guard let appGroup else { return }
-        if appGroup.isAnActiveRecorder { return }
+        if await appGroup.isAnActiveRecorder { return }
         startRecording()
         logger.info("tookOverRecording", subsystem: .timeline)
-        appGroup.becameCurrentRecorder()
+        await appGroup.becameCurrentRecorder()
     }
 
     // MARK: -
@@ -325,7 +325,7 @@ public final class LocomotionManager: @unchecked Sendable {
             }
 
         case .sleeping, .deepSleeping:
-            if let appGroup, appGroup.isAnActiveRecorder, !appGroup.shouldBeTheRecorder {
+            if let appGroup, await appGroup.isAnActiveRecorder, !appGroup.shouldBeTheRecorder {
                 startStandby()
             }
 
@@ -358,7 +358,7 @@ public final class LocomotionManager: @unchecked Sendable {
             wakeupTimer?.invalidate()
             wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
                 if let self {
-                    self.startWakeup()
+                    Task { await self.startWakeup() }
                 }
             }
         }
@@ -370,7 +370,7 @@ public final class LocomotionManager: @unchecked Sendable {
             standbyTimer?.invalidate()
             standbyTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
                 if let self {
-                    self.startWakeup()
+                    Task { await self.startWakeup() }
                 }
             }
         }

@@ -8,8 +8,8 @@
 import Foundation
 import GRDB
 
-// TODO: get rid of @unchecked
-public final class TimelineRecorder: @unchecked Sendable {
+@TimelineActor
+public final class TimelineRecorder {
 
     public static let highlander = TimelineRecorder()
 
@@ -33,7 +33,9 @@ public final class TimelineRecorder: @unchecked Sendable {
     // MARK: -
 
     public private(set) var currentItemId: String? {
-        didSet { loco.appGroup?.save() }
+        didSet {
+            Task { await loco.appGroup?.save() }
+        }
     }
 
     public func currentItem() -> TimelineItem? {
@@ -49,7 +51,7 @@ public final class TimelineRecorder: @unchecked Sendable {
 
     public private(set) var latestSampleId: String?
 
-    public var latestSample: LocomotionSample? {
+    public func latestSample() -> LocomotionSample? {
         guard let latestSampleId else { return nil }
         return try? Database.pool.read {
             try LocomotionSample.fetchOne($0, id: latestSampleId)
@@ -59,7 +61,9 @@ public final class TimelineRecorder: @unchecked Sendable {
     // MARK: -
 
     public private(set) var currentLegacyItemId: String? {
-        didSet { loco.appGroup?.save() }
+        didSet {
+            Task { await loco.appGroup?.save() }
+        }
     }
 
     public func currentLegacyItem() -> LegacyItem? {
@@ -67,7 +71,14 @@ public final class TimelineRecorder: @unchecked Sendable {
         return try? Database.legacyPool?.read { try LegacyItem.fetchOne($0, id: currentLegacyItemId) }
     }
 
-    public private(set) var latestLegacySample: LegacySample?
+    public private(set) var latestLegacySampleId: String?
+
+    public var latestLegacySample: LegacySample? {
+        guard let latestLegacySampleId else { return nil }
+        return try? Database.pool.read {
+            try LegacySample.fetchOne($0, id: latestLegacySampleId)
+        }
+    }
 
     // MARK: - Private
 
@@ -214,10 +225,7 @@ public final class TimelineRecorder: @unchecked Sendable {
             logger.error(error, subsystem: .database)
         }
 
-        let sampleCopy = sample
-        await MainActor.run {
-            latestSampleId = sampleCopy.id
-        }
+        latestSampleId = sample.id
     }
 
     private func processSample(_ sample: inout LocomotionSample) async {
@@ -309,10 +317,7 @@ public final class TimelineRecorder: @unchecked Sendable {
             logger.error(error, subsystem: .database)
         }
 
-        let sampleCopy = sample
-        await MainActor.run {
-            latestLegacySample = sampleCopy
-        }
+        latestLegacySampleId = sample.id
     }
 
     private func processLegacySample(_ sample: inout LegacySample) async {

@@ -29,7 +29,6 @@ public final class AppGroup: @unchecked Sendable {
     private lazy var talker: AppGroupTalk = { AppGroupTalk(messagePrefix: suiteName, appName: thisApp) }()
 
     private let loco = LocomotionManager.highlander
-    private let timeline = TimelineRecorder.highlander
 
     // MARK: - Public methods
 
@@ -39,13 +38,13 @@ public final class AppGroup: @unchecked Sendable {
 
         if readOnly { load(); return }
 
-        save()
+        Task { await save() }
 
         let center = NotificationCenter.default
         center.addObserver(forName: .receivedAppGroupMessage, object: nil, queue: nil) { [weak self] note in
             guard let messageRaw = note.userInfo?["message"] as? String else { return }
             guard let message = AppGroup.Message(rawValue: messageRaw.deletingPrefix(suiteName + ".")) else { return }
-            self?.received(message)
+            Task { await self?.received(message) }
         }
         center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] note in
             self?.applicationState = .active
@@ -70,11 +69,13 @@ public final class AppGroup: @unchecked Sendable {
     }
 
     public var isAnActiveRecorder: Bool {
-        return currentAppState.recordingState.isCurrentRecorder
+        get async {
+            return await currentAppState.recordingState.isCurrentRecorder
+        }
     }
 
-    public func becameCurrentRecorder() {
-        save()
+    public func becameCurrentRecorder() async {
+        await save()
         send(message: .tookOverRecording)
     }
 
@@ -99,24 +100,27 @@ public final class AppGroup: @unchecked Sendable {
         apps = states
     }
 
-    public func save() {
+    public func save() async {
         let fileManager = FileManager.default
         guard let containerURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: suiteName) else {
             return
         }
 
         let fileURL = containerURL.appendingPathComponent("\(thisApp.rawValue).AppState.json")
-        try? currentAppState.saveToFile(url: fileURL)
+        try? await currentAppState.saveToFile(url: fileURL)
 
         send(message: .updatedState)
     }
 
     var currentAppState: AppState {
-        return AppState(
-            appName: thisApp,
-            recordingStateString: loco.recordingState.stringValue,
-            currentItemId: timeline.legacyDbMode ? timeline.currentLegacyItemId : timeline.currentItemId
-        )
+        get async {
+            let timeline = await TimelineRecorder.highlander
+            return await AppState(
+                appName: thisApp,
+                recordingStateString: loco.recordingState.stringValue,
+                currentItemId: timeline.legacyDbMode ? timeline.currentLegacyItemId : timeline.currentItemId
+            )
+        }
     }
 
     public func notifyObjectChanges(objectIds: Set<UUID>) {
@@ -135,7 +139,7 @@ public final class AppGroup: @unchecked Sendable {
     }
 
     // TODO: should store lastMessage in AppGroup (don't want to be relying on groupDefaults)
-    private func received(_ message: AppGroup.Message) {
+    private func received(_ message: AppGroup.Message) async {
         guard let data = groupDefaults?.value(forKey: "lastMessage") as? Data else { return }
         guard let messageInfo = try? decoder.decode(MessageInfo.self, from: data) else { return }
         guard messageInfo.appName != thisApp else { return }
@@ -148,15 +152,15 @@ public final class AppGroup: @unchecked Sendable {
 
         switch message {
         case .updatedState:
-            appStateUpdated(by: messageInfo.appName)
+            await appStateUpdated(by: messageInfo.appName)
         case .modifiedObjects:
             break
         case .tookOverRecording:
-            concedeRecording(to: messageInfo.appName)
+            await concedeRecording(to: messageInfo.appName)
         }
     }
     
-    private func appStateUpdated(by: AppName) {
+    private func appStateUpdated(by: AppName) async {
         logger.debug("RECEIVED: .updatedState, from: \(by.rawValue)")
 
         if currentRecorder?.currentItemId == nil {
@@ -167,19 +171,20 @@ public final class AppGroup: @unchecked Sendable {
             logger.error("No AppGroup.currentRecorder", subsystem: .appgroup)
         }
 
-        if isAnActiveRecorder {
+        if await isAnActiveRecorder {
             if !shouldBeTheRecorder {
-                concedeRecording()
+                await concedeRecording()
             }
 
-        } else if let currentItemId = currentRecorder?.currentItemId, currentAppState.currentItemId != currentItemId {
-            logger.debug("Local currentItemId is stale (mine: \(currentAppState.currentItemId ?? "nil"), theirs: \(currentItemId))")
-            timeline.updateCurrentItemId()
+        } else if let currentItemId = currentRecorder?.currentItemId, await currentAppState.currentItemId != currentItemId {
+            let appState = await currentAppState
+            logger.debug("Local currentItemId is stale (mine: \(appState.currentItemId ?? "nil"), theirs: \(currentItemId))")
+            await TimelineRecorder.highlander.updateCurrentItemId()
         }
     }
 
-    private func concedeRecording(to activeRecorder: AppName? = nil) {
-        guard isAnActiveRecorder else { return }
+    private func concedeRecording(to activeRecorder: AppName? = nil) async {
+        guard await isAnActiveRecorder else { return }
 
         LocomotionManager.highlander.startStandby()
 

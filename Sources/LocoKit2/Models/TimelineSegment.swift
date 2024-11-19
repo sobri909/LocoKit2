@@ -105,7 +105,7 @@ public final class TimelineSegment: Sendable {
 
         do {
             var mutableItems = items
-            let currentItemId = TimelineRecorder.highlander.currentItemId
+            let currentItemId = await TimelineRecorder.highlander.currentItemId
             let currentItem = mutableItems.first { $0.id == currentItemId }
 
             // shouldn't do processing if currentItem is in the segment and isn't a keeper
