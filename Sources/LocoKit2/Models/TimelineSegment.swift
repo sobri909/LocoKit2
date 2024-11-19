@@ -70,9 +70,14 @@ public final class TimelineSegment: Sendable {
         }
     }
 
+    @ObservationIgnored
+    nonisolated(unsafe)
+    private var lastCurrentItemId: String?
+
     private func update(from updatedItems: [TimelineItem]) async {
         var mutableItems = updatedItems
 
+        // load/copy samples
         for index in mutableItems.indices {
             let itemCopy = mutableItems[index]
             if itemCopy.samplesChanged {
@@ -90,38 +95,53 @@ public final class TimelineSegment: Sendable {
             }
         }
 
+        let oldItems = await timelineItems
         await MainActor.run {
             self.timelineItems = mutableItems
         }
 
+        let recorder = await TimelineRecorder.highlander
+        let currentItemId = await recorder.currentItemId
+
+        // don't reprocess if currentItem is in segment and isn't a keeper
+        if let currentItemId, let currentItem = mutableItems.first(where: { $0.id == currentItemId }) {
+            do {
+                if try !currentItem.isWorthKeeping { return }
+            } catch {
+                logger.error(error, subsystem: .timeline)
+                return
+            }
+        }
+
+        // if there's no currentItem, always process
+        guard let currentItemId else {
+            lastCurrentItemId = nil
+            await reprocess(items: mutableItems)
+            return
+        }
+
+        // check if anything besides currentItem changed
+        let oldWithoutCurrent = oldItems.filter { $0.id != currentItemId }
+        let newWithoutCurrent = mutableItems.filter { $0.id != currentItemId }
+
+        // if only currentItem changed, skip processing
+        if oldWithoutCurrent == newWithoutCurrent { return }
+
+        // something else changed - do the processing
+        lastCurrentItemId = currentItemId
         await reprocess(items: mutableItems)
     }
 
     private func reprocess(items: [TimelineItem]) async {
         guard shouldReprocessOnUpdate else { return }
-
-        // no reprocessing in the background
         guard await UIApplication.shared.applicationState == .active else { return }
 
-        do {
-            var mutableItems = items
-            let currentItemId = await TimelineRecorder.highlander.currentItemId
-            let currentItem = mutableItems.first { $0.id == currentItemId }
-
-            // shouldn't do processing if currentItem is in the segment and isn't a keeper
-            if let currentItem, try !currentItem.isWorthKeeping {
-                return
-            }
-
-            for index in mutableItems.indices {
-                await mutableItems[index].classifySamples()
-            }
-
-            await TimelineProcessor.process(mutableItems)
-
-        } catch {
-            logger.error(error, subsystem: .timeline)
+        var mutableItems = items
+        for index in mutableItems.indices {
+            await mutableItems[index].classifySamples()
         }
+
+        await TimelineProcessor.process(mutableItems)
     }
 
 }
