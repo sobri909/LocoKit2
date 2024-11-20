@@ -169,4 +169,8 @@ public final class ActivityClassifier {
         models = updated
     }
 
+    public func invalidateModel(geoKey: String) {
+        models = models.filter { $0.value.geoKey != geoKey }
+    }
+
 }

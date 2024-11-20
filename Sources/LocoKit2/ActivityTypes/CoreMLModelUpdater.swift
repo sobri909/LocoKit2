@@ -244,6 +244,8 @@ public final class CoreMLModelUpdater {
 
             try model.reloadModel()
 
+            ActivityClassifier.highlander.invalidateModel(geoKey: model.geoKey)
+
         } catch {
             logger.error(error, subsystem: .activitytypes)
         }
