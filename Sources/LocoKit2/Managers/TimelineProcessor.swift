@@ -307,8 +307,8 @@ public final class TimelineProcessor {
 
         // first attempt: try to move trip edge into visit
         if !excluding.contains(tripEdge) {
-            let tripEdgeIsInside = visit.contains(tripEdgeLocation, sd: 0.5) // experiment with smaller radius
-            let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: 0.5)
+            let tripEdgeIsInside = visit.contains(tripEdgeLocation, sd: 1) // experiment with smaller radius
+            let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: 1)
 
             if tripEdgeIsInside && tripEdgeNextIsInside {
                 try await tripEdge.assignTo(itemId: visitItem.id)
@@ -320,7 +320,7 @@ public final class TimelineProcessor {
         let edgeNextDuration = abs(visitEdge.date.timeIntervalSince(visitEdgeNext.date))
         if edgeNextDuration > .minutes(2) { return nil }
 
-        if !excluding.contains(visitEdge), !visit.contains(tripEdgeLocation, sd: 0.5) {
+        if !excluding.contains(visitEdge), !visit.contains(tripEdgeLocation, sd: 1) {
             try await visitEdge.assignTo(itemId: tripItem.id)
             return visitEdge
         }
