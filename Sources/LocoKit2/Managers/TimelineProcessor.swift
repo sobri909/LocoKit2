@@ -276,7 +276,7 @@ public final class TimelineProcessor {
         if speedIsSlow != otherSpeedIsSlow { return nil }
 
         if !excluding.contains(otherEdge), otherEdge.classifiedActivityType == activityType {
-            try await moveSample(otherEdge, to: tripItem.id)
+            try await otherEdge.assignTo(itemId: tripItem.id)
             return otherEdge
         }
 
@@ -285,43 +285,49 @@ public final class TimelineProcessor {
 
     private static func edgeSteal(forVisitItem visitItem: TimelineItem, tripItem: TimelineItem, in list: TimelineLinkedList,
                                   excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
-        guard let visit = visitItem.visit, tripItem.isTrip else { return nil }
+        guard visitItem.isVisit, let visit = visitItem.visit, tripItem.isTrip else { return nil }
 
+        // check if items could theoretically merge
+        guard try visitItem.isWithinMergeableDistance(of: tripItem) else { return nil }
+
+        // sanity check: don't steal edges across large time gaps
+        guard abs(visitItem.timeInterval(from: tripItem)) < .minutes(10) else { return nil }
+
+        // get required edge samples
         guard let visitEdge = try visitItem.edgeSample(withOtherItemId: tripItem.id),
               let visitEdgeNext = try visitItem.secondToEdgeSample(withOtherItemId: tripItem.id),
               let tripEdge = try tripItem.edgeSample(withOtherItemId: visitItem.id),
-              let tripEdgeNext = try tripItem.secondToEdgeSample(withOtherItemId: visitItem.id),
+              let tripEdgeNext = try tripItem.secondToEdgeSample(withOtherItemId: visitItem.id) else { return nil }
+
+        // check for usable coordinates and get locations
+        guard visitEdge.hasUsableCoordinate, visitEdgeNext.hasUsableCoordinate,
+              tripEdge.hasUsableCoordinate, tripEdgeNext.hasUsableCoordinate,
               let tripEdgeLocation = tripEdge.location,
               let tripEdgeNextLocation = tripEdgeNext.location else { return nil }
 
-        let tripEdgeIsInside = visit.contains(tripEdgeLocation, sd: 1)
-        let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: 1)
+        // first attempt: try to move trip edge into visit
+        if !excluding.contains(tripEdge) {
+            let tripEdgeIsInside = visit.contains(tripEdgeLocation, sd: 0.5) // experiment with smaller radius
+            let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: 0.5)
 
-        if !excluding.contains(tripEdge), tripEdgeIsInside && tripEdgeNextIsInside {
-            try await moveSample(tripEdge, to: visitItem.id)
-            return tripEdge
+            if tripEdgeIsInside && tripEdgeNextIsInside {
+                try await tripEdge.assignTo(itemId: visitItem.id)
+                return tripEdge
+            }
         }
 
+        // only attempt moving visit edge if moving trip edge failed
         let edgeNextDuration = abs(visitEdge.date.timeIntervalSince(visitEdgeNext.date))
-        if edgeNextDuration > 120 { return nil }
+        if edgeNextDuration > .minutes(2) { return nil }
 
-        if !excluding.contains(visitEdge), !tripEdgeIsInside {
-            try await moveSample(visitEdge, to: tripItem.id)
+        if !excluding.contains(visitEdge), !visit.contains(tripEdgeLocation, sd: 0.5) {
+            try await visitEdge.assignTo(itemId: tripItem.id)
             return visitEdge
         }
 
         return nil
     }
-
-    private static func moveSample(_ sample: LocomotionSample, to destinationItemId: String) async throws {
-        try await Database.pool.write { db in
-            var mutableSample = sample
-            try mutableSample.updateChanges(db) {
-                $0.timelineItemId = destinationItemId
-            }
-        }
-    }
-
+    
     // MARK: - Item extraction
 
     @discardableResult

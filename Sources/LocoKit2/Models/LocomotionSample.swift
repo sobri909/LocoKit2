@@ -155,6 +155,15 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         }
     }
 
+    func assignTo(itemId: String) async throws {
+        try await Database.pool.write { db in
+            var mutableSample = self
+            try mutableSample.updateChanges(db) {
+                $0.timelineItemId = itemId
+            }
+        }
+    }
+
     // MARK: -
 
     internal func saveRTree() async {
