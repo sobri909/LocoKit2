@@ -40,6 +40,18 @@ public final class TimelineSegment: Sendable {
 
     // MARK: -
 
+    public func pruneSamples() async {
+        for item in await timelineItems {
+            do {
+                try await item.pruneSamples()
+            } catch {
+                logger.error(error, subsystem: .timeline)
+            }
+        }
+    }
+
+    // MARK: - Private
+
     private func setupObserver() {
         changesTask = Task { [weak self] in
             for await changedRange in TimelineObserver.highlander.changesStream() {
