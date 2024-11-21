@@ -624,62 +624,45 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             throw TimelineError.invalidItem("Can only prune Visits with samples")
         }
 
-        print("pruneVisitSamples() starting with \(samples.count) samples")
-
         let startEdgeEnd = dateRange.start + .minutes(30)
         let endEdgeStart = dateRange.end - .minutes(30)
         let maxGap: TimeInterval = .minutes(2)
 
         var keepSamples: Set<String> = []
-        var edgeCount = 0
-        var nonStationaryCount = 0
-        var middleCount = 0
-        var gapSizes: [TimeInterval] = []
+        var rollingWindow: [LocomotionSample] = []
+        var lastKeptDate: Date?
 
         // first pass: keep all edge and non-stationary samples
         for sample in samples {
             // Always keep non-stationary samples
             if sample.activityType != .stationary {
                 keepSamples.insert(sample.id)
-                nonStationaryCount += 1
                 continue
             }
 
             // Keep edge samples
             if sample.date <= startEdgeEnd || sample.date >= endEdgeStart {
                 keepSamples.insert(sample.id)
-                edgeCount += 1
                 continue
             }
         }
 
-        print("- After first pass: keeping \(keepSamples.count) edge/non-stationary samples")
-
         // get remaining samples to process
-        var middleSamples = samples.filter { !keepSamples.contains($0.id) }
-        print("- Found \(middleSamples.count) middle samples to process")
+        let middleSamples = samples
+            .filter { !keepSamples.contains($0.id) }
+            .sorted { $0.date < $1.date }
 
         // rolling window approach
-        var rollingWindow: [LocomotionSample] = []
-
         for sample in middleSamples {
             rollingWindow.append(sample)
 
-            // if we've accumulated 2+ mins of samples
-            if let firstInWindow = rollingWindow.first,
-               sample.date - firstInWindow.date >= maxGap {
+            if let windowRange = rollingWindow.dateRange(),
+               windowRange.duration >= maxGap {
 
                 // pick best sample from window
                 if let bestSample = chooseBestSample(from: rollingWindow) {
                     keepSamples.insert(bestSample.id)
-                    middleCount += 1
-
-                    // track gap from previous kept sample for stats
-                    if let previousDate = rollingWindow.first?.date {
-                        let gap = bestSample.date - previousDate
-                        gapSizes.append(gap)
-                        print("- Kept sample at \(bestSample.date.formatted(date: .omitted, time: .standard)) (window: \(String(format: "%.1f", gap)) seconds)")
-                    }
+                    lastKeptDate = bestSample.date
 
                     // remove everything up to and including kept sample
                     if let keptIndex = rollingWindow.firstIndex(where: { $0.id == bestSample.id }) {
@@ -693,54 +676,41 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         if !rollingWindow.isEmpty {
             if let bestSample = chooseBestSample(from: rollingWindow) {
                 keepSamples.insert(bestSample.id)
-                middleCount += 1
+            }
+        }
 
-                if let previousDate = rollingWindow.first?.date {
-                    let gap = bestSample.date - previousDate
-                    gapSizes.append(gap)
-                    print("- Final kept sample at \(bestSample.date.formatted(date: .omitted, time: .standard)) (window: \(String(format: "%.1f", gap)) seconds)")
+        // delete samples not in keepSamples
+        try await Database.pool.write { [keepSamples] db in
+            for sample in samples {
+                if !keepSamples.contains(sample.id) {
+                    try sample.delete(db)
                 }
             }
         }
 
-        let avgGap = gapSizes.isEmpty ? 0 : gapSizes.reduce(0, +) / Double(gapSizes.count)
-        let maxFoundGap = gapSizes.max() ?? 0
-
         print("""
-       pruneVisitSamples() results:
-       - Total samples: \(samples.count)
-       - Keeping \(keepSamples.count) samples (\(Int((Double(keepSamples.count) / Double(samples.count)) * 100))%)
-       - Edge samples: \(edgeCount)
-       - Non-stationary: \(nonStationaryCount)
-       - Middle gaps: \(middleCount)
-       - Average gap: \(String(format: "%.1f", avgGap)) seconds
-       - Maximum gap: \(String(format: "%.1f", maxFoundGap)) seconds
-       """)
-
-//        try await Database.pool.write { [keepSamples] db in
-//            for sample in samples {
-//                if !keepSamples.contains(sample.id) {
-//                    try sample.delete(db)
-//                }
-//            }
-//        }
+              pruneVisitSamples() results:
+              - Total samples: \(samples.count)
+              - Keeping \(keepSamples.count) samples (\(Int((Double(keepSamples.count) / Double(samples.count)) * 100))%)
+              - Edge samples: \(samples.filter { $0.date <= startEdgeEnd || $0.date >= endEdgeStart }.count)
+              - Non-stationary: \(samples.filter { $0.activityType != .stationary }.count)
+              - Middle gaps: \(keepSamples.count - (samples.filter { $0.date <= startEdgeEnd || $0.date >= endEdgeStart }.count) - (samples.filter { $0.activityType != .stationary }.count))
+              """)
     }
 
     private func chooseBestSample(from candidates: [LocomotionSample]) -> LocomotionSample? {
         guard !candidates.isEmpty else { return nil }
 
         // Sort by accuracy (higher accuracy = lower number = better)
-        // For equal accuracies, prefer newer samples
+        // For equal accuracies, prefer older samples to minimize gaps
         // Samples without horizontalAccuracy go last
         return candidates
             .sorted { lhs, rhs in
-                // if either lacks accuracy, it loses
                 guard let lhsAccuracy = lhs.horizontalAccuracy else { return false }
-                guard let rhsAccuracy = rhs.horizontalAccuracy else { return true } // rhs has no accuracy, lhs wins
+                guard let rhsAccuracy = rhs.horizontalAccuracy else { return true }
 
-                // both have accuracy - compare
                 if lhsAccuracy == rhsAccuracy {
-                    return lhs.date > rhs.date // newer samples first
+                    return lhs.date < rhs.date // older samples first
                 }
                 return lhsAccuracy < rhsAccuracy
             }
