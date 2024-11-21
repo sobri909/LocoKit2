@@ -636,7 +636,6 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
         var keepSamples: Set<String> = []
         var rollingWindow: [LocomotionSample] = []
-        var lastKeptDate: Date?
 
         // first pass: keep all edge and non-stationary samples
         for sample in samples {
@@ -668,7 +667,6 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
                 // pick best sample from window
                 if let bestSample = chooseBestSample(from: rollingWindow) {
                     keepSamples.insert(bestSample.id)
-                    lastKeptDate = bestSample.date
 
                     // remove everything up to and including kept sample
                     if let keptIndex = rollingWindow.firstIndex(where: { $0.id == bestSample.id }) {
