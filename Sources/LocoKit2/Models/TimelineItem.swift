@@ -606,9 +606,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
         guard points.count > 2 else { return }
 
-        let keepIndices = RamerDouglasPeucker.simplifyDebug(coordinates: points, maxInterval: maxInterval, epsilon: epsilon)
-
-        print("pruneTripSamples() maxInterval: \(maxInterval), epsilon: \(epsilon), points: \(points.count), keepIndices: \(keepIndices.count)")
+        let keepIndices = RamerDouglasPeucker.simplify(coordinates: points, maxInterval: maxInterval, epsilon: epsilon)
 
         try await Database.pool.write { db in
             for (index, sample) in sortedSamples.enumerated() {
@@ -617,9 +615,17 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
                 }
             }
         }
+
+        print("""
+          pruneTripSamples() results:
+          - Activity type: \(activityType.displayName)
+          - Total samples: \(sortedSamples.count)
+          - Keeping: \(keepIndices.count) samples (\(Int((Double(keepIndices.count) / Double(sortedSamples.count)) * 100))%)
+          - Params: \(String(format: "%.1fs", maxInterval)) maxInterval, \(Int(epsilon))m epsilon
+          """)
     }
 
-    func pruneVisitSamples() async throws {
+    private func pruneVisitSamples() async throws {
         guard isVisit, let dateRange = dateRange, let samples = samples else {
             throw TimelineError.invalidItem("Can only prune Visits with samples")
         }
