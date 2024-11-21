@@ -474,7 +474,7 @@ public final class TimelineProcessor {
     private static let edgeHealingThreshold: TimeInterval = .minutes(15)
 
     static func healEdges(itemId: String) async throws {
-        guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: false) else {
+        guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) else {
             return
         }
 
@@ -493,13 +493,24 @@ public final class TimelineProcessor {
                 .filter(Column("startDate") <= dateRange.start)
                 .filter(Column("endDate") >= dateRange.end)
                 .filter(Column("deleted") == false && Column("disabled") == false)
+                .filter(Column("source") == item.source)  // only merge same sources
                 .filter(Column("id") != item.id)
                 .fetchOne(db)
         }
 
-        // we're not here to deal with fully overlapping items
-        if container != nil {
-            logger.error("healEdges() Item is fully contained by another item", subsystem: .timeline)
+        // if fully contained, transfer samples and delete
+        if let container, let samples = item.samples {
+            try await Database.pool.write { db in
+                for var sample in samples {
+                    try sample.updateChanges(db) {
+                        $0.timelineItemId = container.id
+                    }
+                }
+                var mutableItem = item
+                try mutableItem.base.updateChanges(db) {
+                    $0.deleted = true
+                }
+            }
             return
         }
 
@@ -517,27 +528,11 @@ public final class TimelineProcessor {
             return
         }
 
-        // Check for overlapping items
-        let overlapper = try await Database.pool.read { db in
-            try TimelineItem.itemRequest(includeSamples: false)
-                .filter(Column("endDate") > dateRange.start)
-                .filter(Column("startDate") < dateRange.start)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("id") != item.id)
-                .fetchOne(db)
-        }
-
-        if overlapper != nil {
-            logger.error("healPreviousEdge() Overlapping item found", subsystem: .timeline)
-            return
-        }
-
-        // Find nearest previous item
+        // Find nearest previous item (even if it has an edge)
         let nearest = try await Database.pool.read { db in
             try TimelineItem.itemRequest(includeSamples: false)
                 .filter(Column("endDate") <= dateRange.start)
                 .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("nextItemId") == nil)
                 .filter(Column("id") != item.id)
                 .order(Column("endDate").desc)
                 .fetchOne(db)
@@ -546,19 +541,25 @@ public final class TimelineProcessor {
         if let nearest, let nearestEndDate = nearest.dateRange?.end {
             let gap = dateRange.start.timeIntervalSince(nearestEndDate)
 
-            if gap <= edgeHealingThreshold { // can heal the edge
+            if gap <= edgeHealingThreshold {
+                // check if nearest already has a next item
+                if let currentNextId = nearest.base.nextItemId,
+                   let currentNext = try await TimelineItem.fetchItem(itemId: currentNextId, includeSamples: false) {
+                    let currentGap = currentNext.timeInterval(from: nearest)
+                    // only steal if we're closer
+                    if abs(gap) >= abs(currentGap) {
+                        return
+                    }
+                }
+
+                // we're either first or closer - take the edge
                 try await Database.pool.write { db in
                     var mutableItem = item
                     try mutableItem.base.updateChanges(db) {
                         $0.previousItemId = nearest.id
                     }
-                    var mutableNearest = nearest
-                    try mutableNearest.base.updateChanges(db) {
-                        $0.nextItemId = item.id
-                    }
                 }
-
-            } else { // can't heal the edge
+            } else {
                 logger.info("healPreviousEdge() Gap too large: \(String(format: "%.f2", gap / 60)) minutes", subsystem: .timeline)
             }
         } else {
@@ -571,27 +572,11 @@ public final class TimelineProcessor {
             return
         }
 
-        // Check for overlapping items
-        let overlapper = try await Database.pool.read { db in
-            try TimelineItem.itemRequest(includeSamples: false)
-                .filter(Column("startDate") < dateRange.end)
-                .filter(Column("endDate") > dateRange.end)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("id") != item.id)
-                .fetchOne(db)
-        }
-
-        if overlapper != nil {
-            logger.error("healNextEdge() Overlapping item found", subsystem: .timeline)
-            return
-        }
-
-        // Find nearest next item
+        // Find nearest next item (even if it has an edge)
         let nearest = try await Database.pool.read { db in
             try TimelineItem.itemRequest(includeSamples: false)
                 .filter(Column("startDate") >= dateRange.end)
                 .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("previousItemId") == nil)
                 .filter(Column("id") != item.id)
                 .order(Column("startDate").asc)
                 .fetchOne(db)
@@ -600,19 +585,25 @@ public final class TimelineProcessor {
         if let nearest, let nearestStartDate = nearest.dateRange?.start {
             let gap = nearestStartDate.timeIntervalSince(dateRange.end)
 
-            if gap <= edgeHealingThreshold { // can heal the edge
+            if gap <= edgeHealingThreshold {
+                // check if nearest already has a previous item
+                if let currentPrevId = nearest.base.previousItemId,
+                   let currentPrev = try await TimelineItem.fetchItem(itemId: currentPrevId, includeSamples: false) {
+                    let currentGap = currentPrev.timeInterval(from: nearest)
+                    // only steal if we're closer
+                    if abs(gap) >= abs(currentGap) {
+                        return
+                    }
+                }
+
+                // we're either first or closer - take the edge
                 try await Database.pool.write { db in
                     var mutableItem = item
                     try mutableItem.base.updateChanges(db) {
                         $0.nextItemId = nearest.id
                     }
-                    var mutableNearest = nearest
-                    try mutableNearest.base.updateChanges(db) {
-                        $0.previousItemId = item.id
-                    }
                 }
-
-            } else { // can't heal the edge
+            } else {
                 logger.info("healNextEdge() Gap too large: \(String(format: "%.f2", gap / 60)) minutes", subsystem: .timeline)
             }
         } else {
