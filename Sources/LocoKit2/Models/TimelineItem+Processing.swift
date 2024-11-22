@@ -11,8 +11,8 @@ import CoreLocation
 extension TimelineItem {
 
     @TimelineActor
-    public func scoreForConsuming(_ item: TimelineItem) -> ConsumptionScore {
-        return MergeScores.consumptionScoreFor(self, toConsume: item)
+    public func scoreForConsuming(_ item: TimelineItem) async -> ConsumptionScore {
+        return await MergeScores.consumptionScoreFor(self, toConsume: item)
     }
 
     public var keepnessScore: Int {

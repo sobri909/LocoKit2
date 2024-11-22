@@ -21,7 +21,7 @@ public enum ConsumptionScore: Int {
 public final class MergeScores {
 
     // MARK: - SOMETHING <- SOMETHING
-    static func consumptionScoreFor(_ consumer: TimelineItem, toConsume consumee: TimelineItem) -> ConsumptionScore {
+    static func consumptionScoreFor(_ consumer: TimelineItem, toConsume consumee: TimelineItem) async -> ConsumptionScore {
         guard let consumerSamples = consumer.samples else { return .impossible }
         guard let consumeeSamples = consumee.samples else { return .impossible }
 
@@ -60,7 +60,7 @@ public final class MergeScores {
             if consumer.isVisit {
                 return consumptionScoreFor(visit: consumer, toConsume: consumee)
             } else { // trip <- something
-                return try consumptionScoreFor(trip: consumer, toConsume: consumee)
+                return try await consumptionScoreFor(trip: consumer, toConsume: consumee)
             }
 
         } catch {
@@ -70,7 +70,7 @@ public final class MergeScores {
     }
 
     // MARK: - TRIP <- SOMETHING
-    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsume consumee: TimelineItem) throws -> ConsumptionScore {
+    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsume consumee: TimelineItem) async throws -> ConsumptionScore {
         guard consumer.isTrip else { fatalError() }
 
         // consumer is invalid
@@ -87,7 +87,7 @@ public final class MergeScores {
         if consumee.isVisit { return try consumptionScoreFor(trip: consumer, toConsumeVisit: consumee) }
 
         // trip <- trip
-        if consumee.isTrip { return try consumptionScoreFor(trip: consumer, toConsumeTrip: consumee) }
+        if consumee.isTrip { return try await consumptionScoreFor(trip: consumer, toConsumeTrip: consumee) }
 
         return .impossible
     }
@@ -124,12 +124,9 @@ public final class MergeScores {
     }
 
     // MARK: - TRIP <- TRIP
-    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeTrip consumee: TimelineItem) throws -> ConsumptionScore {
+    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeTrip consumee: TimelineItem) async throws -> ConsumptionScore {
         guard consumer.isTrip, consumee.isTrip else { fatalError() }
         guard let consumerTrip = consumer.trip, let consumeeTrip = consumee.trip else { fatalError() }
-
-//        let consumerType = consumer.modeMovingActivityType ?? consumer.modeActivityType
-//        let consumeeType = consumee.modeMovingActivityType ?? consumee.modeActivityType
 
         let consumerType = consumerTrip.activityType
         let consumeeType = consumeeTrip.activityType
@@ -146,28 +143,27 @@ public final class MergeScores {
         // a path with nil type can't consume anyone
         guard let scoringType = consumerType else { return .impossible }
 
-//        guard let typeResult = consumee.classifierResults?.first(where: { $0.name == scoringType }) else {
-//            return .impossible
-//        }
+        // check consumee's classifier results for compatibility with consumer's type
+        guard let classifierResults = await consumee.samples?.first?.classifierResults,
+              let typeResult = classifierResults[scoringType] else {
+            return .impossible
+        }
 
-        // consumee's type score for consumer's type, as a usable Int
-//        let typeScore = Int(floor(typeResult.score * 1000))
-//
-//        switch typeScore {
-//        case 75...Int.max:
-//            return .perfect
-//        case 50...75:
-//            return .high
-//        case 25...50:
-//            return .medium
-//        case 10...25:
-//            return .low
-//        default:
-//            return .veryLow
-//        }
+        // convert score to percentage for easier thresholds
+        let typeScore = Int(floor(typeResult.score * 100))
 
-        // TODO: remove this once above actually works
-        return .impossible
+        switch typeScore {
+        case 75...Int.max:  // 0.75-1.0 -> very strong match
+            return .perfect
+        case 50...74:       // 0.5-0.74 -> good match
+            return .high
+        case 25...49:       // 0.25-0.49 -> possible match
+            return .medium
+        case 10...24:       // 0.1-0.24 -> weak match
+            return .low
+        default:            // < 0.1 -> very weak match
+            return .veryLow
+        }
     }
 
     // MARK: - VISIT <- SOMETHING

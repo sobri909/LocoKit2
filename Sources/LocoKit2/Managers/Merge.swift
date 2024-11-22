@@ -31,7 +31,7 @@ internal final class Merge: Hashable, Sendable {
         guard await isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
             return .impossible
         }
-        return keeper.scoreForConsuming(deadman)
+        return await keeper.scoreForConsuming(deadman)
     }
 
     private static func isValid(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> Bool {
