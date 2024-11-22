@@ -1,5 +1,5 @@
 //
-//  RamerDouglasPeucker.swift
+//  PathSimplifier.swift
 //  LocoKit2
 //
 //  Created by Matt Greenfield on 31/10/2024.
@@ -8,7 +8,7 @@
 import Foundation
 import CoreLocation
 
-enum RamerDouglasPeucker {
+enum PathSimplifier {
     private struct PathPoint {
         let coordinate: CLLocationCoordinate2D
         let date: Date

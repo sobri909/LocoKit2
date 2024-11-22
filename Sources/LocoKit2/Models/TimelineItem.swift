@@ -606,7 +606,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
         guard points.count > 2 else { return }
 
-        let keepIndices = RamerDouglasPeucker.simplify(coordinates: points, maxInterval: maxInterval, epsilon: epsilon)
+        let keepIndices = PathSimplifier.simplify(coordinates: points, maxInterval: maxInterval, epsilon: epsilon)
 
         try await Database.pool.write { db in
             for (index, sample) in sortedSamples.enumerated() {
