@@ -23,23 +23,21 @@ public final class TimelineProcessor {
         print("TimelineProcessor.processFrom(itemId:)")
 
         do {
-            guard let list = try await processingList(fromItemId: itemId) else { return }
-
-            _ = await process(list)
+            if let list = try await processingList(fromItemId: itemId) {
+                await process(list)
+            }
 
         } catch {
             logger.error(error, subsystem: .timeline)
         }
     }
 
-    @discardableResult
-    public static func process(_ items: [TimelineItem]) async -> MergeResult? {
+    public static func process(_ items: [TimelineItem]) async {
         let list = TimelineLinkedList(fromItems: items)
-        return await process(list)
+        await process(list)
     }
 
-    @discardableResult
-    public static func process(_ list: TimelineLinkedList) async -> MergeResult? {
+    public static func process(_ list: TimelineLinkedList) async {
         logger.info("TimelineProcessor.process(list:)", subsystem: .timeline)
 
         var lastResult: MergeResult?
@@ -83,10 +81,7 @@ public final class TimelineProcessor {
             }
         } catch {
             logger.error(error, subsystem: .timeline)
-            return nil
         }
-
-        return lastResult
     }
 
 
