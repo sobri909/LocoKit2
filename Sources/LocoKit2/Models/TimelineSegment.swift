@@ -10,6 +10,12 @@ import Combine
 import UIKit
 import GRDB
 
+/// Provides an observable window into a timeline date range, designed for UI presentation
+/// and foreground processing.
+///
+/// TimelineSegment automatically observes timeline changes via TimelineObserver and manages
+/// data loading/processing for its date range. Applications should manage TimelineSegment
+/// lifecycle in accordance with UI state and foreground/background transitions.
 @Observable
 public final class TimelineSegment: Sendable {
 

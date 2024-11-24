@@ -9,6 +9,21 @@ import Foundation
 import GRDB
 import os
 
+/// Provides real-time timeline change notifications intended for UI updates and foreground processing.
+///
+/// For optimal resource usage, applications should disable the observer during background operation by setting
+/// `enabled = false`. Observer streams will pause while disabled and automatically resume when re-enabled.
+///
+/// Example usage in an app's lifecycle:
+/// ```
+/// func enteredBackground() {
+///     TimelineObserver.highlander.enabled = false
+/// }
+///
+/// func becameActive() {
+///     TimelineObserver.highlander.enabled = true
+/// }
+/// ```
 public final class TimelineObserver: TransactionObserver, Sendable {
 
     public static let highlander = TimelineObserver()
@@ -22,6 +37,9 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     private var continuations: [UUID: AsyncStream<DateInterval>.Continuation] = [:]
 
     private let lock = OSAllocatedUnfairLock()
+
+    nonisolated(unsafe)
+    public var enabled = true
 
     // MARK: -
 
@@ -82,6 +100,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     // MARK: - TransactionObserver
 
     public func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool {
+        guard enabled else { return false }
         return observedTables.contains(eventKind.tableName)
     }
 
