@@ -580,24 +580,15 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             throw TimelineError.invalidItem("Trip requires activityType for pruning")
         }
 
-        let maxInterval: TimeInterval
+        let (maxInterval, epsilon): (TimeInterval, CLLocationDistance)
         if ActivityType.workoutTypes.contains(activityType) {
-            maxInterval = 2.0
+            (maxInterval, epsilon) = (2.0, 5.0) // workout types
         } else if activityType == .airplane {
-            maxInterval = 15.0
+            (maxInterval, epsilon) = (15.0, 100.0) // airplane
         } else {
-            maxInterval = 6.0
+            (maxInterval, epsilon) = (6.0, 8.0) // default case (vehicles)
         }
 
-        let epsilon: CLLocationDistance
-        if activityType == .airplane {
-            epsilon = 100
-        } else if ActivityType.workoutTypes.contains(activityType) {
-            epsilon = 5 // all human-powered modes
-        } else {
-            epsilon = 25 // vehicles
-        }
-        
         let sortedSamples = samples.sorted { $0.date < $1.date }
         let points = sortedSamples.enumerated().compactMap { index, sample -> (coordinate: CLLocationCoordinate2D, date: Date, index: Int)? in
             guard let coordinate = sample.coordinate, coordinate.isUsable else { return nil }
