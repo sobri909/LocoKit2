@@ -40,7 +40,7 @@ public final class TimelineProcessor {
 
     @discardableResult
     public static func process(_ list: TimelineLinkedList) async -> MergeResult? {
-        print("TimelineProcessor.process(list:)")
+        logger.info("TimelineProcessor.process(list:)", subsystem: .timeline)
 
         var lastResult: MergeResult?
         do {
@@ -52,9 +52,9 @@ public final class TimelineProcessor {
 
                 if TimelineProcessor.debugLogging {
                     if merges.isEmpty {
-                        print("Considering 0 merges")
+                        logger.info("Considering 0 merges", subsystem: .timeline)
                     } else {
-                        print("Considering \(merges.count) merges")
+                        logger.info("Considering \(merges.count) merges", subsystem: .timeline)
 //                        do {
 //                            let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
 //                            print("Considering \(merges.count) merges:\n\(descriptions)")
