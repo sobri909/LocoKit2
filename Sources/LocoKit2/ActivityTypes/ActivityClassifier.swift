@@ -8,6 +8,7 @@
 import Foundation
 import CoreLocation
 import CoreML
+import UIKit
 import Surge
 import GRDB
 
@@ -25,10 +26,13 @@ public final class ActivityClassifier {
         return !models.isEmpty
     }
 
-    public func results(for sample: LocomotionSample) -> ClassifierResults? {
+    public func results(for sample: LocomotionSample) async -> ClassifierResults? {
         if let cached = cache.object(forKey: sample.id as NSString) {
             return cached
         }
+
+        // no Core ML in background plz
+        if await UIApplication.shared.applicationState == .background { return nil }
 
         // make sure have suitable classifiers
         if let coordinate = sample.location?.coordinate {
@@ -76,8 +80,11 @@ public final class ActivityClassifier {
         return combinedResults
     }
 
-    public func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) -> (combinedResults: ClassifierResults?, perSampleResults: [String: ClassifierResults])? {
+    public func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) async -> (combinedResults: ClassifierResults?, perSampleResults: [String: ClassifierResults])? {
         if samples.isEmpty { return nil }
+
+        // no Core ML in background plz
+        if await UIApplication.shared.applicationState == .background { return nil }
 
         let start = Date()
 
@@ -94,7 +101,7 @@ public final class ActivityClassifier {
                 break
             }
 
-            guard let results = results(for: sample) else {
+            guard let results = await results(for: sample) else {
                 continue
             }
 
