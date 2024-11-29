@@ -65,7 +65,6 @@ public extension CLLocationCoordinate2D {
         let lat2 = line.1.latitude.radians
         let lon2 = line.1.longitude.radians
 
-        // Cross track distance formula
         let earthRadius: CLLocationDistance = 6371000
 
         // Initial bearing from start to end
@@ -74,19 +73,59 @@ public extension CLLocationCoordinate2D {
             cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lon2 - lon1)
         )
 
-        // Angular distance from start to point
-        let sigma13 = acos(sin(lat1) * sin(lat) + cos(lat1) * cos(lat) * cos(lon - lon1))
-
-        // Initial bearing from start to point
         let theta13 = atan2(
             sin(lon - lon1) * cos(lat),
             cos(lat1) * sin(lat) - sin(lat1) * cos(lat) * cos(lon - lon1)
         )
 
-        // Cross track distance angle
-        let crossTrackAngle = asin(sin(sigma13) * sin(theta13 - theta12))
+        // Angular distances
+        let delta13 = acos(sin(lat1) * sin(lat) + cos(lat1) * cos(lat) * cos(lon - lon1))
+        let delta12 = acos(sin(lat1) * sin(lat2) + cos(lat1) * cos(lat2) * cos(lon2 - lon1))
 
-        return abs(earthRadius * crossTrackAngle)
+        // Cross-track distance
+        let crossTrackAngle = asin(sin(delta13) * sin(theta13 - theta12))
+        let crossTrackDistance = abs(earthRadius * crossTrackAngle)
+
+        // Along-track distance to the foot of the perpendicular
+        let alongTrackAngle = acos(cos(delta13) / cos(crossTrackAngle))
+        let alongTrackDistance = alongTrackAngle * earthRadius
+
+        let totalDistance = delta12 * earthRadius
+
+        if alongTrackDistance < 0 {
+            // The perpendicular foot falls before the start point
+            let distanceToStart = delta13 * earthRadius
+            return distanceToStart
+        } else if alongTrackDistance > totalDistance {
+            // The perpendicular foot falls beyond the end point
+            let delta23 = acos(sin(lat2) * sin(lat) + cos(lat2) * cos(lat) * cos(lon - lon2))
+            let distanceToEnd = delta23 * earthRadius
+            return distanceToEnd
+        } else {
+            // The perpendicular foot falls within the segment
+            return crossTrackDistance
+        }
+    }
+
+    func simplePerpendicularDistance(to line: (CLLocationCoordinate2D, CLLocationCoordinate2D)) -> CLLocationDistance {
+        // Constants
+        let metersPerDegreeLat = 111319.9  // meters per degree latitude
+
+        // Compute meters per degree longitude for each latitude
+        let metersPerDegreeLonSelf = metersPerDegreeLat * cos(self.latitude.radians)
+        let metersPerDegreeLonA = metersPerDegreeLat * cos(line.0.latitude.radians)
+        let metersPerDegreeLonB = metersPerDegreeLat * cos(line.1.latitude.radians)
+
+        // Convert coordinates to approximately square projection
+        let p = (self.latitude * metersPerDegreeLat, self.longitude * metersPerDegreeLonSelf)
+        let a = (line.0.latitude * metersPerDegreeLat, line.0.longitude * metersPerDegreeLonA)
+        let b = (line.1.latitude * metersPerDegreeLat, line.1.longitude * metersPerDegreeLonB)
+
+        // Simple 2D perpendicular distance formula
+        let numerator = abs((b.1 - a.1) * p.0 - (b.0 - a.0) * p.1 + b.0 * a.1 - b.1 * a.0)
+        let denominator = sqrt(pow(b.1 - a.1, 2) + pow(b.0 - a.0, 2))
+
+        return numerator / denominator
     }
 }
 
