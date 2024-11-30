@@ -59,13 +59,16 @@ internal final class Merge: Hashable, Sendable {
     func doIt() async -> MergeResult? {
         if TimelineProcessor.debugLogging {
             if let description = try? description {
-                logger.info("Doing:\n\(description)", subsystem: .timeline)
+                logger.info("Doing merge: \(description)", subsystem: .timeline)
             }
         }
 
+        guard await Self.isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
+            logger.error("Merge no longer valid", subsystem: .timeline)
+            return nil
+        }
+
         var mutableKeeper = keeper
-        let keeperPrevious = await keeper.previousItem(in: list)
-        let keeperNext = await keeper.nextItem(in: list)
         guard let deadmanSamples = deadman.samples else { fatalError() }
 
         if let betweener {
@@ -76,31 +79,28 @@ internal final class Merge: Hashable, Sendable {
         var samplesToMove: Set<LocomotionSample> = []
         var itemsToDelete: Set<TimelineItem> = []
 
-        // deadman is previous
-        if keeperPrevious == self.deadman || (betweener != nil && keeperPrevious == betweener) {
-            mutableKeeper.base.previousItemId = deadman.base.previousItemId
-
-            // deadman is next
-        } else if keeperNext == self.deadman || (betweener != nil && keeperNext == betweener) {
+        // copy over the edge ids from the items being deleted
+        if let betweener = betweener {
+            if betweener.base.previousItemId == keeper.id {
+                mutableKeeper.base.nextItemId = deadman.base.nextItemId
+            } else {
+                mutableKeeper.base.previousItemId = deadman.base.previousItemId
+            }
+        } else if deadman.base.previousItemId == keeper.id {
             mutableKeeper.base.nextItemId = deadman.base.nextItemId
-
         } else {
-            logger.error("Merge no longer valid", subsystem: .timeline)
-            return nil
+            mutableKeeper.base.previousItemId = deadman.base.previousItemId
         }
 
-        /** deal with a betweener **/
-
+        // collect the samples to move
         if let betweener, let betweenerSamples = betweener.samples {
             samplesToMove.formUnion(betweenerSamples)
             itemsToDelete.insert(betweener)
         }
-
-        /** deal with the deadman **/
-
         samplesToMove.formUnion(deadmanSamples)
         itemsToDelete.insert(deadman)
-
+        
+        // do the db changes
         do {
             try await Database.pool.write { [mutableKeeper, samplesToMove, itemsToDelete] db in
                 try mutableKeeper.base.updateChanges(db, from: self.keeper.base)
