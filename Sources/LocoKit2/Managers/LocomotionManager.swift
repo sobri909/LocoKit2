@@ -311,11 +311,15 @@ public final class LocomotionManager: @unchecked Sendable {
                 startStandby()
 
             } else if sleepState.shouldBeSleeping {
-                startSleeping()
-
+                if await TimelineRecorder.highlander.canStartSleeping {
+                    startSleeping()
+                } else {
+                    restartTheFallbackTimer()
+                }
+                
             } else {
                 restartTheFallbackTimer()
-            }   
+            }
 
         case .wakeup:
             if sleepState.shouldBeSleeping {

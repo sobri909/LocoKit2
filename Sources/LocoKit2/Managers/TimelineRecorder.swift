@@ -200,6 +200,23 @@ public final class TimelineRecorder {
         }
     }
 
+    var canStartSleeping: Bool {
+        get async {
+            guard let currentItem = await currentItem() else {
+                return false
+            }
+            guard currentItem.isVisit else {
+                return false
+            }
+            do {
+                return try currentItem.isWorthKeeping
+            } catch {
+                logger.error(error, subsystem: .timeline)
+                return false
+            }
+        }
+    }
+
     // MARK: -
 
     private var lastRecordSampleCall: Date?
