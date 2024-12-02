@@ -215,7 +215,7 @@ public final class TimelineRecorder {
 
     var canStartSleeping: Bool {
         get async {
-            guard let currentItem = await currentItem() else {
+            guard let currentItem = currentItem(includeSamples: true) else {
                 return false
             }
             guard currentItem.isVisit else {
