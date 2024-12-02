@@ -38,15 +38,28 @@ public final class TimelineRecorder {
         }
     }
 
-    public func currentItem() -> TimelineItem? {
-        guard let currentItemId else { return nil }
-        return try? Database.pool.read {
-            try TimelineItem
-                .itemRequest(includeSamples: false)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("id") == currentItemId)
-                .fetchOne($0)
+    public func currentItem(includeSamples: Bool = false) -> TimelineItem? {
+        do {
+            let item = try Database.pool.read {
+                try TimelineItem
+                    .itemRequest(includeSamples: includeSamples)
+                    .filter(Column("deleted") == false && Column("disabled") == false)
+                    .order(Column("endDate").desc)
+                    .fetchOne($0)
+            }
+
+            // update currentItemId if changed
+            if let item, item.id != currentItemId {
+                self.currentItemId = item.id
+            }
+
+            return item
+
+        } catch {
+            logger.error(error, subsystem: .database)
         }
+
+        return nil
     }
 
     public private(set) var latestSampleId: String?
