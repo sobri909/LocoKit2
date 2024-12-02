@@ -34,6 +34,18 @@ public final class MergeScores {
         // can't consume a different source
         if consumer.source != consumee.source { return .impossible }
 
+        // if consumee is currentItem and not a keeper, no merge allowed
+        if consumee.id == TimelineRecorder.highlander.currentItemId {
+            do {
+                if try !consumee.isWorthKeeping {
+                    return .impossible
+                }
+            } catch {
+                logger.error(error, subsystem: .timeline)
+                return .impossible
+            }
+        }
+
         // if consumee has zero samples, call it a perfect merge
         if consumeeSamples.isEmpty { return .perfect }
 
