@@ -98,6 +98,8 @@ extension TimelineProcessor {
             }
         }
 
+        TimelineRecorder.highlander.updateCurrentItemId()
+
         return newItem
     }
 }
