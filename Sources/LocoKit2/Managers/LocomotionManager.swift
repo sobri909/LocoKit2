@@ -331,6 +331,8 @@ public final class LocomotionManager: @unchecked Sendable {
         case .sleeping, .deepSleeping:
             if let appGroup, await appGroup.isAnActiveRecorder, !appGroup.shouldBeTheRecorder {
                 startStandby()
+            } else if !(await TimelineRecorder.highlander.canStartSleeping) {
+                startRecording()
             }
 
         case .standby, .off:

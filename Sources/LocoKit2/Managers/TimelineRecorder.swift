@@ -215,18 +215,16 @@ public final class TimelineRecorder {
 
     var canStartSleeping: Bool {
         get async {
-            guard let currentItem = currentItem(includeSamples: true) else {
+            guard let currentItem = currentItem() else {
                 return false
             }
             guard currentItem.isVisit else {
                 return false
             }
-            do {
-                return try currentItem.isWorthKeeping
-            } catch {
-                logger.error(error, subsystem: .timeline)
+            guard let dateRange = currentItem.dateRange else {
                 return false
             }
+            return dateRange.duration >= TimelineItemVisit.minimumKeeperDuration
         }
     }
 
