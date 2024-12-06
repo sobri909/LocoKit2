@@ -118,6 +118,13 @@ public final class TimelineSegment: Sendable {
             self.timelineItems = mutableItems
         }
 
+        // early return if we're not supposed to modify the items at all
+        guard shouldReprocessOnUpdate else { return }
+        guard await UIApplication.shared.applicationState == .active else { return }
+
+        // first classify
+        await classifyItems(mutableItems)
+
         let recorder = await TimelineRecorder.highlander
         let currentItemId = await recorder.currentItemId
 
@@ -134,7 +141,7 @@ public final class TimelineSegment: Sendable {
         // if there's no currentItem, always process
         guard let currentItemId else {
             lastCurrentItemId = nil
-            await reprocess(items: mutableItems)
+            await TimelineProcessor.process(mutableItems)
             return
         }
 
@@ -147,19 +154,14 @@ public final class TimelineSegment: Sendable {
 
         // something else changed - do the processing
         lastCurrentItemId = currentItemId
-        await reprocess(items: mutableItems)
+        await TimelineProcessor.process(mutableItems)
     }
 
-    private func reprocess(items: [TimelineItem]) async {
-        guard shouldReprocessOnUpdate else { return }
-        guard await UIApplication.shared.applicationState == .active else { return }
-
+    private func classifyItems(_ items: [TimelineItem]) async {
         var mutableItems = items
         for index in mutableItems.indices {
             await mutableItems[index].classifySamples()
         }
-
-        await TimelineProcessor.process(mutableItems)
     }
 
 }
