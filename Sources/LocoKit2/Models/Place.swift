@@ -80,6 +80,10 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         return false
     }
 
+    public func overlaps(center: CLLocationCoordinate2D, radius: Radius) -> Bool {
+        return distance(from: center, radius: radius) < 0
+    }
+
     public func overlaps(_ otherPlace: Place) -> Bool {
         return distance(from: otherPlace) < 0
     }
@@ -91,7 +95,11 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     public func distance(from segment: ItemSegment) -> CLLocationDistance? {
         guard let segmentCenter = segment.center, let segmentRadius = segment.radius else { return nil }
-        return center.location.distance(from: segmentCenter.location) - radius.with3sd - segmentRadius.with2sd
+        return distance(from: segmentCenter, radius: segmentRadius)
+    }
+
+    public func distance(from center: CLLocationCoordinate2D, radius: Radius) -> CLLocationDistance {
+        return self.center.location.distance(from: center.location) - self.radius.with3sd - radius.with2sd
     }
 
     public func distance(from otherPlace: Place) -> CLLocationDistance {
