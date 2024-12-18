@@ -44,8 +44,6 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     // MARK: - Init
 
     init?(itemId: String, samples: [LocomotionSample]) {
-        let usableLocations = samples.usableLocations()
-
         guard let coordinate = samples.weightedCenter() else {
             return nil
         }
@@ -55,7 +53,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         self.longitude = coordinate.longitude
 
         let center = CLLocation(coordinate: coordinate)
-        let radius = Self.calculateBoundedRadius(of: usableLocations, from: center)
+        let radius = Self.calculateBoundedRadius(of: samples, from: center)
 
         self.radiusMean = radius.mean
         self.radiusSD = radius.sd
@@ -158,14 +156,14 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
-        let radius = Self.calculateBoundedRadius(of: samples.usableLocations(), from: coordinate.location)
+        let radius = Self.calculateBoundedRadius(of: samples, from: coordinate.location)
 
         self.radiusMean = radius.mean
         self.radiusSD = radius.sd
     }
 
-    internal static func calculateBoundedRadius(of locations: [CLLocation], from center: CLLocation) -> Radius {
-        let radius = locations.radius(from: center)
+    static func calculateBoundedRadius(of samples: [LocomotionSample], from center: CLLocation) -> Radius {
+        let radius = samples.weightedRadius(from: center)
         let boundedMean = min(max(radius.mean, Self.minRadius), Self.maxRadius)
         let boundedSD = min(radius.sd, Self.maxRadius)
         return Radius(mean: boundedMean, sd: boundedSD)
