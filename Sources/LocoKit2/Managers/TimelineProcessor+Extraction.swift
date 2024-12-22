@@ -29,51 +29,44 @@ extension TimelineProcessor {
                 .fetchAll(db)
         }
 
-        var prevEdgesToBreak: [TimelineItem] = []
-        var nextEdgesToBreak: [TimelineItem] = []
-        var itemsToDelete: [TimelineItem] = []
-        var itemsToHeal = overlappers.map { $0.id }
+        let (newItem, itemsToHeal) = try await Database.pool.write { db in
+            var prevEdgesToBreak: [TimelineItem] = []
+            var nextEdgesToBreak: [TimelineItem] = []
+            var itemsToDelete: [TimelineItem] = []
+            var itemsToHeal = overlappers.map { $0.id }
+            var afterItems: [TimelineItem] = []
 
-        // process overlapping items
-        for item in overlappers {
-            guard let itemRange = item.dateRange, let itemSamples = item.samples else { continue }
+            // process overlapping items
+            for item in overlappers {
+                guard let itemRange = item.dateRange, let itemSamples = item.samples else { continue }
 
-            // if item is entirely inside the segment (or identical to), delete the item
-            if segment.dateRange.contains(itemRange) {
-                itemsToDelete.append(item)
-                continue
-            }
+                // if item is entirely inside the segment (or identical to), delete the item
+                if segment.dateRange.contains(itemRange) {
+                    itemsToDelete.append(item)
+                    continue
+                }
 
-            // break prev edges inside the segment's range
-            if segment.dateRange.contains(itemRange.start) {
-                prevEdgesToBreak.append(item)
-            }
+                // break prev edges inside the segment's range
+                if segment.dateRange.contains(itemRange.start) {
+                    prevEdgesToBreak.append(item)
+                }
 
-            // break next edges inside the segment's range
-            if segment.dateRange.contains(itemRange.end) {
-                nextEdgesToBreak.append(item)
-            }
+                // break next edges inside the segment's range
+                if segment.dateRange.contains(itemRange.end) {
+                    nextEdgesToBreak.append(item)
+                }
 
-            // if segment is entirely inside the item (and not identical to), split the item
-            if itemRange.start < segment.dateRange.start && itemRange.end > segment.dateRange.end {
-                let afterSamples = itemSamples.filter { $0.date > segment.dateRange.end }
-                nextEdgesToBreak.append(item)
-                let afterItem = try await TimelineItem.createItem(from: afterSamples, isVisit: item.isVisit)
-                itemsToHeal.append(afterItem.id)
-            }
-        }
-
-        // create the new item
-        let newItem = try await TimelineItem.createItem(from: segment.samples, isVisit: isVisit)
-        itemsToHeal.append(newItem.id)
-
-        // perform database operations
-        try await Database.pool.write { [prevEdgesToBreak, nextEdgesToBreak, itemsToDelete] db in
-            for var item in itemsToDelete {
-                try item.base.updateChanges(db) {
-                    $0.deleted = true
+                // if segment is entirely inside the item (and not identical to), split the item
+                if itemRange.start < segment.dateRange.start && itemRange.end > segment.dateRange.end {
+                    let afterSamples = itemSamples.filter { $0.date > segment.dateRange.end }
+                    nextEdgesToBreak.append(item)
+                    let afterItem = try TimelineItem.createItem(from: afterSamples, isVisit: item.isVisit, db: db)
+                    afterItems.append(afterItem)
+                    itemsToHeal.append(afterItem.id)
                 }
             }
+
+            // break edges
             for var item in prevEdgesToBreak {
                 try item.base.updateChanges(db) {
                     $0.previousItemId = nil
@@ -84,6 +77,19 @@ extension TimelineProcessor {
                     $0.nextItemId = nil
                 }
             }
+
+            // create the new item
+            let newItem = try TimelineItem.createItem(from: segment.samples, isVisit: isVisit, db: db)
+            itemsToHeal.append(newItem.id)
+
+            // delete items
+            for var item in itemsToDelete {
+                try item.base.updateChanges(db) {
+                    $0.deleted = true
+                }
+            }
+
+            return (newItem, itemsToHeal)
         }
 
         // update current item if necessary
@@ -102,4 +108,5 @@ extension TimelineProcessor {
 
         return newItem
     }
+    
 }

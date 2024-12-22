@@ -225,7 +225,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
 
     // MARK: - Item creation
 
-    public static func createItem(from samples: [LocomotionSample], isVisit: Bool) async throws -> TimelineItem {
+    public static func createItem(from samples: [LocomotionSample], isVisit: Bool, db: GRDB.Database) throws -> TimelineItem {
         let base = TimelineItemBase(isVisit: isVisit)
         let visit: TimelineItemVisit?
         let trip: TimelineItemTrip?
@@ -238,21 +238,19 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
             visit = nil
         }
 
-        let newItem = try await Database.pool.write { [base, visit, trip] in
-            try base.save($0)
-            try visit?.save($0)
-            try trip?.save($0)
-            for var sample in samples {
-                try sample.updateChanges($0) {
-                    $0.timelineItemId = base.id
-                }
+        try base.save(db)
+        try visit?.save(db)
+        try trip?.save(db)
+        for var sample in samples {
+            try sample.updateChanges(db) {
+                $0.timelineItemId = base.id
             }
-
-            return try TimelineItem
-                .itemRequest(includeSamples: false)
-                .filter(Column("id") == base.id)
-                .fetchOne($0)
         }
+
+        let newItem = try TimelineItem
+            .itemRequest(includeSamples: false)
+            .filter(Column("id") == base.id)
+            .fetchOne(db)
 
         guard let newItem else {
             throw TimelineError.itemNotFound
