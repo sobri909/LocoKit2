@@ -214,40 +214,40 @@ extension TimelineProcessor {
             return
         }
 
-        // Find nearest previous item (even if it has an edge)
-        let nearest = try await Database.pool.read { db in
+        // find nearest in window centered on our start date
+        let nearest = try await Database.pool.read { [edgeHealingThreshold] db in
             try TimelineItem.itemRequest(includeSamples: false)
-                .filter(Column("endDate") <= dateRange.start)
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .filter(Column("id") != item.id)
-                .order(Column("endDate").desc)
+                .filter(Column("endDate") >= dateRange.start - edgeHealingThreshold)
+                .filter(Column("endDate") <= dateRange.start + edgeHealingThreshold)
+                .annotated(with: SQL(sql: "ABS(strftime('%s', endDate) - strftime('%s', ?))",arguments: [dateRange.start]).forKey("gap"))
+                .order(literal: "gap")
                 .fetchOne(db)
         }
 
         if let nearest, let nearestEndDate = nearest.dateRange?.end {
             let gap = dateRange.start.timeIntervalSince(nearestEndDate)
 
-            if gap <= edgeHealingThreshold {
-                // check if nearest already has a next item
-                if let currentNextId = nearest.base.nextItemId,
-                   let currentNext = try await TimelineItem.fetchItem(itemId: currentNextId, includeSamples: false) {
-                    let currentGap = currentNext.timeInterval(from: nearest)
-                    // only steal if we're closer
-                    if abs(gap) >= abs(currentGap) {
-                        return
-                    }
-                }
+            // check if nearest already has a next item
+            if let currentNextId = nearest.base.nextItemId,
+               let currentNext = try await TimelineItem.fetchItem(itemId: currentNextId, includeSamples: false) {
+                let currentGap = currentNext.timeInterval(from: nearest)
 
-                // we're either first or closer - take the edge
-                try await Database.pool.write { db in
-                    var mutableItem = item
-                    try mutableItem.base.updateChanges(db) {
-                        $0.previousItemId = nearest.id
-                    }
+                // only steal if we're closer
+                if abs(gap) >= abs(currentGap) {
+                    return
                 }
-            } else {
-                logger.info("healPreviousEdge() Gap too large: \(String(format: "%.f2", gap / 60)) minutes", subsystem: .timeline)
             }
+
+            // we're either first or closer - take the edge
+            try await Database.pool.write { db in
+                var mutableItem = item
+                try mutableItem.base.updateChanges(db) {
+                    $0.previousItemId = nearest.id
+                }
+            }
+
         } else {
             logger.info("healPreviousEdge() No possible nearest item found", subsystem: .timeline)
         }
@@ -258,42 +258,43 @@ extension TimelineProcessor {
             return
         }
 
-        // Find nearest next item (even if it has an edge)
-        let nearest = try await Database.pool.read { db in
+        // find nearest in window centered on our end date
+        let nearest = try await Database.pool.read { [edgeHealingThreshold] db in
             try TimelineItem.itemRequest(includeSamples: false)
-                .filter(Column("startDate") >= dateRange.end)
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .filter(Column("id") != item.id)
-                .order(Column("startDate").asc)
+                .filter(Column("startDate") >= dateRange.end - edgeHealingThreshold)
+                .filter(Column("startDate") <= dateRange.end + edgeHealingThreshold)
+                .annotated(with: SQL(sql: "ABS(strftime('%s', startDate) - strftime('%s', ?))",arguments: [dateRange.end]).forKey("gap"))
+                .order(literal: "gap")
                 .fetchOne(db)
         }
 
         if let nearest, let nearestStartDate = nearest.dateRange?.start {
             let gap = nearestStartDate.timeIntervalSince(dateRange.end)
 
-            if gap <= edgeHealingThreshold {
-                // check if nearest already has a previous item
-                if let currentPrevId = nearest.base.previousItemId,
-                   let currentPrev = try await TimelineItem.fetchItem(itemId: currentPrevId, includeSamples: false) {
-                    let currentGap = currentPrev.timeInterval(from: nearest)
-                    // only steal if we're closer
-                    if abs(gap) >= abs(currentGap) {
-                        return
-                    }
-                }
+            // check if nearest already has a previous item
+            if let currentPrevId = nearest.base.previousItemId,
+               let currentPrev = try await TimelineItem.fetchItem(itemId: currentPrevId, includeSamples: false) {
+                let currentGap = currentPrev.timeInterval(from: nearest)
 
-                // we're either first or closer - take the edge
-                try await Database.pool.write { db in
-                    var mutableItem = item
-                    try mutableItem.base.updateChanges(db) {
-                        $0.nextItemId = nearest.id
-                    }
+                // only steal if we're closer
+                if abs(gap) >= abs(currentGap) {
+                    return
                 }
-            } else {
-                logger.info("healNextEdge() Gap too large: \(String(format: "%.f2", gap / 60)) minutes", subsystem: .timeline)
             }
+
+            // we're either first or closer - take the edge
+            try await Database.pool.write { db in
+                var mutableItem = item
+                try mutableItem.base.updateChanges(db) {
+                    $0.nextItemId = nearest.id
+                }
+            }
+            
         } else {
             logger.info("healNextEdge() No possible nearest item found", subsystem: .timeline)
         }
     }
+
 }
