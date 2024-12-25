@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreLocation
+import MessagePacker
 @preconcurrency import GRDB
 
 public enum PlaceSource { case google, foursquare, mapbox }
@@ -159,6 +160,9 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                         $0.visitCount = 0
                         $0.visitDays = 0
                         $0.isStale = false
+                        $0.arrivalTimes = nil
+                        $0.leavingTimes = nil
+                        $0.visitDurations = nil
                     }
                 }
                 return
@@ -182,6 +186,10 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                 let boundedMean = radius.mean.clamped(min: Place.minimumPlaceRadius, max: Place.maximumPlaceRadius)
                 let boundedSD = radius.sd.clamped(min: 0, max: Place.maximumPlaceRadius)
 
+                let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
+                let visitEnds = confirmedVisits.compactMap { $0.dateRange?.end }
+                let visitDurations = confirmedVisits.compactMap { $0.dateRange?.duration }
+
                 try await Database.pool.write { [self] db in
                     var mutableSelf = self
                     try mutableSelf.updateChanges(db) {
@@ -192,18 +200,12 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                         $0.radiusMean = boundedMean
                         $0.radiusSD = boundedSD
                         $0.isStale = false
+                        $0.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
+                        $0.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
+                        $0.visitDurations = Histogram.forDurations(intervals: visitDurations)
                     }
                 }
             }
-
-            // keep histogram updates until we persist them
-            let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
-            let visitEnds = confirmedVisits.compactMap { $0.dateRange?.end }
-            let visitDurations = confirmedVisits.compactMap { $0.dateRange?.duration }
-
-            self.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
-            self.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
-            self.visitDurations = Histogram.forDurations(intervals: visitDurations)
 
         } catch {
             logger.error(error, subsystem: .database)
@@ -301,6 +303,82 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
         case visitCount
         case visitDays
+    }
+
+    // MARK: - FetchableRecord
+
+    public init(row: Row) throws {
+        // core fields
+        id = row["id"]
+        latitude = row["latitude"]
+        longitude = row["longitude"]
+        radiusMean = row["radiusMean"]
+        radiusSD = row["radiusSD"]
+        secondsFromGMT = row["secondsFromGMT"]
+        name = row["name"]
+        streetAddress = row["streetAddress"]
+        isStale = row["isStale"]
+        rtreeId = row["rtreeId"]
+
+        // external place ids
+        mapboxPlaceId = row["mapboxPlaceId"]
+        mapboxCategory = row["mapboxCategory"]
+        mapboxMakiIcon = row["mapboxMakiIcon"]
+        googlePlaceId = row["googlePlaceId"]
+        googlePrimaryType = row["googlePrimaryType"]
+        foursquarePlaceId = row["foursquarePlaceId"]
+        foursquareCategoryId = row["foursquareCategoryId"]
+
+        // stats
+        visitCount = row["visitCount"]
+        visitDays = row["visitDays"]
+
+        // Histograms with MessagePack
+        let decoder = MessagePackDecoder()
+        if let arrivalData = row["arrivalTimes"] as? Data {
+            arrivalTimes = try? decoder.decode(Histogram.self, from: arrivalData)
+        }
+        if let leavingData = row["leavingTimes"] as? Data {
+            leavingTimes = try? decoder.decode(Histogram.self, from: leavingData)
+        }
+        if let durationData = row["visitDurations"] as? Data {
+            visitDurations = try? decoder.decode(Histogram.self, from: durationData)
+        }
+    }
+
+    // MARK: - PersistableRecord
+    
+    public func encode(to container: inout PersistenceContainer) {
+        // core fields
+        container["id"] = id
+        container["latitude"] = latitude
+        container["longitude"] = longitude
+        container["radiusMean"] = radiusMean
+        container["radiusSD"] = radiusSD
+        container["secondsFromGMT"] = secondsFromGMT
+        container["name"] = name
+        container["streetAddress"] = streetAddress
+        container["isStale"] = isStale
+        container["rtreeId"] = rtreeId
+
+        // external place ids
+        container["mapboxPlaceId"] = mapboxPlaceId
+        container["mapboxCategory"] = mapboxCategory
+        container["mapboxMakiIcon"] = mapboxMakiIcon
+        container["googlePlaceId"] = googlePlaceId
+        container["googlePrimaryType"] = googlePrimaryType
+        container["foursquarePlaceId"] = foursquarePlaceId
+        container["foursquareCategoryId"] = foursquareCategoryId
+
+        // stats
+        container["visitCount"] = visitCount
+        container["visitDays"] = visitDays
+
+        // Histograms with MessagePack
+        let encoder = MessagePackEncoder()
+        container["arrivalTimes"] = try? encoder.encode(arrivalTimes)
+        container["leavingTimes"] = try? encoder.encode(leavingTimes)
+        container["visitDurations"] = try? encoder.encode(visitDurations)
     }
 
 }

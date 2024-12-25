@@ -125,6 +125,10 @@ public final class Database: @unchecked Sendable {
 
                 table.column("visitCount", .integer).notNull()
                 table.column("visitDays", .integer).notNull()
+
+                table.column("arrivalTimes", .blob)
+                table.column("leavingTimes", .blob)
+                table.column("visitDurations", .blob)
             }
 
             try db.create(

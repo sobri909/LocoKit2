@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct Histogram: Hashable, Sendable {
+public struct Histogram: Hashable, Sendable, Codable {
 
     private let bins: [Bin]
 
