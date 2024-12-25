@@ -52,7 +52,7 @@ public struct Histogram: Hashable, Sendable, Codable {
         return 2.0 * iqr * pow(Double(values.count), -1.0/3.0)
     }
 
-    private struct Bin: Hashable, Sendable {
+    private struct Bin: Hashable, Sendable, Codable {
         let start: Double
         let count: Int
     }
