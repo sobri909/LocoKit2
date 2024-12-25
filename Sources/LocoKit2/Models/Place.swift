@@ -7,7 +7,6 @@
 
 import Foundation
 import CoreLocation
-import MessagePacker
 @preconcurrency import GRDB
 
 public enum PlaceSource { case google, foursquare, mapbox }
@@ -334,7 +333,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         visitDays = row["visitDays"]
 
         // Histograms with MessagePack
-        let decoder = MessagePackDecoder()
+        let decoder = JSONDecoder()
         if let arrivalData = row["arrivalTimes"] as? Data {
             arrivalTimes = try? decoder.decode(Histogram.self, from: arrivalData)
         }
@@ -375,7 +374,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         container["visitDays"] = visitDays
 
         // Histograms with MessagePack
-        let encoder = MessagePackEncoder()
+        let encoder = JSONEncoder()
         container["arrivalTimes"] = try? encoder.encode(arrivalTimes)
         container["leavingTimes"] = try? encoder.encode(leavingTimes)
         container["visitDurations"] = try? encoder.encode(visitDurations)
