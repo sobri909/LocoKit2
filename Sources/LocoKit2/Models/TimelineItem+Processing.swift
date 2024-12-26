@@ -91,7 +91,14 @@ extension TimelineItem {
 
         // TRIP <-> TRIP
 
-        let timeSeparation = abs(self.timeInterval(from: otherItem))
+        // get the same edge samples we'll use for distance calculation
+        guard let edge = try? edgeSample(withOtherItemId: otherItem.id, requireLocation: true),
+              let otherEdge = try? otherItem.edgeSample(withOtherItemId: self.id, requireLocation: true) else {
+            return 0
+        }
+
+        // calculate separation using actual sample dates
+        let timeSeparation = abs(edge.date.timeIntervalSince(otherEdge.date))
 
         let selfSpeed = self.trip?.speed ?? 0
         let otherSpeed = otherItem.trip?.speed ?? 0
@@ -119,29 +126,15 @@ extension TimelineItem {
     private func distanceFromTripToTrip(_ otherItem: TimelineItem) throws -> CLLocationDistance? {
         guard self.isTrip, otherItem.isTrip else { fatalError() }
 
-        guard let samples, let otherSamples = otherItem.samples else {
-            throw TimelineError.samplesNotLoaded
-        }
-
-        guard let selfStart = dateRange?.start,
-              let otherStart = otherItem.dateRange?.start else {
+        // get the edge samples requiring valid locations
+        guard let selfEdge = try edgeSample(withOtherItemId: otherItem.id, requireLocation: true),
+              let otherEdge = try otherItem.edgeSample(withOtherItemId: self.id, requireLocation: true),
+              let selfLocation = selfEdge.location,
+              let otherLocation = otherEdge.location else {
             return nil
         }
 
-        if selfStart < otherStart {
-            guard let selfEdge = samples.last?.location,
-                  let otherEdge = otherSamples.first?.location else {
-                return nil
-            }
-            return selfEdge.distance(from: otherEdge)
-
-        } else {
-            guard let selfEdge = samples.first?.location,
-                  let otherEdge = otherSamples.last?.location else {
-                return nil
-            }
-            return selfEdge.distance(from: otherEdge)
-        }
+        return selfLocation.distance(from: otherLocation)
     }
 
     // a negative value indicates overlapping items, thus the duration of their overlap
@@ -194,16 +187,16 @@ extension TimelineItem {
 
     // MARK: -
 
-    public func edgeSample(withOtherItemId otherItemId: String) throws -> LocomotionSample? {
+    public func edgeSample(withOtherItemId otherItemId: String, requireLocation: Bool = false) throws -> LocomotionSample? {
         guard let samples else {
             throw TimelineError.samplesNotLoaded
         }
 
         if otherItemId == base.previousItemId {
-            return samples.first
+            return requireLocation ? samples.first { $0.hasUsableCoordinate } : samples.first
         }
         if otherItemId == base.nextItemId {
-            return samples.last
+            return requireLocation ? samples.last { $0.hasUsableCoordinate } : samples.last
         }
 
         return nil
