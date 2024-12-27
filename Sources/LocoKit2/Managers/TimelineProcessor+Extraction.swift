@@ -34,7 +34,6 @@ extension TimelineProcessor {
             var nextEdgesToBreak: [TimelineItem] = []
             var itemsToDelete: [TimelineItem] = []
             var itemsToHeal = overlappers.map { $0.id }
-            var afterItems: [TimelineItem] = []
 
             // process overlapping items
             for item in overlappers {
@@ -60,8 +59,8 @@ extension TimelineProcessor {
                 if itemRange.start < segment.dateRange.start && itemRange.end > segment.dateRange.end {
                     let afterSamples = itemSamples.filter { $0.date > segment.dateRange.end }
                     nextEdgesToBreak.append(item)
-                    let afterItem = try TimelineItem.createItem(from: afterSamples, isVisit: item.isVisit, db: db)
-                    afterItems.append(afterItem)
+                    var afterItem = try TimelineItem.createItem(from: afterSamples, isVisit: item.isVisit, db: db)
+                    try afterItem.copyMetadata(from: item, db: db)
                     itemsToHeal.append(afterItem.id)
                 }
             }

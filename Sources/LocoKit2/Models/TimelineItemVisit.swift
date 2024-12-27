@@ -169,4 +169,11 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         return Radius(mean: boundedMean, sd: boundedSD)
     }
 
+    public mutating func copyMetadata(from otherVisit: TimelineItemVisit) {
+        placeId = otherVisit.placeId
+        confirmedPlace = otherVisit.confirmedPlace
+        customTitle = otherVisit.customTitle
+        streetAddress = otherVisit.streetAddress
+    }
+
 }

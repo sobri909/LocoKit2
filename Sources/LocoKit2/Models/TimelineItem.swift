@@ -182,6 +182,14 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return newItem
     }
 
+    public mutating func copyMetadata(from otherItem: TimelineItem, db: GRDB.Database) throws {
+        if var thisVisit = self.visit, let otherVisit = otherItem.visit {
+            try thisVisit.updateChanges(db) { visit in
+                visit.copyMetadata(from: otherVisit)
+            }
+        }
+    }
+
     // MARK: - Item fetching
 
     public static func fetchItem(itemId: String, includeSamples: Bool, includePlace: Bool = false) async throws -> TimelineItem? {
