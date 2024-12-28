@@ -240,6 +240,11 @@ extension TimelineProcessor {
                 }
             }
 
+            if nearest.base.previousItemId == item.id {
+                logger.info("healPreviousEdge() Rejecting potential circular reference", subsystem: .timeline)
+                return
+            }
+
             // we're either first or closer - take the edge
             try await Database.pool.write { db in
                 var mutableItem = item
@@ -282,6 +287,11 @@ extension TimelineProcessor {
                 if abs(gap) >= abs(currentGap) {
                     return
                 }
+            }
+
+            if nearest.base.nextItemId == item.id {
+                logger.info("healNextEdge() Rejecting potential circular reference", subsystem: .timeline)
+                return
             }
 
             // we're either first or closer - take the edge
