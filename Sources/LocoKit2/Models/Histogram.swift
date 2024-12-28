@@ -30,10 +30,36 @@ public struct Histogram: Hashable, Sendable, Codable {
             .sorted { $0.start < $1.start }
     }
 
+    public var totalCount: Int {
+        bins.reduce(0) { $0 + $1.count }
+    }
+
     public var mostCommonBin: (start: Double, end: Double, count: Int)? {
         guard let maxBin = bins.max(by: { $0.count < $1.count }),
               let binWidth = binWidth else { return nil }
         return (maxBin.start, maxBin.start + binWidth, maxBin.count)
+    }
+
+    /// Calculate a smoothed probability for the given value using kernel density estimation
+    public func probability(for value: Double) -> Double? {
+        guard let binWidth, !bins.isEmpty else { return nil }
+
+        // Start with 2x binWidth for bandwidth - we can tune this
+        let h = binWidth * 2
+
+        // Sum up Gaussian kernel contributions from each bin
+        let kernelSum = bins.reduce(0.0) { sum, bin in
+            // Use bin center as the reference point
+            let binCenter = bin.start + binWidth / 2
+            let z = (value - binCenter) / h
+
+            // Weight by bin count and calculate Gaussian
+            let kernel = Double(bin.count) * exp(-0.5 * z * z) / sqrt(2 * .pi)
+            return sum + kernel
+        }
+
+        // Normalize by total area
+        return kernelSum / (Double(totalCount) * h)
     }
 
     public var binWidth: Double? {

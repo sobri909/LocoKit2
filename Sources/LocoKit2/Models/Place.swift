@@ -63,49 +63,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         return sources
     }
 
-    // MARK: - Overlaps etc
-
-    public func contains(_ location: CLLocation, sd: Double) -> Bool {
-        return location.distance(from: center.location) <= radius.withSD(sd)
-    }
-
-    public func overlaps(_ visit: TimelineItemVisit) -> Bool {
-        return distance(from: visit) < 0
-    }
-
-    public func overlaps(_ segment: ItemSegment) -> Bool {
-        if let distance = distance(from: segment) {
-            return distance < 0
-        }
-        return false
-    }
-
-    public func overlaps(center: CLLocationCoordinate2D, radius: Radius) -> Bool {
-        return distance(from: center, radius: radius) < 0
-    }
-
-    public func overlaps(_ otherPlace: Place) -> Bool {
-        return distance(from: otherPlace) < 0
-    }
-
-    // TODO: Arc Timeline uses 4sd if visitCount is < 2
-    public func distance(from visit: TimelineItemVisit) -> CLLocationDistance {
-        return center.location.distance(from: visit.center.location) - radius.with3sd - visit.radius.with1sd
-    }
-
-    public func distance(from segment: ItemSegment) -> CLLocationDistance? {
-        guard let segmentCenter = segment.center, let segmentRadius = segment.radius else { return nil }
-        return distance(from: segmentCenter, radius: segmentRadius)
-    }
-
-    public func distance(from center: CLLocationCoordinate2D, radius: Radius) -> CLLocationDistance {
-        return self.center.location.distance(from: center.location) - self.radius.with3sd - radius.with2sd
-    }
-
-    public func distance(from otherPlace: Place) -> CLLocationDistance {
-        return center.location.distance(from: otherPlace.center.location) - radius.with3sd - otherPlace.radius.with3sd
-    }
-
     // MARK: - Timezone
 
     public var localTimeZone: TimeZone? {
@@ -136,78 +93,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
         } catch {
             logger.error(error, subsystem: .places)
-        }
-    }
-
-    // MARK: - Stats
-
-    @PlacesActor
-    public mutating func updateVisitStats() async {
-        do {
-            let visits = try await Database.pool.read { [id] db in
-                try TimelineItem
-                    .itemRequest(includeSamples: true, includePlaces: true)
-                    .filter(sql: "visit.placeId = ?", arguments: [id])
-                    .filter(Column("deleted") == false)
-                    .fetchAll(db)
-            }
-
-            if visits.isEmpty {
-                try await Database.pool.write { [self] db in
-                    var mutableSelf = self
-                    try mutableSelf.updateChanges(db) {
-                        $0.visitCount = 0
-                        $0.visitDays = 0
-                        $0.isStale = false
-                        $0.arrivalTimes = nil
-                        $0.leavingTimes = nil
-                        $0.visitDurations = nil
-                    }
-                }
-                return
-            }
-
-            // count unique visit days using place's timezone
-            var calendar = Calendar.current
-            calendar.timeZone = localTimeZone ?? .current
-
-            let uniqueDays = Set<Date>(visits.compactMap {
-                return $0.dateRange?.start.startOfDay(in: calendar)
-            })
-
-            let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
-            let samples = confirmedVisits.flatMap { $0.samples ?? [] }
-
-            // Only update if we have valid data to update with
-            if let center = samples.weightedCenter() {
-                let radius = samples.radius(from: center.location)
-
-                let boundedMean = radius.mean.clamped(min: Place.minimumPlaceRadius, max: Place.maximumPlaceRadius)
-                let boundedSD = radius.sd.clamped(min: 0, max: Place.maximumPlaceRadius)
-
-                let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
-                let visitEnds = confirmedVisits.compactMap { $0.dateRange?.end }
-                let visitDurations = confirmedVisits.compactMap { $0.dateRange?.duration }
-
-                try await Database.pool.write { [self] db in
-                    var mutableSelf = self
-                    try mutableSelf.updateChanges(db) {
-                        $0.visitCount = visits.count
-                        $0.visitDays = uniqueDays.count
-                        $0.latitude = center.latitude
-                        $0.longitude = center.longitude
-                        $0.radiusMean = boundedMean
-                        $0.radiusSD = boundedSD
-                        $0.isStale = false
-                        $0.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
-                        $0.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
-                        $0.visitDurations = Histogram.forDurations(intervals: visitDurations)
-                    }
-                }
-            }
-
-        } catch {
-            logger.error(error, subsystem: .database)
         }
     }
 

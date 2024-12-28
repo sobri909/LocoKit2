@@ -197,13 +197,49 @@ public final class TimelineRecorder {
             return
         }
 
-        guard let sleepDuration = recordingEnded?.age else {
+        guard let currentItem = currentItem(),
+              currentItem.isVisit,
+              let place = currentItem.place,
+              let dateRange = currentItem.dateRange else {
+            updateSleepCycleDurationLegacy()
+            return
+        }
+
+        // Calculate combined probability
+        let visitDuration = -dateRange.start.timeIntervalSinceNow
+        guard let probability = place.calculateLeavingProbability(visitDuration: visitDuration) else {
+            updateSleepCycleDurationLegacy()
+            return
+        }
+
+        if TimelineProcessor.debugLogging {
+            print("""
+                Sleep cycle probability:
+                - Place: \(place.name)
+                - Visit duration: \(visitDuration / 60) mins
+                - Combined probability: \(String(format: "%.3f", probability))
+                """)
+        }
+
+        // Map probability to duration (6-60 seconds)
+        switch probability {
+        case 0.5...1.0:  // High probability (>50%)
+            loco.sleepCycleDuration = 6
+        case 0.01..<0.5: // Scale between 1-50%
+            let normalized = (probability - 0.01) / 0.49
+            loco.sleepCycleDuration = 60 - (normalized * 54)
+        default:         // Very low probability (<1%)
+            loco.sleepCycleDuration = 60
+        }
+    }
+
+    private func updateSleepCycleDurationLegacy() {
+        guard let recordingEnded else {
             loco.sleepCycleDuration = 6
             return
         }
 
-        let sleepMinutes = sleepDuration / 60
-
+        let sleepMinutes = recordingEnded.age / 60
         if sleepMinutes < 2 {
             loco.sleepCycleDuration = 6
         } else if sleepMinutes <= 60 {
