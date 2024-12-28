@@ -38,6 +38,11 @@ internal final class Merge: Hashable, Sendable {
         if keeper.deleted || deadman.deleted || betweener?.deleted == true { return false }
         if keeper.disabled || deadman.disabled || betweener?.disabled == true { return false }
 
+        // reject circular references
+        if keeper.base.nextItemId == keeper.base.previousItemId { return false }
+        if deadman.base.nextItemId == deadman.base.previousItemId { return false }
+        if let betweener, betweener.base.nextItemId == betweener.base.previousItemId { return false }
+
         if let betweener {
             // keeper -> betweener -> deadman
             if keeper.base.nextItemId == betweener.id, betweener.base.nextItemId == deadman.id { return true }
