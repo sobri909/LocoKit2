@@ -38,11 +38,11 @@ public final class TimelineRecorder {
         }
     }
 
-    public func currentItem(includeSamples: Bool = false) -> TimelineItem? {
+    public func currentItem(includeSamples: Bool = false, includePlaces: Bool = false) -> TimelineItem? {
         do {
             let item = try Database.pool.read {
                 try TimelineItem
-                    .itemRequest(includeSamples: includeSamples)
+                    .itemRequest(includeSamples: includeSamples, includePlaces: includePlaces)
                     .filter(Column("deleted") == false && Column("disabled") == false)
                     .order(Column("endDate").desc)
                     .fetchOne($0)
