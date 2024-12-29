@@ -80,7 +80,7 @@ extension Place {
         }
     }
 
-    func calculateLeavingProbability(visitDuration: TimeInterval, at date: Date = .now) -> Double? {
+    public func calculateLeavingProbability(visitDuration: TimeInterval, at date: Date = .now) -> Double? {
         guard let leavingTimes = leavingTimes,
               let visitDurations = visitDurations else {
             return nil
