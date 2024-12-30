@@ -12,7 +12,7 @@ actor SleepModeDetector {
 
     // MARK: - Config
 
-    public static let sleepModeDelay: TimeInterval = 120.0
+    public static let sleepModeDelay: TimeInterval = .minutes(2)
     private let minGeofenceRadius: CLLocationDistance = 20.0
     private let maxGeofenceRadius: CLLocationDistance = 100.0
 
