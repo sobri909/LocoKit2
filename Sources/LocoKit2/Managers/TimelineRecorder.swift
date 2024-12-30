@@ -123,7 +123,7 @@ public final class TimelineRecorder {
 
         Task {
             for await newState in loco.stateUpdates() {
-                recordingStateChanged(newState)
+                await recordingStateChanged(newState)
             }
         }
     }
@@ -158,7 +158,7 @@ public final class TimelineRecorder {
 
     // MARK: -
 
-    private func recordingStateChanged(_ recordingState: RecordingState) {
+    private func recordingStateChanged(_ recordingState: RecordingState) async {
         // we're only here for changes
         if recordingState == previousRecordingState {
             return
@@ -183,32 +183,31 @@ public final class TimelineRecorder {
 
         switch recordingState {
         case .sleeping, .recording:
-            updateSleepCycleDuration(recordingState)
+            await updateSleepCycleDuration(recordingState)
             break
         default:
             break
         }
     }
 
-    private func updateSleepCycleDuration(_ recordingState: RecordingState) {
+    private func updateSleepCycleDuration(_ recordingState: RecordingState) async {
         // ensure sleep cycles are short for when sleeping next starts
         if recordingState == .recording {
-            loco.sleepCycleDuration = 6
+            await loco.setSleepCycleDuration(6)
             return
         }
 
         guard let currentItem = currentItem(),
-              currentItem.isVisit,
               let place = currentItem.place,
               let dateRange = currentItem.dateRange else {
-            updateSleepCycleDurationLegacy()
+            await updateSleepCycleDurationFallback()
             return
         }
 
         // Calculate combined probability
         let visitDuration = -dateRange.start.timeIntervalSinceNow
         guard let probability = place.calculateLeavingProbability(visitDuration: visitDuration) else {
-            updateSleepCycleDurationLegacy()
+            await updateSleepCycleDurationFallback()
             return
         }
 
@@ -224,28 +223,28 @@ public final class TimelineRecorder {
         // Map probability to duration (6-60 seconds)
         switch probability {
         case 0.5...1.0:  // High probability (>50%)
-            loco.sleepCycleDuration = 6
+            await loco.setSleepCycleDuration(6)
         case 0.01..<0.5: // Scale between 1-50%
             let normalized = (probability - 0.01) / 0.49
-            loco.sleepCycleDuration = 60 - (normalized * 54)
+            await loco.setSleepCycleDuration(60 - (normalized * 54))
         default:         // Very low probability (<1%)
-            loco.sleepCycleDuration = 60
+            await loco.setSleepCycleDuration(60)
         }
     }
 
-    private func updateSleepCycleDurationLegacy() {
+    private func updateSleepCycleDurationFallback() async {
         guard let recordingEnded else {
-            loco.sleepCycleDuration = 6
+            await loco.setSleepCycleDuration(6)
             return
         }
 
         let sleepMinutes = recordingEnded.age / 60
         if sleepMinutes < 2 {
-            loco.sleepCycleDuration = 6
+            await loco.setSleepCycleDuration(6)
         } else if sleepMinutes <= 60 {
-            loco.sleepCycleDuration = 6 + ((sleepMinutes - 2) / 58 * (60 - 6))
+            await loco.setSleepCycleDuration(6 + ((sleepMinutes - 2) / 58 * (60 - 6)))
         } else {
-            loco.sleepCycleDuration = 60
+            await loco.setSleepCycleDuration(60)
         }
     }
 

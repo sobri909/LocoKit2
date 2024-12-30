@@ -19,8 +19,15 @@ public final class LocomotionManager: @unchecked Sendable {
     public static let locoKitVersion = "9.0.0"
 
     // MARK: - Public
-    
-    public var sleepCycleDuration: TimeInterval = 30
+
+    @MainActor
+    public private(set) var sleepCycleDuration: TimeInterval = 30
+
+    @MainActor
+    public func setSleepCycleDuration(_ duration: TimeInterval) {
+        sleepCycleDuration = duration
+    }
+
     public var standbyCycleDuration: TimeInterval = 60 * 2
     public var fallbackUpdateDuration: TimeInterval = 6
 
@@ -358,6 +365,7 @@ public final class LocomotionManager: @unchecked Sendable {
         }
     }
 
+    @MainActor
     private func restartTheWakeupTimer() {
         let duration = sleepCycleDuration
         Task { @MainActor in
