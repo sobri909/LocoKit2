@@ -197,7 +197,7 @@ public final class TimelineRecorder {
             return
         }
 
-        guard let currentItem = currentItem(),
+        guard let currentItem = currentItem(includePlaces: true),
               let place = currentItem.place,
               let dateRange = currentItem.dateRange else {
             await updateSleepCycleDurationFallback()
@@ -211,14 +211,12 @@ public final class TimelineRecorder {
             return
         }
 
-        if TimelineProcessor.debugLogging {
-            print("""
-                Sleep cycle probability:
-                - Place: \(place.name)
-                - Visit duration: \(visitDuration / 60) mins
-                - Combined probability: \(String(format: "%.3f", probability))
-                """)
-        }
+        print("""
+            Sleep cycle probability:
+            - Place: \(place.name)
+            - Visit duration: \(visitDuration / 60) mins
+            - Combined probability: \(String(format: "%.3f", probability))
+            """)
 
         // Map probability to duration (6-60 seconds)
         switch probability {
