@@ -50,7 +50,7 @@ public extension Array where Element == LocomotionSample {
             let baseWeight = 1 / (clampedAccuracy * clampedAccuracy)
 
             // multiply weight for stationary samples
-            let weight = sample.activityType == .stationary ? baseWeight * 3.0 : baseWeight
+            let weight = sample.activityType == .stationary ? baseWeight * 10 : baseWeight
 
             let cosLatitude = cos(latitude)
             let sinLatitude = sin(latitude)
@@ -89,7 +89,7 @@ public extension Array where Element == LocomotionSample {
             let clampedAccuracy = Swift.max(location.horizontalAccuracy, 1.0)
 
             let baseWeight = 1 / (clampedAccuracy * clampedAccuracy)
-            let weight = sample.activityType == .stationary ? baseWeight * 3.0 : baseWeight
+            let weight = sample.activityType == .stationary ? baseWeight * 10 : baseWeight
 
             let distance = location.distance(from: center)
             return (distance, weight)
