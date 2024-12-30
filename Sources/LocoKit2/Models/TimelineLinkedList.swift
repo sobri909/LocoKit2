@@ -31,10 +31,13 @@ public final class TimelineLinkedList: AsyncSequence {
         }
     }
 
-    public init(fromItems: [TimelineItem]) {
-        for item in fromItems {
-            timelineItems[item.id] = item
-            observers[item.id] = addObserverFor(itemId: item.id)
+    public convenience init(fromItems: [TimelineItem]) {
+        self.init(fromItemIds: fromItems.map { $0.id })
+    }
+
+    public init(fromItemIds: [String]) {
+        for itemId in fromItemIds {
+            observers[itemId] = addObserverFor(itemId: itemId)
         }
     }
 
