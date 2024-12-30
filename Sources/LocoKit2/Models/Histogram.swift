@@ -44,24 +44,39 @@ public struct Histogram: Hashable, Sendable, Codable {
     public func probability(for value: Double) -> Double? {
         guard let binWidth, !bins.isEmpty else { return nil }
 
-        // Start with 2x binWidth for bandwidth - we can tune this
-        let h = binWidth * 2
+        // Estimate SD from bins
+        let weightedSum = bins.reduce(0.0) { sum, bin -> Double in
+            let binCenter = bin.start + binWidth / 2
+            return sum + (binCenter * Double(bin.count))
+        }
+        let mean = weightedSum / Double(totalCount)
 
-        // Sum up Gaussian kernel contributions from each bin
-        let kernelSum = bins.reduce(0.0) { sum, bin in
-            // Use bin center as the reference point
+        let weightedSqSum = bins.reduce(0.0) { sum, bin -> Double in
+            let binCenter = bin.start + binWidth / 2
+            let diff = binCenter - mean
+            return sum + (diff * diff * Double(bin.count))
+        }
+        let sd = sqrt(weightedSqSum / Double(totalCount - 1))
+
+        // More conservative bandwidth for sparse data
+        let h = sd * pow(Double(totalCount), -1.0/3.0)
+
+        // Factor out the constant
+        let gaussianConstant = 1.0 / sqrt(2 * .pi)
+
+        // Calculate kernel contributions
+        let kernelContributions = bins.map { bin -> Double in
             let binCenter = bin.start + binWidth / 2
             let z = (value - binCenter) / h
-
-            // Weight by bin count and calculate Gaussian
-            let kernel = Double(bin.count) * exp(-0.5 * z * z) / sqrt(2 * .pi)
-            return sum + kernel
+            return Double(bin.count) * exp(-0.5 * z * z) * gaussianConstant
         }
 
-        // Normalize by total area
-        return kernelSum / (Double(totalCount) * h)
-    }
+        let kernelSum = kernelContributions.reduce(0, +)
+        let normalizationFactor = Double(totalCount) * gaussianConstant
 
+        return kernelSum / normalizationFactor
+    }
+    
     public var binWidth: Double? {
         guard bins.count >= 2 else { return nil }
         return bins[1].start - bins[0].start
