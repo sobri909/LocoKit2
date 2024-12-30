@@ -260,7 +260,8 @@ public final class TimelineRecorder {
             guard let dateRange = currentItem.dateRange else {
                 return false
             }
-            return dateRange.duration >= TimelineItemVisit.minimumKeeperDuration
+            // use age instead of duration, because distanceFilter delays new samples when stationary
+            return dateRange.start.age >= TimelineItemVisit.minimumKeeperDuration
         }
     }
 
