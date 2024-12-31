@@ -17,17 +17,19 @@ public final class TimelineRecorder {
 
     public var legacyDbMode = false
 
-    public func startRecording() {
+    public func startRecording() async {
         startWatchingLoco()
-        loco.startRecording()
+        await loco.startRecording()
     }
 
-    public func stopRecording() {
-        loco.stopRecording()
+    public func stopRecording() async {
+        await loco.stopRecording()
     }
 
     public var isRecording: Bool {
-        return loco.recordingState != .off
+        get async {
+            return await loco.recordingState != .off
+        }
     }
 
     // MARK: -
@@ -267,7 +269,7 @@ public final class TimelineRecorder {
     private var lastRecordSampleCall: Date?
 
     private func recordSample() async {
-        guard isRecording else { return }
+        guard await isRecording else { return }
 
         // minimum 1 second between samples plz
         if let lastRecordSampleCall, lastRecordSampleCall.age < 1 { return }
@@ -359,7 +361,7 @@ public final class TimelineRecorder {
     // MARK: - Legacy db recording
 
     private func recordLegacySample() async {
-        guard isRecording else { return }
+        guard await isRecording else { return }
 
         // minimum 1 second between samples plz
         if let lastRecordSampleCall, lastRecordSampleCall.age < 1 { return }

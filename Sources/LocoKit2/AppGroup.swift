@@ -186,7 +186,7 @@ public final class AppGroup: @unchecked Sendable {
     private func concedeRecording(to activeRecorder: AppName? = nil) async {
         guard await isAnActiveRecorder else { return }
 
-        LocomotionManager.highlander.startStandby()
+        await LocomotionManager.highlander.startStandby()
 
         if let activeRecorder {
             logger.info("concededRecording to \(activeRecorder)", subsystem: .timeline)

@@ -34,6 +34,7 @@ public final class LocomotionManager: @unchecked Sendable {
     @ObservationIgnored
     public var appGroup: AppGroup?
 
+    @MainActor
     public private(set) var recordingState: RecordingState = .off {
         didSet {
             Task { await appGroup?.save() }
@@ -82,6 +83,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
     // MARK: - Recording states
 
+    @MainActor
     public func startRecording() {
         if recordingState == .recording { return }
 
@@ -102,6 +104,7 @@ public final class LocomotionManager: @unchecked Sendable {
         restartTheFallbackTimer()
     }
 
+    @MainActor
     public func stopRecording() {
         print("LocomotionManager.stopRecording()")
 
@@ -120,6 +123,7 @@ public final class LocomotionManager: @unchecked Sendable {
         recordingState = .off
     }
 
+    @MainActor
     public func startStandby() {
         sleepLocationManager.startUpdatingLocation()
         sleepLocationManager.startMonitoringSignificantLocationChanges()
@@ -165,7 +169,7 @@ public final class LocomotionManager: @unchecked Sendable {
         var sample = LocomotionSample(
             date: location.timestamp,
             movingState: movingState.movingState,
-            recordingState: recordingState,
+            recordingState: await recordingState,
             location: location
         )
 
@@ -188,7 +192,7 @@ public final class LocomotionManager: @unchecked Sendable {
         var sample = LegacySample(
             date: location.timestamp,
             movingState: movingState.movingState,
-            recordingState: recordingState,
+            recordingState: await recordingState,
             location: location
         )
         sample.stepHz = stepHz
@@ -246,6 +250,7 @@ public final class LocomotionManager: @unchecked Sendable {
         restartTheWakeupTimer()
     }
 
+    @MainActor
     private func startWakeup() async {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
@@ -271,7 +276,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func becomeTheActiveRecorder() async {
         guard let appGroup else { return }
         if await appGroup.isAnActiveRecorder { return }
-        startRecording()
+        await startRecording()
         logger.info("tookOverRecording", subsystem: .timeline)
         await appGroup.becameCurrentRecorder()
     }
