@@ -9,7 +9,25 @@ import Foundation
 
 public struct Histogram: Hashable, Sendable, Codable {
 
-    private let bins: [Bin]
+    public let bins: [Bin]
+
+    public struct Bin: Hashable, Sendable, Codable {
+        public let start: Double
+        public let count: Int
+    }
+
+    // MARK: - Init
+
+    public static func forTimeOfDay(dates: [Date], timeZone: TimeZone = .current) -> Histogram? {
+        var calendar = Calendar.current
+        calendar.timeZone = timeZone
+        let timesOfDay = dates.map { $0.sinceStartOfDay(in: calendar) }
+        return Histogram(values: timesOfDay, minimumBinWidth: 60.0) // minimum 1 minute bins
+    }
+
+    public static func forDurations(intervals: [TimeInterval]) -> Histogram? {
+        return Histogram(values: intervals, minimumBinWidth: 60.0)
+    }
 
     public init?(values: [Double], minimumBinWidth: Double? = nil) {
         if values.isEmpty { return nil }
@@ -28,6 +46,13 @@ public struct Histogram: Hashable, Sendable, Codable {
 
         bins = counts.map { Bin(start: $0.key, count: $0.value) }
             .sorted { $0.start < $1.start }
+    }
+
+    // MARK: -
+
+    public var binWidth: Double? {
+        guard bins.count >= 2 else { return nil }
+        return bins[1].start - bins[0].start
     }
 
     public var totalCount: Int {
@@ -76,11 +101,8 @@ public struct Histogram: Hashable, Sendable, Codable {
 
         return kernelSum / normalizationFactor
     }
-    
-    public var binWidth: Double? {
-        guard bins.count >= 2 else { return nil }
-        return bins[1].start - bins[0].start
-    }
+
+    // MARK: - FD calc
 
     private static func computeBinWidth(for values: [Double]) -> Double {
         guard values.count > 1 else { return 1.0 } // sensible default depends on usage
@@ -91,24 +113,6 @@ public struct Histogram: Hashable, Sendable, Codable {
         let iqr = sorted[q3Index] - sorted[q1Index]
 
         return 2.0 * iqr * pow(Double(values.count), -1.0/3.0)
-    }
-
-    private struct Bin: Hashable, Sendable, Codable {
-        let start: Double
-        let count: Int
-    }
-
-    // MARK: - Type specific inits
-
-    public static func forTimeOfDay(dates: [Date], timeZone: TimeZone = .current) -> Histogram? {
-        var calendar = Calendar.current
-        calendar.timeZone = timeZone
-        let timesOfDay = dates.map { $0.sinceStartOfDay(in: calendar) }
-        return Histogram(values: timesOfDay, minimumBinWidth: 60.0) // minimum 1 minute bins
-    }
-    
-    public static func forDurations(intervals: [TimeInterval]) -> Histogram? {
-        return Histogram(values: intervals, minimumBinWidth: 60.0)
     }
 
 }
