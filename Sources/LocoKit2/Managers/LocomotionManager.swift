@@ -167,7 +167,7 @@ public final class LocomotionManager: @unchecked Sendable {
         let stepHz = stepsSampler.currentStepHz()
 
         var sample = LocomotionSample(
-            date: location.timestamp,
+            date: .now,
             movingState: movingState.movingState,
             recordingState: await recordingState,
             location: location

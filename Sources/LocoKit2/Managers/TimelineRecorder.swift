@@ -20,10 +20,12 @@ public final class TimelineRecorder {
     public func startRecording() async {
         startWatchingLoco()
         await loco.startRecording()
+        await startFallbackSampleTimer()
     }
 
     public func stopRecording() async {
         await loco.stopRecording()
+        await stopFallbackSampleTimer()
     }
 
     public var isRecording: Bool {
@@ -176,6 +178,13 @@ public final class TimelineRecorder {
         // fire up the processor on transition to sleep
         if previousRecordingState == .recording, recordingState == .sleeping {
             print("recordingStateChanged() .recording -> .sleeping")
+
+            // force a sample at state transition, to ensure currentVisit is a keeper
+            // (transition to sleep only requires up-to-now duration, and distance filtered
+            // location updates mean actual dateRange may not reflect that, preventing
+            // merges with previous items at same location)
+            await recordSample()
+
             if let currentItemId {
                 Task { await TimelineProcessor.processFrom(itemId: currentItemId) }
             }
@@ -266,7 +275,7 @@ public final class TimelineRecorder {
         }
     }
 
-    // MARK: -
+    // MARK: - Sample recording
 
     private var lastRecordSampleCall: Date?
 
@@ -286,6 +295,9 @@ public final class TimelineRecorder {
             
             await processSample(&sample)
             await sample.saveRTree()
+
+            // reset the fallback
+            await startFallbackSampleTimer()
 
         } catch {
             logger.error(error, subsystem: .database)
@@ -358,6 +370,36 @@ public final class TimelineRecorder {
         }
 
         return newItem
+    }
+
+    // MARK: - Fallback sample recording
+
+    private let fallbackSampleDuration: TimeInterval = 60
+
+    @MainActor
+    private var fallbackSampleTimer: Timer?
+
+    @MainActor
+    private func startFallbackSampleTimer() {
+        fallbackSampleTimer?.invalidate()
+        fallbackSampleTimer = Timer.scheduledTimer(withTimeInterval: fallbackSampleDuration, repeats: false) { [weak self] _ in
+            if let self {
+                Task {
+                    // only record if we haven't had a sample in a while
+                    if let latestSample = await self.latestSample(),
+                       latestSample.date.age > self.loco.fallbackUpdateDuration {
+                        await self.recordSample()
+                    }
+                    await self.startFallbackSampleTimer()
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func stopFallbackSampleTimer() {
+        fallbackSampleTimer?.invalidate()
+        fallbackSampleTimer = nil
     }
 
     // MARK: - Legacy db recording
