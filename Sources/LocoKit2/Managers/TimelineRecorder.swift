@@ -226,7 +226,9 @@ public final class TimelineRecorder {
             await loco.setSleepCycleDuration(6)
         case 0.01..<0.5: // Scale between 1-50%
             let normalized = (probability - 0.01) / 0.49
-            await loco.setSleepCycleDuration(60 - (normalized * 54))
+            // Use cube root (0.33) for aggressive curve towards shorter cycles
+            let curved = pow(normalized, 0.33)
+            await loco.setSleepCycleDuration(60 - (curved * 54))
         default:         // Very low probability (<1%)
             await loco.setSleepCycleDuration(60)
         }
