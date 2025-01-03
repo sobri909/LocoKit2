@@ -39,6 +39,21 @@ public struct Histogram: Hashable, Sendable, Codable {
 
         // create bins
         var counts: [Double: Int] = [:]
+
+        // find range
+        let minValue = values.min()!
+        let maxValue = values.max()!
+        let start = floor(minValue / binWidth) * binWidth
+        let end = floor(maxValue / binWidth) * binWidth
+
+        // create all bins in range
+        var current = start
+        while current <= end {
+            counts[current] = 0
+            current += binWidth
+        }
+
+        // fill in actual counts
         for value in values {
             let binStart = floor(value / binWidth) * binWidth
             counts[binStart, default: 0] += 1
