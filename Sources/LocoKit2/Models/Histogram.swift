@@ -59,10 +59,13 @@ public struct Histogram: Hashable, Sendable, Codable {
         bins.reduce(0) { $0 + $1.count }
     }
 
-    public var mostCommonBin: (start: Double, end: Double, count: Int)? {
+    public var mostCommonBin: (start: Double, middle: Double, end: Double, count: Int)? {
         guard let maxBin = bins.max(by: { $0.count < $1.count }),
               let binWidth = binWidth else { return nil }
-        return (maxBin.start, maxBin.start + binWidth, maxBin.count)
+        let start = maxBin.start
+        let end = start + binWidth
+        let middle = start + (binWidth / 2)
+        return (start, middle, end, count: maxBin.count)
     }
 
     /// Calculate a smoothed probability for the given value using kernel density estimation
