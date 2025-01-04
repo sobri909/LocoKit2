@@ -146,6 +146,16 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
+    public var uncertainAssignment: Bool {
+        if let visit {
+            return visit.uncertainPlace
+        }
+        if let trip {
+            return trip.uncertainActivityType
+        }
+        fatalError()
+    }
+
     // MARK: - Item creation
 
     public static func createItem(from samples: [LocomotionSample], isVisit: Bool, db: GRDB.Database) throws -> TimelineItem {

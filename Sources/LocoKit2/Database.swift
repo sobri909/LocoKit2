@@ -179,6 +179,7 @@ public final class Database: @unchecked Sendable {
                     .references("Place", onDelete: .setNull, deferred: true)
 
                 table.column("confirmedPlace", .boolean).notNull()
+                table.column("uncertainPlace", .boolean).notNull().defaults(to: true)
 
                 table.column("customTitle", .text).indexed()
                 table.column("streetAddress", .text).indexed()
@@ -192,6 +193,7 @@ public final class Database: @unchecked Sendable {
                 table.column("speed", .double).notNull()
                 table.column("classifiedActivityType", .integer)
                 table.column("confirmedActivityType", .integer)
+                table.column("uncertainActivityType", .boolean).notNull().defaults(to: true)
             }
 
             // MARK: - LocomotionSample

@@ -25,6 +25,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     public var placeId: String?
     public var confirmedPlace = false
+    public var uncertainPlace = true
 
     public var customTitle: String?
     public var streetAddress: String?
