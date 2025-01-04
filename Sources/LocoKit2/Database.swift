@@ -49,8 +49,7 @@ public final class Database: @unchecked Sendable {
 
     private lazy var migrator = {
         var migrator = DatabaseMigrator()
-        // TODO: remove this after schema is stable!
-        migrator.eraseDatabaseOnSchemaChange = true
+        // migrator.eraseDatabaseOnSchemaChange = true
         return migrator
     }()
 
