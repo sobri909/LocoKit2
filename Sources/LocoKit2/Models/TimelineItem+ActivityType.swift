@@ -12,6 +12,7 @@ extension TimelineItem {
     public mutating func classifySamples() async {
         guard let samples else { return }
         guard let results = await ActivityClassifier.highlander.results(for: samples) else { return }
+        let trip = self.trip
 
         do {
             self.samples = try await Database.pool.write { db in
@@ -26,6 +27,15 @@ extension TimelineItem {
                     }
                     updatedSamples.append(mutableSample)
                 }
+
+                // update trip uncertainty if this is a trip and we have combined results
+                if let combinedResults = results.combinedResults {
+                    if var mutableTrip = trip {
+                        mutableTrip.updateUncertainty(from: combinedResults)
+                        try mutableTrip.save(db)
+                    }
+                }
+
                 return updatedSamples
             }
 

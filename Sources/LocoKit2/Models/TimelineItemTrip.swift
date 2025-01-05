@@ -48,6 +48,10 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         self.confirmedActivityType = Self.calculateConfirmedActivityType(from: samples)
     }
 
+    public mutating func updateUncertainty(from results: ClassifierResults) {
+        uncertainActivityType = results.bestMatch.score < 0.75
+    }
+
     private static func calculateDistance(from samples: [LocomotionSample]) -> CLLocationDistance {
         return samples.usableLocations().distance() ?? 0
     }
