@@ -89,7 +89,12 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     // MARK: - Place
 
-    public func assignPlace(_ place: Place, confirm: Bool = false) async {
+    public func assignPlace(_ place: Place, confirm: Bool = false, uncertain: Bool = true) async {
+        // cannot be both confirmed and uncertain
+        if confirm && uncertain {
+            fatalError("Cannot have a confirmed place that is uncertain")
+        }
+
         // don't overwrite a confirmed assignment with an unconfirmed one
         if !confirm, confirmedPlace, placeId != nil { return }
 
@@ -101,6 +106,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
                 try mutableSelf.updateChanges(db) {
                     $0.placeId = place.id
                     $0.confirmedPlace = confirm
+                    $0.uncertainPlace = uncertain
                     $0.customTitle = nil
                 }
                 var mutablePlace = place
