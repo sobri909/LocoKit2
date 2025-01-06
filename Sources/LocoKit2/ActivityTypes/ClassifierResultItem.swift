@@ -20,12 +20,10 @@ public struct ClassifierResultItem: Equatable, Identifiable, Sendable {
     public var id: Int { return activityType.rawValue }
     public let activityType: ActivityType
     public let score: Double
-    public let modelAccuracyScore: Double?
 
-    public init(name: ActivityType, score: Double, modelAccuracyScore: Double? = nil) {
+    public init(name: ActivityType, score: Double) {
         self.activityType = name
         self.score = score
-        self.modelAccuracyScore = modelAccuracyScore
     }
 
     public func normalisedScore(in results: ClassifierResults) -> Double {
