@@ -89,7 +89,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     // MARK: - Place
 
-    public func assignPlace(_ place: Place, confirm: Bool = false, uncertain: Bool = true) async {
+    public func assignPlace(_ place: Place, confirm: Bool = false, uncertain: Bool = false) async {
         // cannot be both confirmed and uncertain
         if confirm && uncertain {
             fatalError("Cannot have a confirmed place that is uncertain")
