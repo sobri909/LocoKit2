@@ -178,7 +178,9 @@ public final class Database: @unchecked Sendable {
                     .references("Place", onDelete: .setNull, deferred: true)
 
                 table.column("confirmedPlace", .boolean).notNull()
+                    .check { $0 == false || Column("placeId") != nil }
                 table.column("uncertainPlace", .boolean).notNull().defaults(to: true)
+                    .check { $0 == true || Column("placeId") != nil }
 
                 table.column("customTitle", .text).indexed()
                 table.column("streetAddress", .text).indexed()
@@ -193,6 +195,7 @@ public final class Database: @unchecked Sendable {
                 table.column("classifiedActivityType", .integer)
                 table.column("confirmedActivityType", .integer)
                 table.column("uncertainActivityType", .boolean).notNull().defaults(to: true)
+                    .check { $0 == true || Column("classifiedActivityType") != nil }
             }
 
             // MARK: - LocomotionSample
