@@ -78,6 +78,71 @@ public final class ExportManager {
         try await exportPlaces()
     }
     
+    private func exportSamples() async throws {
+        guard let samplesURL else {
+            throw PersistenceError.exportNotInitialised
+        }
+        
+        // Get all samples ordered by date
+        let samples = try await Database.pool.read { db in
+            try LocomotionSample
+                .order(Column("date").asc)
+                .fetchAll(db)
+        }
+        
+        // Group samples by week using UTC calendar
+        var weekSamples: [String: [LocomotionSample]] = [:]
+        var calendar = Calendar.current
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        
+        for sample in samples {
+            let weekOfYear = calendar.component(.weekOfYear, from: sample.date)
+            let year = calendar.component(.year, from: sample.date)
+            let weekId = String(format: "%4d-%02d", year, weekOfYear)
+            weekSamples[weekId, default: []].append(sample)
+        }
+        
+        // Export each week's samples to its own file
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        for (weekId, samples) in weekSamples {
+            let weekURL = samplesURL.appendingPathComponent("\(weekId).json")
+            let data = try encoder.encode(samples)
+            try data.write(to: weekURL)
+        }
+        
+        // Export complete - clear state
+        exportInProgress = false
+    }
+
+    private func exportItems() async throws {
+        guard let itemsURL else {
+            throw PersistenceError.exportNotInitialised
+        }
+        
+        // Get all timeline items with their full relationships loaded
+        let items = try await Database.pool.read { db in
+            try TimelineItem
+                .itemRequest(includeSamples: false, includePlaces: false)
+                .filter(Column("deleted") == false)
+                .fetchAll(db)
+        }
+        
+        // Export each item
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        
+        for item in items {
+            let itemURL = itemsURL.appendingPathComponent("\(item.id).json")
+            let data = try encoder.encode(item)
+            try data.write(to: itemURL)
+        }
+
+        // Continue with samples export
+        try await exportSamples()
+    }
+    
     private func exportPlaces() async throws {
         guard let placesURL else {
             throw PersistenceError.exportNotInitialised
@@ -97,6 +162,9 @@ public final class ExportManager {
             let data = try encoder.encode(place)
             try data.write(to: placeURL)
         }
+
+        // Continue with items export
+        try await exportItems()
     }
     
     private func writeInitialMetadata() async throws {
