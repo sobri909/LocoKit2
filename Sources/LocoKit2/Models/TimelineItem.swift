@@ -146,14 +146,24 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
-    public var uncertainAssignment: Bool {
+    var assignmentConfirmed: Bool {
         if let visit {
-            return visit.uncertainPlace
+            return visit.confirmedPlace
         }
         if let trip {
-            return trip.uncertainActivityType
+            return trip.confirmedActivityType != nil
         }
-        fatalError()
+        return false
+    }
+
+    var assignmentCertain: Bool {
+        if let visit {
+            return !visit.uncertainPlace
+        }
+        if let trip {
+            return !trip.uncertainActivityType
+        }
+        return false
     }
 
     // MARK: - Item creation
