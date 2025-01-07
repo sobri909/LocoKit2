@@ -146,7 +146,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         }
     }
 
-    var assignmentConfirmed: Bool {
+    public var assignmentConfirmed: Bool {
         if let visit {
             return visit.confirmedPlace
         }
@@ -156,7 +156,7 @@ public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, 
         return false
     }
 
-    var assignmentCertain: Bool {
+    public var assignmentCertain: Bool {
         if let visit {
             return !visit.uncertainPlace
         }
