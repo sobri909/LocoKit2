@@ -18,6 +18,11 @@ public final class ExportManager {
     
     private var currentExportURL: URL?
     
+    private var metadataURL: URL? {
+        guard let currentExportURL else { return nil }
+        return currentExportURL.appendingPathComponent("metadata.json")
+    }
+    
     private var placesURL: URL? {
         guard let currentExportURL else { return nil }
         return currentExportURL.appendingPathComponent("places", isDirectory: true)
@@ -66,6 +71,9 @@ public final class ExportManager {
         try FileManager.default.createDirectory(at: itemsURL!, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: samplesURL!, withIntermediateDirectories: true)
         
+        // Write initial metadata before starting export
+        try await writeInitialMetadata()
+        
         // start with places export
         try await exportPlaces()
     }
@@ -89,6 +97,37 @@ public final class ExportManager {
             let data = try encoder.encode(place)
             try data.write(to: placeURL)
         }
+    }
+    
+    private func writeInitialMetadata() async throws {
+        guard let metadataURL else {
+            throw PersistenceError.exportNotInitialised
+        }
+        
+        // Gather stats
+        let (placeCount, itemCount, sampleCount) = try await Database.pool.read { db in
+            let places = try Place.fetchCount(db)
+            let items = try TimelineItemBase.fetchCount(db)
+            let samples = try LocomotionSample.fetchCount(db)
+            return (places, items, samples)
+        }
+        
+        let stats = ExportStats(
+            placeCount: placeCount,
+            itemCount: itemCount,
+            sampleCount: sampleCount
+        )
+        
+        let metadata = ExportMetadata(
+            exportDate: .now,
+            version: LocomotionManager.locoKitVersion,
+            stats: stats
+        )
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(metadata)
+        try data.write(to: metadataURL)
     }
 }
 
