@@ -1,6 +1,6 @@
 //
 //  TimelineItem.swift
-//
+//  LocoKit2
 //
 //  Created by Matt Greenfield on 18/3/24.
 //
@@ -9,7 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct TimelineItem: FetchableRecord, Decodable, Identifiable, Hashable, Sendable {
+public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Sendable {
 
     public var base: TimelineItemBase
     public var visit: TimelineItemVisit?
