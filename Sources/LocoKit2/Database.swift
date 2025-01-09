@@ -122,7 +122,7 @@ public final class Database: @unchecked Sendable {
                 table.column("foursquarePlaceId", .text).indexed()
                 table.column("foursquareCategoryId", .integer)
 
-                table.column("visitCount", .integer).notNull()
+                table.column("visitCount", .integer).notNull().indexed()
                 table.column("visitDays", .integer).notNull()
 
                 table.column("arrivalTimes", .blob)
@@ -133,6 +133,13 @@ public final class Database: @unchecked Sendable {
             try db.create(
                 virtualTable: "PlaceRTree",
                 using: "rtree(id, latMin, latMax, lonMin, lonMax)"
+            )
+
+            // Composite index for combining deleted with startDate filtering
+            try db.create(
+                index: "TimelineItemBase_on_deleted_startDate",
+                on: "TimelineItemBase",
+                columns: ["deleted", "startDate"]
             )
 
             // MARK: - TimelineItem
