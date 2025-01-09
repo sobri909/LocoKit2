@@ -57,8 +57,12 @@ public final class ExportManager {
             throw PersistenceError.iCloudNotAvailable
         }
         
-        // Create exports dir under container root
-        let exportsRoot = iCloudRoot.appendingPathComponent("Exports", isDirectory: true)
+        // Create Documents dir under container root if needed
+        let documentsRoot = iCloudRoot.appendingPathComponent("Documents", isDirectory: true)
+        try FileManager.default.createDirectory(at: documentsRoot, withIntermediateDirectories: true)
+
+        // Create exports dir under Documents
+        let exportsRoot = documentsRoot.appendingPathComponent("Exports", isDirectory: true)
         try FileManager.default.createDirectory(at: exportsRoot, withIntermediateDirectories: true)
         
         let rootURL = exportsRoot.appendingPathComponent("export-\(timestamp)", isDirectory: true)
