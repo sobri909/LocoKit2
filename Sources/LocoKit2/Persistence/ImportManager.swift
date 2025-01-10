@@ -28,6 +28,7 @@ public final class ImportManager {
         do {
             try await validateImportDirectory()
             try await importPlaces()
+            try await importTimelineItems()
             
             // Clear import state
             importInProgress = false
@@ -47,13 +48,18 @@ public final class ImportManager {
         // Check for required structure
         let metadataURL = importURL.appendingPathComponent("metadata.json")
         let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
+        let itemsURL = importURL.appendingPathComponent("items", isDirectory: true)
         
         guard FileManager.default.fileExists(atPath: metadataURL.path) else {
-            throw ImportError.missingMetadata
+            throw PersistenceError.missingMetadata
         }
         
         guard FileManager.default.fileExists(atPath: placesURL.path) else {
-            throw ImportError.missingPlacesDirectory
+            throw PersistenceError.missingPlacesDirectory
+        }
+        
+        guard FileManager.default.fileExists(atPath: itemsURL.path) else {
+            throw PersistenceError.missingItemsDirectory
         }
         
         // Load and validate metadata
@@ -98,15 +104,80 @@ public final class ImportManager {
     
     // MARK: - Error handling
     
+    private func importTimelineItems() async throws {
+        let itemsURL = importURL!.appendingPathComponent("items")
+        let edgesURL = importURL!.appendingPathComponent("edge_records.jsonl")
+        
+        // Get the monthly item files in chronological order
+        let itemFiles = try FileManager.default.contentsOfDirectory(
+            at: itemsURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension == "json" }
+        .sorted() // filenames are YYYY-MM.json so string sort works
+        
+        // Remove any existing edge records file
+        try? FileManager.default.removeItem(at: edgesURL)
+        
+        // Process monthly files
+        for fileURL in itemFiles {
+            do {
+                let itemsData = try Data(contentsOf: fileURL)
+                let items = try JSONDecoder().decode([TimelineItemBase].self, from: itemsData)
+                
+                // Process in batches of 100
+                for batch in items.chunked(into: 100) {
+                    try await Database.pool.write { db in
+                        for var item in batch {
+                            // Store edge record before nulling the relationships
+                            let record = EdgeRecord(
+                                itemId: item.id,
+                                previousId: item.previousItemId,
+                                nextId: item.nextItemId
+                            )
+                            if let data = try? JSONEncoder().encode(record) {
+                                try data.append(to: edgesURL)
+                            }
+                            
+                            // Clear edges for initial import
+                            item.previousItemId = nil
+                            item.nextItemId = nil
+                            
+                            // Upsert pattern
+                            if let existing = try TimelineItemBase.filter(Column("id") == item.id).fetchOne(db) {
+                                try existing.updateChanges(db) {
+                                    $0 = item
+                                }
+                            } else {
+                                try item.insert(db)
+                            }
+                        }
+                    }
+                }
+            } catch {
+                logger.error(error, subsystem: .database)
+                continue // Log and continue on file errors
+            }
+        }
+    }
+    
     private func cleanupFailedImport() {
         importInProgress = false
         importURL = nil
+        
+        // Clean up edge records file if it exists
+        if let importURL {
+            let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
+            try? FileManager.default.removeItem(at: edgesURL)
+        }
     }
 }
 
 // MARK: -
 
-enum ImportError: Error {
-    case missingMetadata
-    case missingPlacesDirectory
+private struct EdgeRecord: Codable {
+    let itemId: String
+    let previousId: String?
+    let nextId: String?
 }

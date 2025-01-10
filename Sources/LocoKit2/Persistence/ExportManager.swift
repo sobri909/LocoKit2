@@ -222,9 +222,17 @@ public final class ExportManager {
 // MARK: -
 
 enum PersistenceError: Error {
+    // Export errors
     case exportInProgress
     case exportNotInitialised
+    
+    // Import errors
     case importInProgress
     case importNotInitialised
+    case missingMetadata
+    case missingPlacesDirectory
+    case missingItemsDirectory
+    
+    // iCloud errors
     case iCloudNotAvailable
 }

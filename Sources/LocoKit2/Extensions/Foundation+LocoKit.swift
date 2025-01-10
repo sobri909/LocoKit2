@@ -5,6 +5,12 @@
 import Foundation
 
 extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
+        }
+    }
+
     var second: Element? {
         guard count > 1 else { return nil }
         return self[1]
@@ -87,13 +93,21 @@ extension String {
 extension Data {
     func appendTo(_ url: URL) throws {
         if let fileHandle = try? FileHandle(forWritingTo: url) {
-            defer {
-                fileHandle.closeFile()
-            }
-            fileHandle.seekToEndOfFile()
-            fileHandle.write(self)
+            defer { try? fileHandle.close() }
+            try fileHandle.seekToEnd()
+            try fileHandle.write(contentsOf: self)
         } else {
-            try write(to: url, options: .atomic)
+            try write(to: url)
+        }
+    }
+    
+    func appendLine(to url: URL) throws {
+        if let fileHandle = try? FileHandle(forWritingTo: url) {
+            defer { try? fileHandle.close() }
+            try fileHandle.seekToEnd()
+            try fileHandle.write(contentsOf: self + "\n".data(using: .utf8)!)
+        } else {
+            try write(to: url)
         }
     }
 }
