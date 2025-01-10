@@ -108,7 +108,7 @@ public final class ExportManager {
         for sample in samples {
             let weekOfYear = calendar.component(.weekOfYear, from: sample.date)
             let year = calendar.component(.year, from: sample.date)
-            let weekId = String(format: "%4d-%02d", year, weekOfYear)
+            let weekId = String(format: "%4d-W%02d", year, weekOfYear)  // YYYY-Www format
             weekSamples[weekId, default: []].append(sample)
         }
 
@@ -136,17 +136,29 @@ public final class ExportManager {
             try TimelineItem
                 .itemRequest(includeSamples: false, includePlaces: false)
                 .filter(Column("deleted") == false)
+                .order(Column("startDate").asc)  // order by date for grouping
                 .fetchAll(db)
         }
 
-        // Export each item
+        // group items by YYYY-MM
+        var monthlyItems: [String: [TimelineItem]] = [:]
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+        
+        for item in items {
+            guard let startDate = item.dateRange?.start else { continue }
+            let monthKey = formatter.string(from: startDate)
+            monthlyItems[monthKey, default: []].append(item)
+        }
+
+        // export each month's items
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
-        for item in items {
-            let itemURL = itemsURL.appendingPathComponent("\(item.id).json")
-            let data = try encoder.encode(item)
-            try data.write(to: itemURL)
+        for (monthKey, items) in monthlyItems {
+            let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
+            let data = try encoder.encode(items)
+            try data.write(to: monthURL)
         }
 
         // Continue with samples export
@@ -163,14 +175,21 @@ public final class ExportManager {
             try Place.filter(Column("visitCount") > 0).fetchAll(db)
         }
 
-        // export each place
+        // group places by uuid prefix
+        var bucketedPlaces: [String: [Place]] = [:]
+        for place in places {
+            let prefix = String(place.id.prefix(2)).uppercased()
+            bucketedPlaces[prefix, default: []].append(place)
+        }
+
+        // export each bucket
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
-        for place in places {
-            let placeURL = placesURL.appendingPathComponent("\(place.id).json")
-            let data = try encoder.encode(place)
-            try data.write(to: placeURL)
+        for (prefix, places) in bucketedPlaces {
+            let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
+            let data = try encoder.encode(places)
+            try data.write(to: bucketURL)
         }
 
         // Continue with items export

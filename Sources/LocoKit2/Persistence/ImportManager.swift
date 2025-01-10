@@ -84,7 +84,7 @@ public final class ImportManager {
             for fileURL in placeFiles {
                 do {
                     let placeData = try Data(contentsOf: fileURL)
-                    var place = try JSONDecoder().decode(Place.self, from: placeData)
+                    let place = try JSONDecoder().decode(Place.self, from: placeData)
                     
                     // If place exists, update it, otherwise insert
                     if var existing = try Place.filter(Column("id") == place.id).fetchOne(db) {
