@@ -6,16 +6,17 @@ Current status of the export/import system implementation.
 
 ### Core Infrastructure
 - [x] PersistenceActor and ExportManager with proper isolation
-- [x] Export directory structure with compression
+- [x] Export directory structure with basic organization
 - [x] Error handling and state management
 - [x] JSON encoding with formatting and sorting
 
-### Export Sequence
-- [x] Stats collection and metadata.json creation
-- [x] Places export with complete data
-- [x] Items export preserving edge relationships
-- [x] Samples export in UTC week-based files
-- [x] Gzip compression integration
+### Export Format 
+- [x] Basic file organization (places, items, samples)
+- [x] UUID-based place bucketing (00.json through FF.json)
+- [x] Month-based item files (YYYY-MM.json)
+- [x] Week-based sample files (YYYY-Www.json)
+- [x] Proper date sorting before grouping
+- [x] Standardized uppercase UUIDs
 
 ## In Progress
 
@@ -33,6 +34,12 @@ Current status of the export/import system implementation.
 - [ ] Batching for large datasets
 - [ ] Memory management during export
 - [ ] Progress vs performance tradeoffs
+
+### Compression Support
+- [ ] Optional gzip compression (.json.gz)
+- [ ] Flexible format handling on import
+- [ ] Performance testing of compressed vs uncompressed
+- [ ] Infrastructure for future compression formats
 
 ### Import System
 - [ ] Import validation
@@ -62,11 +69,11 @@ Current status of the export/import system implementation.
 
 ### Export Validation
 - [ ] Directory structure verification
-- [ ] JSON format/schema validation
+- [ ] UUID bucketing implementation
+- [ ] Month/week file organization
 - [ ] Stats accuracy checking
 - [ ] Relationship preservation testing
 - [ ] Large dataset handling
-- [ ] File permission verification
 
 ### Import Validation
 - [ ] Two-phase import process

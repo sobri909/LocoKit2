@@ -1,25 +1,33 @@
-# Design Decisions
-
-Technical rationale and notes for key design decisions in the export/import system.
-
 ## Export Format Decisions
 
-### Two Format Approach
-Decided on two distinct formats rather than a one-size-fits-all solution:
+### File Organization Strategy
+Core approach with clean separation and efficient organization:
 
-1. Bucketed/Compressed Format
-- Efficiently handles large scale (millions of records)
-- Supports incremental backups
-- Grouping by time period and UUID prefix for manageability
-- Compression for storage efficiency
+1. Places
+   - Simple UUID bucketing (00.json through FF.json)
+   - No subdirectories for simpler file handling
+   - First two chars of UUID determine bucket
+   - Uppercase UUIDs for better readability and consistency with Apple
+   - No compression initially for easier debugging
 
-2. Single File Format
-- Simple format for analysis/scripting
-- Self-contained exports for sharing
-- Still compressed but unified structure
-- Easy to process with standard tools
+2. Items
+   - Month-based files (YYYY-MM.json)
+   - Pre-sorted by startDate
+   - Grouped chronologically for easy access
+   - Arrays of items rather than individual files
 
-This provides clear formats for different use cases while keeping the implementation manageable.
+3. Samples
+   - Week-based files using ISO format (YYYY-Www.json)
+   - UTC-based for timezone consistency
+   - Clear distinction from month files
+   - Maintains chronological organization
+
+### Compression Strategy
+- Optional compression for flexibility
+- Files may be .json or .json.gz
+- Implementations must support both
+- Starting with uncompressed for simplicity
+- Infrastructure ready for future formats
 
 ### Data Structure Design
 Core decision to keep objects separate with foreign key relationships:
