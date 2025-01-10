@@ -18,4 +18,4 @@ A ground up rebuild of LocoKit, providing a modern Swift framework for timeline 
 
 ## License
 
-MIT. See the [LICENSE](LICENSE) file for details.
+Mozilla Public License Version 2.0. See the [LICENSE](LICENSE) file for details.
