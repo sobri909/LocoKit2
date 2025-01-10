@@ -31,16 +31,16 @@ Designed for full database backups and large datasets. Files grouped by type and
 export-YYYY-MM-DD-HHmmss/
   metadata.json
   places/
-    00/places.json.gz  # Places with UUIDs starting "00"
-    01/places.json.gz  # Places with UUIDs starting "01"
-    .../              # Through "ff"
+    00.json.gz  # Places with UUIDs starting "00"
+    01.json.gz  # Places with UUIDs starting "01"
+    .../        # Through "FF"
   items/
     2025-01.json.gz   # Timeline items for January 2025
     2025-02.json.gz   # Timeline items for February 2025
     ...
   samples/
-    2025-01.json.gz   # Location samples for week 1, 2025
-    2025-02.json.gz   # Location samples for week 2, 2025
+    2025-W01.json.gz  # Location samples for week 1, 2025
+    2025-W02.json.gz  # Location samples for week 2, 2025
     ...
 ```
 
@@ -92,19 +92,19 @@ Designed for data analysis and sharing specific date ranges. All data contained 
   },
   "items": [
     {
-      "id": "uuid-string",
+      "id": "9F264AC1-992C-4E7D-B333-79F0C9FEEE22",
       "type": "visit",  // or "trip"
       "startDate": "2025-01-05T10:00:00Z",
       "endDate": "2025-01-05T11:30:00Z",
-      "previousItemId": "uuid-string",
-      "nextItemId": "uuid-string",
+      "previousItemId": "1A95C320-D04E-4F53-8F6D-D8A6BB3E66A4",
+      "nextItemId": "E721F2D5-AD31-4F8B-90EE-8E92F1123D64",
       ...
     },
     ...
   ],
   "places": [
     {
-      "id": "uuid-string",
+      "id": "B22EE7C8-5FC0-4F2B-9289-A50FA8D11ACF",
       "name": "Place Name",
       "center": {
         "latitude": 35.6762,
@@ -116,11 +116,11 @@ Designed for data analysis and sharing specific date ranges. All data contained 
   ],
   "samples": [
     {
-      "id": "uuid-string",
+      "id": "43FF6A12-7890-4DEF-B123-456789ABCDEF",
       "date": "2025-01-05T10:00:00Z",
       "latitude": 35.6762,
       "longitude": 139.6503,
-      "timelineItemId": "uuid-string",
+      "timelineItemId": "9F264AC1-992C-4E7D-B333-79F0C9FEEE22",
       ...
     },
     ...
@@ -204,7 +204,7 @@ Common fields for both Visits and Trips:
 ## Notes
 
 - All dates are in ISO8601 format with timezone information
-- UUIDs are lowercase string format without curly braces
+- UUIDs are uppercase string format without curly braces
 - Empty/null fields should be omitted from JSON
 - All file paths and names are case-sensitive
 - Week numbers in sample filenames use ISO week date system
