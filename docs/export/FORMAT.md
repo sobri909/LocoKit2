@@ -82,7 +82,7 @@ Designed for data analysis and sharing specific date ranges. All data contained 
 
 #### File Structure
 ```
-2025-01-05.json.gz   # Gzipped JSON with contents:
+2025-01-05.json or 2025-01-05.json.gz   # Single file containing contents:
 {
   "schemaVersion": "1.0.0",
   "exportMode": "singleFile",
@@ -195,11 +195,11 @@ Common fields for both Visits and Trips:
 ```
 
 ## Compression
-- All JSON files in both formats are gzipped using standard gzip compression
-- This applies to metadata.json as well as all data files
-- Compression is required, not optional, to maintain storage efficiency
-- Previous formats only compressed sample files - this format compresses everything
-- The .gz extension must be present on all compressed files
+- Files may be either compressed (.json.gz) or uncompressed (.json)
+- Implementations must support reading both formats
+- Example paths in this doc show .json.gz but .json is equally valid
+- Future compression formats may be added (e.g. .json.zst)
+- The .gz extension when present indicates gzip compression
 
 ## Notes
 
