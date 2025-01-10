@@ -86,12 +86,12 @@ extension String {
 
     func appendTo(_ url: URL) throws {
         let data = data(using: .utf8)!
-        try data.appendTo(url)
+        try data.append(to: url)
     }
 }
 
 extension Data {
-    func appendTo(_ url: URL) throws {
+    func append(to url: URL) throws {
         if let fileHandle = try? FileHandle(forWritingTo: url) {
             defer { try? fileHandle.close() }
             try fileHandle.seekToEnd()
@@ -109,5 +109,21 @@ extension Data {
         } else {
             try write(to: url)
         }
+    }
+}
+
+extension FileHandle {
+    func readLine() throws -> String? {
+        let bufferSize = 1024
+        guard let data = try read(upToCount: bufferSize) else { return nil }
+
+        var line = ""
+        for byte in data {
+            if byte == 0x0A { // newline char
+                return line
+            }
+            line.append(Character(UnicodeScalar(byte)))
+        }
+        return line.isEmpty ? nil : line
     }
 }

@@ -235,4 +235,7 @@ enum PersistenceError: Error {
     
     // iCloud errors
     case iCloudNotAvailable
+    
+    // Edge restoration errors
+    case missingEdgeRecords
 }

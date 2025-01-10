@@ -29,6 +29,7 @@ public final class ImportManager {
             try await validateImportDirectory()
             try await importPlaces()
             try await importTimelineItems()
+            try await restoreEdgeRelationships()
             
             // Clear import state
             importInProgress = false
@@ -86,7 +87,7 @@ public final class ImportManager {
                     var place = try JSONDecoder().decode(Place.self, from: placeData)
                     
                     // If place exists, update it, otherwise insert
-                    if let existing = try Place.filter(Column("id") == place.id).fetchOne(db) {
+                    if var existing = try Place.filter(Column("id") == place.id).fetchOne(db) {
                         try existing.updateChanges(db) {
                             $0 = place
                         }
@@ -115,8 +116,8 @@ public final class ImportManager {
             options: [.skipsHiddenFiles]
         )
         .filter { $0.pathExtension == "json" }
-        .sorted() // filenames are YYYY-MM.json so string sort works
-        
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
         // Remove any existing edge records file
         try? FileManager.default.removeItem(at: edgesURL)
         
@@ -145,7 +146,7 @@ public final class ImportManager {
                             item.nextItemId = nil
                             
                             // Upsert pattern
-                            if let existing = try TimelineItemBase.filter(Column("id") == item.id).fetchOne(db) {
+                            if var existing = try TimelineItemBase.filter(Column("id") == item.id).fetchOne(db) {
                                 try existing.updateChanges(db) {
                                     $0 = item
                                 }
@@ -171,6 +172,53 @@ public final class ImportManager {
             let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
             try? FileManager.default.removeItem(at: edgesURL)
         }
+    }
+    
+    private func restoreEdgeRelationships() async throws {
+        guard let importURL else {
+            throw PersistenceError.importNotInitialised
+        }
+        
+        let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
+        guard FileManager.default.fileExists(atPath: edgesURL.path) else {
+            throw PersistenceError.missingEdgeRecords
+        }
+        
+        // Process records in batches to manage transaction size
+        let records = try await loadEdgeRecords(from: edgesURL)
+        for batch in records.chunked(into: 100) {
+            try await Database.pool.write { db in
+                for record in batch {
+                    // Use GRDB query interface to update edges
+                    try TimelineItemBase
+                        .filter(Column("id") == record.itemId)
+                        .updateAll(db, [
+                            Column("previousItemId").set(to: record.previousId),
+                            Column("nextItemId").set(to: record.nextId)
+                        ])
+                }
+            }
+        }
+        
+        // Clean up edge records file
+        try? FileManager.default.removeItem(at: edgesURL)
+    }
+    
+    private func loadEdgeRecords(from url: URL) async throws -> [EdgeRecord] {
+        var records: [EdgeRecord] = []
+        
+        // Read JSONL file line by line to avoid loading entire file into memory
+        let fileHandle = try FileHandle(forReadingFrom: url)
+        defer { try? fileHandle.close() }
+        
+        while let line = try fileHandle.readLine() {
+            if let data = line.data(using: .utf8),
+               let record = try? JSONDecoder().decode(EdgeRecord.self, from: data) {
+                records.append(record)
+            }
+        }
+        
+        return records
     }
 }
 
