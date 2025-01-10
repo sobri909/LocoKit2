@@ -31,9 +31,13 @@ Designed for full database backups and large datasets. Files grouped by type and
 export-YYYY-MM-DD-HHmmss/
   metadata.json
   places/
-    00.json.gz  # Places with UUIDs starting "00"
-    01.json.gz  # Places with UUIDs starting "01"
+    00.json.gz  # Places with UUIDs starting "00" (e.g. "00ABCDEF-...")
+    01.json.gz  # Places with UUIDs starting "01" (e.g. "0123CDEF-...")
     .../        # Through "FF"
+
+  # Places are assigned to buckets based on the first two characters of their UUID.
+  # For example, a place with UUID "2A95C320-D04E-4F53-8F6D-D8A6BB3E66A4"
+  # would be stored in "2A.json.gz".
   items/
     2025-01.json.gz   # Timeline items for January 2025
     2025-02.json.gz   # Timeline items for February 2025
@@ -104,7 +108,7 @@ Designed for data analysis and sharing specific date ranges. All data contained 
   ],
   "places": [
     {
-      "id": "B22EE7C8-5FC0-4F2B-9289-A50FA8D11ACF",
+      "id": "2A95C320-D04E-4F53-8F6D-D8A6BB3E66A4",
       "name": "Place Name",
       "center": {
         "latitude": 35.6762,
