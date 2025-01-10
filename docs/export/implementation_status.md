@@ -40,6 +40,24 @@ Current status of the export/import system implementation.
 - [ ] Edge relationship restoration
 - [ ] Progress tracking and error handling
 
+## Future Work
+
+### Arc Editor Features
+- [ ] Automatic daily/monthly export updates
+- [ ] UI for manual exports (date range selection)
+- [ ] Export browser/viewer
+- [ ] Import progress display
+
+### Legacy Support
+- [ ] Conversion tools for old Arc Timeline exports
+- [ ] Format version detection and handling
+- [ ] Migration documentation
+
+### Recording Management
+- [ ] Smart recording handling during imports
+- [ ] Sample buffering system
+- [ ] Timeline processing coordination
+
 ## Testing Matrix
 
 ### Export Validation
@@ -81,3 +99,9 @@ Current status of the export/import system implementation.
 - [ ] Transaction rollbacks
 - [ ] Concurrent access
 - [ ] Interruption handling
+
+### Legacy Format Testing
+- [ ] Old format detection
+- [ ] Conversion accuracy
+- [ ] Error handling during conversion
+- [ ] Performance with large datasets

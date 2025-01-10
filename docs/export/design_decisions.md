@@ -21,9 +21,17 @@ Decided on two distinct formats rather than a one-size-fits-all solution:
 
 This provides clear formats for different use cases while keeping the implementation manageable.
 
+### Data Structure Design
+Core decision to keep objects separate with foreign key relationships:
+- Avoids data duplication in both formats
+- Maintains clean, consistent data relationships
+- More efficient for partial/incremental updates
+- Consistent between single-file and multi-file formats
+- Better for memory management with large datasets
+
 ### Compression Strategy
 - Using gzip for wide tool compatibility
-- Applied at individual file level for selective decompression
+- Applied to all JSON files, not just samples (improvement over old system)
 - Weekly batching for samples proven in production
 - Monthly batching for items balances size vs granularity
 - UUID prefix bucketing for places avoids temporal clustering
@@ -69,11 +77,20 @@ Tested with real-world volumes:
 - ~38K timeline items (~24MB)
 - ~7M samples (~4.5GB)
 
+### iOS Constraints
+- Full database exports not practical due to:
+  * iOS background task time limits
+  * Energy impact considerations
+  * Storage space constraints
+- Multi-day imports need careful handling
+- Need to work within iOS background task system
+
 ### File Organization
 - Weekly sample files manage read/write load
 - Monthly item files balance size vs backup granularity
 - Place bucketing prevents single directory overload
-- Compression reduces storage and transfer costs
+- All files compressed to minimize storage impact
+- Structure considers iCloud Drive limitations with many small files
 
 ### Future Optimizations
 - Batch processing for large datasets
@@ -107,6 +124,13 @@ Planned lastSaved timestamp system:
 - Only update if import data is newer
 - Enables proper merging between devices
 
+### Legacy Format Support
+To be implemented:
+- Need conversion tools for existing Arc Timeline exports
+- Must maintain ability to read old formats
+- Consider both app and library layer conversion needs
+- Plan for handling format transitions
+
 ### Known Edge Cases
 - Edge management in two-phase import
 - Transaction size limits with sample data
@@ -122,7 +146,8 @@ Planned lastSaved timestamp system:
 3. Add compression and batching
 4. Implement backup scheduling
 5. Add data merging system
-6. Consider cloud sync features
+6. Implement legacy format conversion
+7. Consider cloud sync features
 
 Core principle: Maintain backward compatibility while enabling future enhancements. Each version should be able to read data from previous versions.
 
@@ -134,3 +159,9 @@ Core principle: Maintain backward compatibility while enabling future enhancemen
 - Large transaction management
 - Memory pressure handling
 - Background task time limits
+
+### Future Considerations
+- More sophisticated recording management during imports
+- Write-ahead log style backup/sync system
+- Alternative edge management strategies
+- Enhanced incremental backup approaches
