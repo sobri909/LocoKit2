@@ -29,20 +29,75 @@ Core approach with clean separation and efficient organization:
 - Starting with uncompressed for simplicity
 - Infrastructure ready for future formats
 
-### Data Structure Design
-Core decision to keep objects separate with foreign key relationships:
+## Implementation Notes
+
+### File Organization Implementation
+1. Place Bucketing:
+   ```swift
+   // Group by first 2 chars of UUID
+   var bucketedPlaces: [String: [Place]] = [:]
+   for place in places {
+       let prefix = String(place.id.prefix(2)).uppercased()
+       bucketedPlaces[prefix, default: []].append(place)
+   }
+   ```
+
+2. Month-Based Items:
+   ```swift
+   // Group by YYYY-MM
+   var monthlyItems: [String: [TimelineItem]] = [:]
+   let formatter = DateFormatter()
+   formatter.dateFormat = "yyyy-MM"
+   
+   for item in items {
+       guard let startDate = item.dateRange?.start else { continue }
+       let monthKey = formatter.string(from: startDate)
+       monthlyItems[monthKey, default: []].append(item)
+   }
+   ```
+
+3. Week-Based Samples:
+   ```swift
+   // Group by UTC week
+   var calendar = Calendar.current
+   calendar.timeZone = TimeZone(identifier: "UTC")!
+   let weekId = String(format: "%4d-W%02d", year, weekOfYear)
+   ```
+
+Key implementation considerations:
+- Sort before grouping for consistent organization
+- Use Calendar for proper week calculations
+- Maintain proper timezone handling
+- Clean error handling throughout
+- Pre-create all directories at export start
+
+### Future Compression Integration
+Planned approach:
+1. File handling first:
+   - Check extensions to detect format (.json vs .json.gz)
+   - Support both reading and writing both formats
+   - Graceful fallback to uncompressed
+
+2. Memory considerations:
+   - Stream compression where possible
+   - Avoid loading full files into memory
+   - Maintain batching with either format
+
+3. Testing strategy:
+   - Compare file sizes between formats
+   - Measure memory impact during export/import
+   - Test format auto-detection
+   - Verify streaming performance
+
+## Data Integrity
+
+### Core Data Organization
+Decision to keep objects separate with foreign key relationships:
 - Avoids data duplication in both formats
 - Maintains clean, consistent data relationships
 - More efficient for partial/incremental updates
 - Consistent between single-file and multi-file formats
 - Better for memory management with large datasets
-
-### Compression Strategy
-- Using gzip for wide tool compatibility
-- Applied to all JSON files, not just samples (improvement over old system)
-- Weekly batching for samples proven in production
-- Monthly batching for items balances size vs granularity
-- UUID prefix bucketing for places avoids temporal clustering
 
 ### Two-Phase Import Strategy
 Core challenge was preserving bidirectional edge relationships while maintaining database constraints.
@@ -60,22 +115,6 @@ New approach:
    - Maintains database constraints
    - Simple, reliable implementation
    - No edge healing dependency
-
-### App Layer State Management
-Considered but rejected adding import state to database schema due to:
-- Unnecessary schema complexity
-- Storage overhead in production
-- Schema change costs
-
-Instead using PersistenceActor to:
-- Manage import/export state
-- Block recording/processing
-- Coordinate app-wide state
-
-Benefits:
-- No schema changes
-- Clean separation of concerns
-- Simpler rollback handling
 
 ## Performance Considerations
 
@@ -111,7 +150,7 @@ Tested with real-world volumes:
 ### Sample File Organization
 Careful consideration given to sample file organization:
 - UTC week-based files chosen over alternatives
-- YYYY-WW.json format provides timezone safety
+- YYYY-Www.json format provides timezone safety
 - UTC basis prevents daylight saving issues
 - Week files provide natural date-range divisions
 - Handles orphaned samples cleanly
