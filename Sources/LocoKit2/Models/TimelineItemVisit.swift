@@ -18,6 +18,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     public static let maxRadius: CLLocationDistance = 150
 
     public let itemId: String
+    public var lastSaved: Date = .now
     public var latitude: CLLocationDegrees
     public var longitude: CLLocationDegrees
     public var radiusMean: CLLocationDistance

@@ -19,6 +19,7 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     public static let minimumKeeperDistance: Double = 20
 
     public let itemId: String
+    public var lastSaved: Date = .now
     public var distance: CLLocationDistance
     public var speed: CLLocationSpeed
     public var classifiedActivityType: ActivityType?
