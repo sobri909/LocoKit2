@@ -91,6 +91,7 @@ Designed for data analysis and sharing specific date ranges. All data contained 
   isStale: boolean
   visitCount: number
   visitDays: number
+  lastSaved: string   // ISO8601 datetime with timezone
   
   // Provider IDs
   mapboxPlaceId: string | null
@@ -119,6 +120,7 @@ Base fields common to all timeline items:
     sourceVersion: string
     disabled: boolean
     deleted: boolean
+    lastSaved: string       // ISO8601 datetime with timezone
     previousItemId: string | null
     nextItemId: string | null
     
@@ -177,6 +179,7 @@ Additional fields for trip items:
   movingState: number      // Maps to MovingState enum
   recordingState: number   // Maps to RecordingState enum
   disabled: boolean
+  lastSaved: string        // ISO8601 datetime with timezone
   timelineItemId: string | null
   
   // Location data
