@@ -179,6 +179,7 @@ public final class Database: @unchecked Sendable {
             try db.create(table: "TimelineItemVisit") { table in
                 table.primaryKey("itemId", .text)
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
+                table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
 
                 table.column("latitude", .double).notNull()
                 table.column("longitude", .double).notNull()
@@ -200,6 +201,7 @@ public final class Database: @unchecked Sendable {
             try db.create(table: "TimelineItemTrip") { table in
                 table.primaryKey("itemId", .text)
                     .references("TimelineItemBase", onDelete: .cascade, deferred: true)
+                table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
 
                 table.column("distance", .double).notNull()
                 table.column("speed", .double).notNull()
