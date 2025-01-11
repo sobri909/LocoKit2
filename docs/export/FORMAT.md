@@ -150,6 +150,7 @@ Additional fields for visit items:
     uncertainPlace: boolean
     customTitle: string | null
     streetAddress: string | null
+    lastSaved: string        // ISO8601 datetime with timezone
   }
 }
 ```
@@ -164,6 +165,7 @@ Additional fields for trip items:
     classifiedActivityType: number | null
     confirmedActivityType: number | null
     uncertainActivityType: boolean
+    lastSaved: string        // ISO8601 datetime with timezone
   }
 }
 ```
