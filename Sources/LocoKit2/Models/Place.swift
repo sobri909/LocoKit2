@@ -18,6 +18,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public static let minimumNewPlaceRadius: CLLocationDistance = 60
 
     public var id: String = UUID().uuidString
+    public var lastSaved: Date = .now
+
     public var latitude: CLLocationDegrees
     public var longitude: CLLocationDegrees
     public var radiusMean: CLLocationDistance = Place.minimumNewPlaceRadius
@@ -166,6 +168,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     enum CodingKeys: String, CodingKey {
         case id
+        case lastSaved
         case latitude
         case longitude
         case radiusMean
@@ -194,6 +197,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public init(row: Row) throws {
         // core fields
         id = row["id"]
+        lastSaved = row["lastSaved"]
         latitude = row["latitude"]
         longitude = row["longitude"]
         radiusMean = row["radiusMean"]
@@ -235,6 +239,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public func encode(to container: inout PersistenceContainer) {
         // core fields
         container["id"] = id
+        container["lastSaved"] = lastSaved
+
         container["latitude"] = latitude
         container["longitude"] = longitude
         container["radiusMean"] = radiusMean
@@ -258,7 +264,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         container["visitCount"] = visitCount
         container["visitDays"] = visitDays
 
-        // Histograms with MessagePack
+        // Histograms
         let encoder = JSONEncoder()
         container["arrivalTimes"] = try? encoder.encode(arrivalTimes)
         container["leavingTimes"] = try? encoder.encode(leavingTimes)

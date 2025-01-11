@@ -102,6 +102,8 @@ public final class Database: @unchecked Sendable {
 
             try db.create(table: "Place") { table in
                 table.primaryKey("id", .text)
+                table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                
                 table.column("rtreeId", .integer).indexed()
                 table.column("isStale", .boolean).notNull()
                 table.column("latitude", .double).notNull()
@@ -146,6 +148,8 @@ public final class Database: @unchecked Sendable {
 
             try db.create(table: "TimelineItemBase") { table in
                 table.primaryKey("id", .text)
+                table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+
                 table.column("isVisit", .boolean).notNull()
                 table.column("startDate", .datetime).indexed()
                 table.column("endDate", .datetime).indexed()
@@ -209,6 +213,7 @@ public final class Database: @unchecked Sendable {
 
             try db.create(table: "LocomotionSample") { table in
                 table.primaryKey("id", .text)
+                table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
 
                 // NOTE: indexing this column in old LocoKit made the query planner do dumb things
                 // make sure there's a composite index that includes it instead
@@ -507,6 +512,35 @@ public final class Database: @unchecked Sendable {
                 WHEN NEW.disabled = 1 AND NEW.disabled != OLD.disabled
                 BEGIN
                     UPDATE TimelineItemBase SET nextItemId = NULL, previousItemId = NULL WHERE id = NEW.id;
+                END;
+                """)
+
+            // MARK: - lastSaved update triggers
+            
+            try db.execute(sql: """
+                CREATE TRIGGER Place_AFTER_UPDATE
+                AFTER UPDATE ON Place
+                BEGIN
+                    UPDATE Place SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE id = NEW.id;
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_lastSaved
+                AFTER UPDATE ON TimelineItemBase
+                BEGIN
+                    UPDATE TimelineItemBase SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE id = NEW.id;
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_AFTER_UPDATE_lastSaved
+                AFTER UPDATE ON LocomotionSample
+                BEGIN
+                    UPDATE LocomotionSample SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE id = NEW.id;
                 END;
                 """)
         }

@@ -12,6 +12,7 @@ import CoreLocation
 public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
     public var id: String = UUID().uuidString
+    public var lastSaved: Date = .now
     public let isVisit: Bool
     public let startDate: Date?
     public let endDate: Date?

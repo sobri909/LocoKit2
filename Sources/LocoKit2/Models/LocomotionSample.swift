@@ -12,7 +12,8 @@ import CoreLocation
 public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
     public private(set) var id: String = UUID().uuidString
-    
+    public var lastSaved: Date = .now
+
     public var date: Date
     public var secondsFromGMT: Int
     public var source: String = "LocoKit"
@@ -33,7 +34,6 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     public let speed: CLLocationSpeed?
     public let course: CLLocationDirection?
 
-    // strings for now, until classifier stuff is ported over
     public var classifiedActivityType: ActivityType?
     public var confirmedActivityType: ActivityType?
 
@@ -109,7 +109,10 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        
         self.id = try container.decode(String.self, forKey: .id)
+        self.lastSaved = try container.decode(Date.self, forKey: .lastSaved)
+
         self.date = try container.decode(Date.self, forKey: .date)
         self.secondsFromGMT = try container.decode(Int.self, forKey: .secondsFromGMT)
         self.source = try container.decode(String.self, forKey: .source)
@@ -193,6 +196,8 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     enum CodingKeys: String, CodingKey {
         case id
+        case lastSaved
+
         case date
         case secondsFromGMT
         case source
