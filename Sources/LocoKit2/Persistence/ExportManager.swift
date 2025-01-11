@@ -178,7 +178,7 @@ public final class ExportManager {
         // group places by uuid prefix
         var bucketedPlaces: [String: [Place]] = [:]
         for place in places {
-            let prefix = String(place.id.prefix(2)).uppercased()
+            let prefix = String(place.id.prefix(1)).uppercased()
             bucketedPlaces[prefix, default: []].append(place)
         }
 
