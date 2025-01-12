@@ -9,7 +9,7 @@ import GRDB
 
 extension Database {
     func addSampleTriggers(to migrator: inout DatabaseMigrator) {
-        migrator.registerMigration("Initial triggers") { db in
+        migrator.registerMigration("Initial sample triggers") { db in
 
             // MARK: - AFTER INSERT LocomotionSample
 

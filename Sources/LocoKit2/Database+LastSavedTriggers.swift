@@ -9,7 +9,10 @@ import GRDB
 
 extension Database {
     func addLastSavedTriggers(to migrator: inout DatabaseMigrator) {
-        migrator.registerMigration("Initial triggers") { db in
+        migrator.registerMigration("Initial lastSaved triggers") { db in
+
+            // MARK: - Last Modified Date Triggers
+
             /** update lastSaved timestamps when rows change */
 
             try db.execute(sql: """

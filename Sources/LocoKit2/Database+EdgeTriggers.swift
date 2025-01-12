@@ -9,7 +9,7 @@ import GRDB
 
 extension Database {
     func addEdgeTriggers(to migrator: inout DatabaseMigrator) {
-        migrator.registerMigration("Initial triggers") { db in
+        migrator.registerMigration("Initial edge triggers") { db in
 
             // MARK: - BEFORE INSERT TimelineItemBase
 
