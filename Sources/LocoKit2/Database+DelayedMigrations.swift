@@ -8,23 +8,22 @@
 import GRDB
 
 extension Database {
-    func addDelayedMigrations(to migrator: inout DatabaseMigrator) {
+    public func addDelayedMigrations(to migrator: inout DatabaseMigrator) {
         migrator.registerMigration("Add lastSaved columns and triggers") { db in
-            // Add lastSaved columns
             try? db.alter(table: "Place") { table in
-                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                table.add(column: "lastSaved", .datetime).notNull().defaults(to: 0)
             }
             try? db.alter(table: "TimelineItemBase") { table in
-                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                table.add(column: "lastSaved", .datetime).notNull().defaults(to: 0)
             }
             try? db.alter(table: "TimelineItemVisit") { table in
-                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                table.add(column: "lastSaved", .datetime).notNull().defaults(to: 0)
             }
             try? db.alter(table: "TimelineItemTrip") { table in
-                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                table.add(column: "lastSaved", .datetime).notNull().defaults(to: 0)
             }
             try? db.alter(table: "LocomotionSample") { table in
-                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                table.add(column: "lastSaved", .datetime).notNull().defaults(to: 0)
             }
 
             // Add timestamp update triggers
