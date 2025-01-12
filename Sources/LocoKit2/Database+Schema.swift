@@ -50,13 +50,6 @@ extension Database {
                 using: "rtree(id, latMin, latMax, lonMin, lonMax)"
             )
 
-            // Composite index for combining deleted with startDate filtering
-            try db.create(
-                index: "TimelineItemBase_on_deleted_startDate",
-                on: "TimelineItemBase",
-                columns: ["deleted", "startDate"]
-            )
-
             // MARK: - TimelineItem
 
             try db.create(table: "TimelineItemBase") { table in
@@ -88,6 +81,13 @@ extension Database {
                 table.column("averageHeartRate", .double)
                 table.column("maxHeartRate", .double)
             }
+
+            // Composite index for combining deleted with startDate filtering
+            try db.create(
+                index: "TimelineItemBase_on_deleted_startDate",
+                on: "TimelineItemBase",
+                columns: ["deleted", "startDate"]
+            )
 
             try db.create(table: "TimelineItemVisit") { table in
                 table.primaryKey("itemId", .text)
