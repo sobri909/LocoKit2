@@ -144,7 +144,7 @@ extension Database {
             try db.execute(sql: """
                 CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_deleted
                 AFTER UPDATE OF deleted ON TimelineItemBase
-                WHEN NEW.deleted = 1 AND NEW.deleted != OLD.deleted
+                WHEN NEW.deleted = 1 AND OLD.deleted = 0
                 BEGIN
                     UPDATE TimelineItemBase SET nextItemId = NULL, previousItemId = NULL WHERE id = NEW.id;
                 END;
@@ -153,7 +153,7 @@ extension Database {
             try db.execute(sql: """
                 CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_disabled
                 AFTER UPDATE OF disabled ON TimelineItemBase
-                WHEN NEW.disabled = 1 AND NEW.disabled != OLD.disabled
+                WHEN NEW.disabled = 1 AND OLD.disabled = 0
                 BEGIN
                     UPDATE TimelineItemBase SET nextItemId = NULL, previousItemId = NULL WHERE id = NEW.id;
                 END;
