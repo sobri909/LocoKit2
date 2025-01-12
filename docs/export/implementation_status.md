@@ -31,9 +31,10 @@ Current status of the export/import system implementation.
 - [ ] UI integration for progress display
 
 ### Performance
-- [ ] Batching for large datasets
-- [ ] Memory management during export
-- [ ] Progress vs performance tradeoffs
+- [x] Batched processing for items and edges
+- [x] Memory-efficient JSONL edge record handling
+- [ ] Memory management optimizations for large exports
+- [ ] Performance vs progress tracking tradeoffs
 
 ### Compression Support
 - [ ] Optional gzip compression (.json.gz)
@@ -42,10 +43,11 @@ Current status of the export/import system implementation.
 - [ ] Infrastructure for future compression formats
 
 ### Import System
-- [ ] Import validation
-- [ ] Two-phase import implementation
-- [ ] Edge relationship restoration
-- [ ] Progress tracking and error handling
+- [x] Import validation
+- [x] Two-phase import implementation
+- [x] Edge relationship restoration
+- [x] Basic error handling
+- [ ] Progress tracking
 
 ## Future Work
 
@@ -58,12 +60,17 @@ Current status of the export/import system implementation.
 ### Legacy Support
 - [ ] Conversion tools for old Arc Timeline exports
 - [ ] Format version detection and handling
-- [ ] Migration documentation
+
+### Documentation
+- [x] Export format specification with versioning
+- [x] Import process documentation
+- [x] Design decisions and rationale
+- [ ] API documentation for third parties
 
 ### Recording Management
-- [ ] Smart recording handling during imports
-- [ ] Sample buffering system
-- [ ] Timeline processing coordination
+- [x] Basic import/recording state coordination via PersistenceActor
+- [ ] Sample buffering during imports
+- [ ] Enhanced timeline processing coordination
 
 ## Testing Matrix
 
