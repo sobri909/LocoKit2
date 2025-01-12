@@ -517,11 +517,14 @@ public final class Database: @unchecked Sendable {
                 END;
                 """)
 
-            // MARK: - lastSaved update triggers
+            // MARK: - Last Modified Date Triggers
             
+            /** update lastSaved timestamps when rows change */
+
             try db.execute(sql: """
-                CREATE TRIGGER Place_AFTER_UPDATE
+                CREATE TRIGGER Place_AFTER_UPDATE_lastSaved_UNCHANGED
                 AFTER UPDATE ON Place
+                WHEN NEW.lastSaved IS OLD.lastSaved
                 BEGIN
                     UPDATE Place SET lastSaved = CURRENT_TIMESTAMP
                     WHERE id = NEW.id;
@@ -529,8 +532,9 @@ public final class Database: @unchecked Sendable {
                 """)
 
             try db.execute(sql: """
-                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_lastSaved
+                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_lastSaved_UNCHANGED
                 AFTER UPDATE ON TimelineItemBase
+                WHEN NEW.lastSaved IS OLD.lastSaved
                 BEGIN
                     UPDATE TimelineItemBase SET lastSaved = CURRENT_TIMESTAMP
                     WHERE id = NEW.id;
@@ -538,18 +542,108 @@ public final class Database: @unchecked Sendable {
                 """)
 
             try db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_AFTER_UPDATE_lastSaved
+                CREATE TRIGGER LocomotionSample_AFTER_UPDATE_lastSaved_UNCHANGED
                 AFTER UPDATE ON LocomotionSample
+                WHEN NEW.lastSaved IS OLD.lastSaved
                 BEGIN
                     UPDATE LocomotionSample SET lastSaved = CURRENT_TIMESTAMP
                     WHERE id = NEW.id;
                 END;
                 """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemVisit_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON TimelineItemVisit
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE TimelineItemVisit SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE itemId = NEW.itemId;
+                END;
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER TimelineItemTrip_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON TimelineItemTrip
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE TimelineItemTrip SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE itemId = NEW.itemId;
+                END;
+                """)
+
         }
     }
 
     public func addDelayedMigrations() {
+        migrator.registerMigration("Add lastSaved columns and triggers") { db in
+            // Add lastSaved columns
+            try? db.alter(table: "Place") { table in
+                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+            try? db.alter(table: "TimelineItemBase") { table in
+                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+            try? db.alter(table: "TimelineItemVisit") { table in
+                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+            try? db.alter(table: "TimelineItemTrip") { table in
+                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
+            try? db.alter(table: "LocomotionSample") { table in
+                table.add(column: "lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+            }
 
+            // Add timestamp update triggers
+            try? db.execute(sql: """
+                CREATE TRIGGER Place_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON Place
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE Place SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE id = NEW.id;
+                END;
+                """)
+
+            try? db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON TimelineItemBase
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE TimelineItemBase SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE id = NEW.id;
+                END;
+                """)
+
+            try? db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON LocomotionSample
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE LocomotionSample SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE id = NEW.id;
+                END;
+                """)
+
+            try? db.execute(sql: """
+                CREATE TRIGGER TimelineItemVisit_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON TimelineItemVisit
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE TimelineItemVisit SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE itemId = NEW.itemId;
+                END;
+                """)
+
+            try? db.execute(sql: """
+                CREATE TRIGGER TimelineItemTrip_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON TimelineItemTrip
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE TimelineItemTrip SET lastSaved = CURRENT_TIMESTAMP
+                    WHERE itemId = NEW.itemId;
+                END;
+                """)
+        }
     }
 
     // MARK: - URLs
