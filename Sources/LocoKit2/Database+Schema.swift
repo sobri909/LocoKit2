@@ -82,7 +82,6 @@ extension Database {
                 table.column("maxHeartRate", .double)
             }
 
-            // Composite index for combining deleted with startDate filtering
             try db.create(
                 index: "TimelineItemBase_on_deleted_startDate",
                 on: "TimelineItemBase",
