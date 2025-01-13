@@ -185,8 +185,13 @@ public final class ImportManager {
                                 previousId: item.base.previousItemId,
                                 nextId: item.base.nextItemId
                             )
-                            if let data = try? JSONEncoder().encode(record) {
-                                try data.append(to: edgesURL)
+
+                            do {
+                                let data = try JSONEncoder().encode(record)
+                                try data.appendLine(to: edgesURL)  // Using appendLine instead of append
+                                print("Saved edge record for item: \(item.id)")
+                            } catch {
+                                logger.error("Failed to save edge record: \(error)", subsystem: .database)
                             }
 
                             // Clear edges for initial import
@@ -217,12 +222,13 @@ public final class ImportManager {
             throw PersistenceError.missingEdgeRecords
         }
 
-        // Process records in batches to manage transaction size
         let records = try await loadEdgeRecords(from: edgesURL)
+        print("Loaded \(records.count) edge records")
+
+        // Process records in batches to manage transaction size
         for batch in records.chunked(into: 100) {
             try await Database.pool.write { db in
                 for record in batch {
-                    // Use GRDB query interface to update edges
                     try TimelineItemBase
                         .filter(Column("id") == record.itemId)
                         .updateAll(db, [
@@ -232,6 +238,8 @@ public final class ImportManager {
                 }
             }
         }
+
+        print("Edge restoration complete")
 
         // Clean up edge records file
         try? FileManager.default.removeItem(at: edgesURL)
