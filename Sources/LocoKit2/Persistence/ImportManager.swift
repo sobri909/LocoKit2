@@ -283,7 +283,20 @@ public final class ImportManager {
                 // Process in batches of 100
                 for batch in samples.chunked(into: 100) {
                     try await Database.pool.write { db in
-                        for sample in batch {
+                        // Get all timeline item IDs referenced in this batch
+                        let itemIds = Set(batch.compactMap(\.timelineItemId))
+
+                        // Find which of those IDs actually exist in the database
+                        let validIds = try String.fetchSet(db, TimelineItemBase
+                            .select(Column("id"))
+                            .filter(itemIds.contains(Column("id"))))
+
+                        // Process each sample, orphaning those with invalid item IDs
+                        for var sample in batch {
+                            if let itemId = sample.timelineItemId, !validIds.contains(itemId) {
+                                logger.error("Orphaning sample due to missing parent item: \(itemId)")
+                                sample.timelineItemId = nil
+                            }
                             try sample.save(db)
                         }
                     }
