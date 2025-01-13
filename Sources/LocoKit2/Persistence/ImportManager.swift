@@ -46,35 +46,59 @@ public final class ImportManager {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
         }
-        
-        // Check for required structure
-        let metadataURL = importURL.appendingPathComponent("metadata.json")
-        let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
-        let itemsURL = importURL.appendingPathComponent("items", isDirectory: true)
-        let samplesURL = importURL.appendingPathComponent("samples", isDirectory: true)
 
-        guard FileManager.default.fileExists(atPath: metadataURL.path) else {
-            throw PersistenceError.missingMetadata
-        }
-        
+        // Try coordinated read of metadata first
+        let metadataURL = importURL.appendingPathComponent("metadata.json")
+        let metadata = try await readImportMetadata(from: metadataURL)
+        print("Import metadata loaded: \(metadata)")
+
+        // Now check directory structure
+        let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
         guard FileManager.default.fileExists(atPath: placesURL.path) else {
             throw PersistenceError.missingPlacesDirectory
         }
-        
+
+        let itemsURL = importURL.appendingPathComponent("items", isDirectory: true)
         guard FileManager.default.fileExists(atPath: itemsURL.path) else {
             throw PersistenceError.missingItemsDirectory
         }
-        
+
+        let samplesURL = importURL.appendingPathComponent("samples", isDirectory: true)
         guard FileManager.default.fileExists(atPath: samplesURL.path) else {
             throw PersistenceError.missingSamplesDirectory
         }
-        
-        // Load and validate metadata
-        let metadata = try JSONDecoder().decode(ExportMetadata.self,
-            from: try Data(contentsOf: metadataURL))
-        
-        // TODO: Version check would go here when we add schema versioning
-        print("Import metadata loaded: \(metadata)")
+    }
+
+    private func readImportMetadata(from metadataURL: URL) async throws -> ExportMetadata {
+        guard metadataURL.startAccessingSecurityScopedResource() else {
+            print("Failed to get security scoped access for metadata")
+            throw PersistenceError.missingMetadata
+        }
+        defer { metadataURL.stopAccessingSecurityScopedResource() }
+
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        var metadata: ExportMetadata?
+
+        coordinator.coordinate(readingItemAt: metadataURL, error: &coordError) { url in
+            do {
+                let data = try Data(contentsOf: url)
+                metadata = try JSONDecoder().decode(ExportMetadata.self, from: data)
+            } catch {
+                print("Failed to read metadata: \(error)")
+            }
+        }
+
+        if let coordError {
+            print("Coordination error: \(coordError)")
+            throw PersistenceError.missingMetadata
+        }
+
+        guard let metadata else {
+            throw PersistenceError.missingMetadata
+        }
+
+        return metadata
     }
 
     // MARK: - Places
