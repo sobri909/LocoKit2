@@ -14,16 +14,30 @@ public final class ImportManager {
     
     private(set) var importInProgress = false
     private var importURL: URL?
+    private var bookmarkData: Data?
     
     // MARK: - Import process
     
-    public func startImport(from exportURL: URL) async throws {
+    public func startImport(withBookmark bookmark: Data) async throws {
         guard !importInProgress else {
             throw PersistenceError.importInProgress
         }
         
         importInProgress = true
-        importURL = exportURL
+        bookmarkData = bookmark
+        
+        var isStale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &isStale) else {
+            cleanupFailedImport()
+            throw PersistenceError.invalidBookmark
+        }
+        
+        guard url.startAccessingSecurityScopedResource() else {
+            cleanupFailedImport()
+            throw PersistenceError.securityScopeAccessDenied
+        }
+        
+        importURL = url
         
         do {
             try await validateImportDirectory()
@@ -33,8 +47,7 @@ public final class ImportManager {
             try await importSamples()
             
             // Clear import state
-            importInProgress = false
-            importURL = nil
+            cleanupSuccessfulImport()
             
         } catch {
             cleanupFailedImport()
@@ -70,18 +83,13 @@ public final class ImportManager {
     }
 
     private func readImportMetadata(from metadataURL: URL) async throws -> ExportMetadata {
-        guard metadataURL.startAccessingSecurityScopedResource() else {
-            print("Failed to get security scoped access for metadata")
-            throw PersistenceError.missingMetadata
-        }
-        defer { metadataURL.stopAccessingSecurityScopedResource() }
-
         let coordinator = NSFileCoordinator()
         var coordError: NSError?
         var metadata: ExportMetadata?
-
+        
         coordinator.coordinate(readingItemAt: metadataURL, error: &coordError) { url in
             do {
+                print("Attempting to read metadata from: \(url)")
                 let data = try Data(contentsOf: url)
                 metadata = try JSONDecoder().decode(ExportMetadata.self, from: data)
             } catch {
@@ -283,15 +291,26 @@ public final class ImportManager {
 
     // MARK: - Cleanup
 
-    private func cleanupFailedImport() {
+    private func cleanupSuccessfulImport() {
+        if let importURL {
+            importURL.stopAccessingSecurityScopedResource()
+        }
         importInProgress = false
         importURL = nil
+        bookmarkData = nil
+    }
 
-        // Clean up edge records file if it exists
+    private func cleanupFailedImport() {
         if let importURL {
+            importURL.stopAccessingSecurityScopedResource()
+            
+            // Clean up edge records file if it exists
             let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
             try? FileManager.default.removeItem(at: edgesURL)
         }
+        importInProgress = false
+        importURL = nil
+        bookmarkData = nil
     }
 }
 

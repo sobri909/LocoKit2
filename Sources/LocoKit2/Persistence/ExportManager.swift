@@ -252,6 +252,8 @@ enum PersistenceError: Error {
     case missingPlacesDirectory
     case missingItemsDirectory
     case missingSamplesDirectory
+    case invalidBookmark
+    case securityScopeAccessDenied
     
     // iCloud errors
     case iCloudNotAvailable
