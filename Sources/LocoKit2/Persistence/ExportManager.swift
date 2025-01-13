@@ -251,6 +251,7 @@ enum PersistenceError: Error {
     case missingMetadata
     case missingPlacesDirectory
     case missingItemsDirectory
+    case missingSamplesDirectory
     
     // iCloud errors
     case iCloudNotAvailable

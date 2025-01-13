@@ -30,6 +30,7 @@ public final class ImportManager {
             try await importPlaces()
             try await importTimelineItems()
             try await restoreEdgeRelationships()
+            try await importSamples()
             
             // Clear import state
             importInProgress = false
@@ -50,7 +51,8 @@ public final class ImportManager {
         let metadataURL = importURL.appendingPathComponent("metadata.json")
         let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
         let itemsURL = importURL.appendingPathComponent("items", isDirectory: true)
-        
+        let samplesURL = importURL.appendingPathComponent("samples", isDirectory: true)
+
         guard FileManager.default.fileExists(atPath: metadataURL.path) else {
             throw PersistenceError.missingMetadata
         }
@@ -63,6 +65,10 @@ public final class ImportManager {
             throw PersistenceError.missingItemsDirectory
         }
         
+        guard FileManager.default.fileExists(atPath: samplesURL.path) else {
+            throw PersistenceError.missingSamplesDirectory
+        }
+        
         // Load and validate metadata
         let metadata = try JSONDecoder().decode(ExportMetadata.self,
             from: try Data(contentsOf: metadataURL))
@@ -70,7 +76,9 @@ public final class ImportManager {
         // TODO: Version check would go here when we add schema versioning
         print("Import metadata loaded: \(metadata)")
     }
-    
+
+    // MARK: - Places
+
     private func importPlaces() async throws {
         let placesURL = importURL!.appendingPathComponent("places")
         
@@ -103,8 +111,8 @@ public final class ImportManager {
         }
     }
     
-    // MARK: - Error handling
-    
+    // MARK: - Items
+
     private func importTimelineItems() async throws {
         let itemsURL = importURL!.appendingPathComponent("items")
         let edgesURL = importURL!.appendingPathComponent("edge_records.jsonl")
@@ -162,18 +170,7 @@ public final class ImportManager {
             }
         }
     }
-    
-    private func cleanupFailedImport() {
-        importInProgress = false
-        importURL = nil
-        
-        // Clean up edge records file if it exists
-        if let importURL {
-            let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
-            try? FileManager.default.removeItem(at: edgesURL)
-        }
-    }
-    
+
     private func restoreEdgeRelationships() async throws {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
@@ -219,6 +216,58 @@ public final class ImportManager {
         }
         
         return records
+    }
+
+    // MARK: - Samples
+
+    private func importSamples() async throws {
+        let samplesURL = importURL!.appendingPathComponent("samples")
+        
+        // Get the weekly sample files in chronological order
+        let sampleFiles = try FileManager.default
+            .contentsOfDirectory(at: samplesURL, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        // Process each week's file
+        for fileURL in sampleFiles {
+            do {
+                let samplesData = try Data(contentsOf: fileURL)
+                let samples = try JSONDecoder().decode([LocomotionSample].self, from: samplesData)
+                
+                // Process in batches of 100
+                for batch in samples.chunked(into: 100) {
+                    try await Database.pool.write { db in
+                        for sample in batch {
+                            // Upsert pattern matching existing imports
+                            if var existing = try LocomotionSample.filter(Column("id") == sample.id).fetchOne(db) {
+                                try existing.updateChanges(db) { 
+                                    $0 = sample
+                                }
+                            } else {
+                                try sample.insert(db)
+                            }
+                        }
+                    }
+                }
+            } catch {
+                logger.error(error, subsystem: .database)
+                continue // Log and continue on file errors
+            }
+        }
+    }
+
+    // MARK: - Cleanup
+
+    private func cleanupFailedImport() {
+        importInProgress = false
+        importURL = nil
+
+        // Clean up edge records file if it exists
+        if let importURL {
+            let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
+            try? FileManager.default.removeItem(at: edgesURL)
+        }
     }
 }
 
