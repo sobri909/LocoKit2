@@ -17,7 +17,4 @@ public struct ExportStats: Codable, Sendable {
     let placeCount: Int
     let itemCount: Int
     let sampleCount: Int
-    
-    // Dictionary to allow future stat additions without breaking format
-    var additionalStats: [String: Int] = [:]
 }
