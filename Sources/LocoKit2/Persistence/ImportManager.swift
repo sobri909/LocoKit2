@@ -188,8 +188,7 @@ public final class ImportManager {
 
                             do {
                                 let data = try JSONEncoder().encode(record)
-                                try data.appendLine(to: edgesURL)  // Using appendLine instead of append
-                                print("Saved edge record for item: \(item.id)")
+                                try data.appendLine(to: edgesURL)
                             } catch {
                                 logger.error("Failed to save edge record: \(error)", subsystem: .database)
                             }
