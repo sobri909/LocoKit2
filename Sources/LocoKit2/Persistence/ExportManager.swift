@@ -88,6 +88,113 @@ public final class ExportManager {
         }
     }
 
+    // MARK: - Metadata
+
+    private func writeInitialMetadata() async throws {
+        guard let metadataURL else {
+            throw PersistenceError.exportNotInitialised
+        }
+
+        // Gather stats
+        let (placeCount, itemCount, sampleCount) = try await Database.pool.read { db in
+            let places = try Place.filter(Column("visitCount") > 0).fetchCount(db)
+            let items = try TimelineItemBase.filter(Column("deleted") == false).fetchCount(db)
+            let samples = try LocomotionSample.fetchCount(db)
+            return (places, items, samples)
+        }
+
+        let stats = ExportStats(
+            placeCount: placeCount,
+            itemCount: itemCount,
+            sampleCount: sampleCount
+        )
+
+        let metadata = ExportMetadata(
+            exportDate: .now,
+            version: LocomotionManager.locoKitVersion,
+            stats: stats
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(metadata)
+        try data.write(to: metadataURL)
+    }
+
+    // MARK: - Places
+
+    private func exportPlaces() async throws {
+        guard let placesURL else {
+            throw PersistenceError.exportNotInitialised
+        }
+
+        // get all places with at least one visit
+        let places = try await Database.pool.read { db in
+            try Place.filter(Column("visitCount") > 0).fetchAll(db)
+        }
+
+        // group places by uuid prefix
+        var bucketedPlaces: [String: [Place]] = [:]
+        for place in places {
+            let prefix = String(place.id.prefix(1)).uppercased()
+            bucketedPlaces[prefix, default: []].append(place)
+        }
+
+        // export each bucket
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        for (prefix, places) in bucketedPlaces {
+            let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
+            let data = try encoder.encode(places)
+            try data.write(to: bucketURL)
+        }
+
+        // Continue with items export
+        try await exportItems()
+    }
+
+    // MARK: - Items
+
+    private func exportItems() async throws {
+        guard let itemsURL else {
+            throw PersistenceError.exportNotInitialised
+        }
+
+        // Get all timeline items with their full relationships loaded
+        let items = try await Database.pool.read { db in
+            try TimelineItem
+                .itemRequest(includeSamples: false, includePlaces: false)
+                .filter(Column("deleted") == false)
+                .order(Column("startDate").asc)  // order by date for grouping
+                .fetchAll(db)
+        }
+
+        // group items by YYYY-MM
+        var monthlyItems: [String: [TimelineItem]] = [:]
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+
+        for item in items {
+            guard let startDate = item.dateRange?.start else { continue }
+            let monthKey = formatter.string(from: startDate)
+            monthlyItems[monthKey, default: []].append(item)
+        }
+
+        // export each month's items
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+
+        for (monthKey, items) in monthlyItems {
+            let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
+            let data = try encoder.encode(items)
+            try data.write(to: monthURL)
+        }
+
+        // Continue with samples export
+        try await exportSamples()
+    }
+
     private func exportSamples() async throws {
         guard let samplesURL else {
             throw PersistenceError.exportNotInitialised
@@ -126,106 +233,6 @@ public final class ExportManager {
         exportInProgress = false
     }
 
-    private func exportItems() async throws {
-        guard let itemsURL else {
-            throw PersistenceError.exportNotInitialised
-        }
-
-        // Get all timeline items with their full relationships loaded
-        let items = try await Database.pool.read { db in
-            try TimelineItem
-                .itemRequest(includeSamples: false, includePlaces: false)
-                .filter(Column("deleted") == false)
-                .order(Column("startDate").asc)  // order by date for grouping
-                .fetchAll(db)
-        }
-
-        // group items by YYYY-MM
-        var monthlyItems: [String: [TimelineItem]] = [:]
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        
-        for item in items {
-            guard let startDate = item.dateRange?.start else { continue }
-            let monthKey = formatter.string(from: startDate)
-            monthlyItems[monthKey, default: []].append(item)
-        }
-
-        // export each month's items
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-
-        for (monthKey, items) in monthlyItems {
-            let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
-            let data = try encoder.encode(items)
-            try data.write(to: monthURL)
-        }
-
-        // Continue with samples export
-        try await exportSamples()
-    }
-
-    private func exportPlaces() async throws {
-        guard let placesURL else {
-            throw PersistenceError.exportNotInitialised
-        }
-
-        // get all places with at least one visit
-        let places = try await Database.pool.read { db in
-            try Place.filter(Column("visitCount") > 0).fetchAll(db)
-        }
-
-        // group places by uuid prefix
-        var bucketedPlaces: [String: [Place]] = [:]
-        for place in places {
-            let prefix = String(place.id.prefix(1)).uppercased()
-            bucketedPlaces[prefix, default: []].append(place)
-        }
-
-        // export each bucket
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-
-        for (prefix, places) in bucketedPlaces {
-            let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
-            let data = try encoder.encode(places)
-            try data.write(to: bucketURL)
-        }
-
-        // Continue with items export
-        try await exportItems()
-    }
-
-    private func writeInitialMetadata() async throws {
-        guard let metadataURL else {
-            throw PersistenceError.exportNotInitialised
-        }
-
-        // Gather stats
-        let (placeCount, itemCount, sampleCount) = try await Database.pool.read { db in
-            let places = try Place.filter(Column("visitCount") > 0).fetchCount(db)
-            let items = try TimelineItemBase.filter(Column("deleted") == false).fetchCount(db)
-            let samples = try LocomotionSample.fetchCount(db)
-            return (places, items, samples)
-        }
-
-        let stats = ExportStats(
-            placeCount: placeCount,
-            itemCount: itemCount,
-            sampleCount: sampleCount
-        )
-
-        let metadata = ExportMetadata(
-            exportDate: .now,
-            version: LocomotionManager.locoKitVersion,
-            stats: stats
-        )
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(metadata)
-        try data.write(to: metadataURL)
-    }
 
     // MARK: - Error handling
 

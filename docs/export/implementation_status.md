@@ -47,7 +47,10 @@ Current status of the export/import system implementation.
 - [x] Two-phase import implementation
 - [x] Edge relationship restoration
 - [x] Basic error handling
+- [x] Basic place/item/sample import logic
 - [ ] Progress tracking
+- [ ] Sample FK constraint handling
+- [ ] LastSaved checks for incremental imports
 
 ## Future Work
 
@@ -83,9 +86,10 @@ Current status of the export/import system implementation.
 - [ ] Large dataset handling
 
 ### Import Validation
-- [ ] Two-phase import process
-- [ ] Edge relationship restoration
-- [ ] Place/item relationship preservation
+- [x] Two-phase import process
+- [x] Edge relationship restoration
+- [x] Place/item relationship preservation
+- [ ] Sample FK constraint resolution
 - [ ] Sample continuity
 - [ ] Incremental progress
 - [ ] Error recovery

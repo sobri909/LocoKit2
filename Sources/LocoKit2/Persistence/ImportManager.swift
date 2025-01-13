@@ -112,29 +112,31 @@ public final class ImportManager {
     // MARK: - Places
 
     private func importPlaces() async throws {
-        let placesURL = importURL!.appendingPathComponent("places")
-        
+        guard let importURL else {
+            throw PersistenceError.importNotInitialised
+        }
+        let placesURL = importURL.appendingPathComponent("places")
+
+        // get all .json files in the places directory
         let placeFiles = try FileManager.default.contentsOfDirectory(
             at: placesURL,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
-        )
-        
+        ).filter { $0.pathExtension == "json" }
+
+        print("Found place files: \(placeFiles)")
+
         try await Database.pool.write { db in
             for fileURL in placeFiles {
                 do {
-                    let placeData = try Data(contentsOf: fileURL)
-                    let place = try JSONDecoder().decode(Place.self, from: placeData)
-                    
-                    // If place exists, update it, otherwise insert
-                    if var existing = try Place.filter(Column("id") == place.id).fetchOne(db) {
-                        try existing.updateChanges(db) {
-                            $0 = place
-                        }
-                    } else {
-                        try place.insert(db)
+                    let fileData = try Data(contentsOf: fileURL)
+                    let places = try JSONDecoder().decode([Place].self, from: fileData)
+                    print("Loaded \(places.count) places from \(fileURL.lastPathComponent)")
+
+                    // Process all places in the file
+                    for place in places {
+                        try place.save(db)
                     }
-                    
                 } catch {
                     logger.error(error, subsystem: .database)
                     continue // Log and continue on errors
@@ -142,57 +144,59 @@ public final class ImportManager {
             }
         }
     }
-    
+
     // MARK: - Items
 
     private func importTimelineItems() async throws {
-        let itemsURL = importURL!.appendingPathComponent("items")
-        let edgesURL = importURL!.appendingPathComponent("edge_records.jsonl")
-        
+        guard let importURL else {
+            throw PersistenceError.importNotInitialised
+        }
+        let itemsURL = importURL.appendingPathComponent("items")
+        let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
+
         // Get the monthly item files in chronological order
         let itemFiles = try FileManager.default.contentsOfDirectory(
             at: itemsURL,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         )
-        .filter { $0.pathExtension == "json" }
-        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .filter { $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        print("Found item files: \(itemFiles)")
 
         // Remove any existing edge records file
         try? FileManager.default.removeItem(at: edgesURL)
-        
+
         // Process monthly files
         for fileURL in itemFiles {
             do {
-                let itemsData = try Data(contentsOf: fileURL)
-                let items = try JSONDecoder().decode([TimelineItemBase].self, from: itemsData)
-                
+                let fileData = try Data(contentsOf: fileURL)
+                let items = try JSONDecoder().decode([TimelineItem].self, from: fileData)
+                print("Loaded \(items.count) items from \(fileURL.lastPathComponent)")
+
                 // Process in batches of 100
                 for batch in items.chunked(into: 100) {
                     try await Database.pool.write { db in
-                        for var item in batch {
+                        for item in batch {
                             // Store edge record before nulling the relationships
                             let record = EdgeRecord(
                                 itemId: item.id,
-                                previousId: item.previousItemId,
-                                nextId: item.nextItemId
+                                previousId: item.base.previousItemId,
+                                nextId: item.base.nextItemId
                             )
                             if let data = try? JSONEncoder().encode(record) {
                                 try data.append(to: edgesURL)
                             }
-                            
+
                             // Clear edges for initial import
-                            item.previousItemId = nil
-                            item.nextItemId = nil
-                            
-                            // Upsert pattern
-                            if var existing = try TimelineItemBase.filter(Column("id") == item.id).fetchOne(db) {
-                                try existing.updateChanges(db) {
-                                    $0 = item
-                                }
-                            } else {
-                                try item.insert(db)
-                            }
+                            var mutableBase = item.base
+                            mutableBase.previousItemId = nil
+                            mutableBase.nextItemId = nil
+
+                            try mutableBase.save(db)
+                            try item.visit?.save(db)
+                            try item.trip?.save(db)
                         }
                     }
                 }
@@ -207,12 +211,12 @@ public final class ImportManager {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
         }
-        
+
         let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
         guard FileManager.default.fileExists(atPath: edgesURL.path) else {
             throw PersistenceError.missingEdgeRecords
         }
-        
+
         // Process records in batches to manage transaction size
         let records = try await loadEdgeRecords(from: edgesURL)
         for batch in records.chunked(into: 100) {
@@ -228,11 +232,11 @@ public final class ImportManager {
                 }
             }
         }
-        
+
         // Clean up edge records file
         try? FileManager.default.removeItem(at: edgesURL)
     }
-    
+
     private func loadEdgeRecords(from url: URL) async throws -> [EdgeRecord] {
         var records: [EdgeRecord] = []
         
@@ -253,32 +257,34 @@ public final class ImportManager {
     // MARK: - Samples
 
     private func importSamples() async throws {
-        let samplesURL = importURL!.appendingPathComponent("samples")
-        
+        guard let importURL else {
+            throw PersistenceError.importNotInitialised
+        }
+        let samplesURL = importURL.appendingPathComponent("samples")
+
         // Get the weekly sample files in chronological order
-        let sampleFiles = try FileManager.default
-            .contentsOfDirectory(at: samplesURL, includingPropertiesForKeys: nil)
+        let sampleFiles = try FileManager.default.contentsOfDirectory(
+            at: samplesURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        print("Found sample files: \(sampleFiles)")
 
         // Process each week's file
         for fileURL in sampleFiles {
             do {
-                let samplesData = try Data(contentsOf: fileURL)
-                let samples = try JSONDecoder().decode([LocomotionSample].self, from: samplesData)
-                
+                let fileData = try Data(contentsOf: fileURL)
+                let samples = try JSONDecoder().decode([LocomotionSample].self, from: fileData)
+                print("Loaded \(samples.count) samples from \(fileURL.lastPathComponent)")
+
                 // Process in batches of 100
                 for batch in samples.chunked(into: 100) {
                     try await Database.pool.write { db in
                         for sample in batch {
-                            // Upsert pattern matching existing imports
-                            if var existing = try LocomotionSample.filter(Column("id") == sample.id).fetchOne(db) {
-                                try existing.updateChanges(db) { 
-                                    $0 = sample
-                                }
-                            } else {
-                                try sample.insert(db)
-                            }
+                            try sample.save(db)
                         }
                     }
                 }
@@ -288,7 +294,7 @@ public final class ImportManager {
             }
         }
     }
-
+    
     // MARK: - Cleanup
 
     private func cleanupSuccessfulImport() {
