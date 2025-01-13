@@ -144,7 +144,7 @@ extension Database {
                 table.column("disabled", .boolean).notNull()
 
                 table.column("timelineItemId", .text).indexed()
-                    .references("TimelineItemBase", onDelete: .setNull, deferred: true)
+                    .references("TimelineItemBase", onDelete: .restrict, deferred: true)
 
                 // CLLocation
                 table.column("latitude", .double)
