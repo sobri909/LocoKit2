@@ -102,28 +102,44 @@ extension Data {
     }
     
     func appendLine(to url: URL) throws {
-        if let fileHandle = try? FileHandle(forWritingTo: url) {
-            defer { try? fileHandle.close() }
-            try fileHandle.seekToEnd()
-            try fileHandle.write(contentsOf: self + "\n".data(using: .utf8)!)
-        } else {
-            try write(to: url)
-        }
+        let withNewline = "\n".data(using: .utf8)! + self
+        try withNewline.append(to: url)
     }
 }
 
 extension FileHandle {
     func readLine() throws -> String? {
-        let bufferSize = 1024
-        guard let data = try read(upToCount: bufferSize) else { return nil }
-
         var line = ""
-        for byte in data {
-            if byte == 0x0A { // newline char
+        let bufferSize = 1024
+
+        while true {
+            guard let data = try read(upToCount: bufferSize) else {
+                return line.isEmpty ? nil : line
+            }
+
+            var foundNewline = false
+            var newlineIndex = 0
+
+            for (index, byte) in data.enumerated() {
+                if byte == 0x0A { // newline char
+                    foundNewline = true
+                    newlineIndex = index
+                    break
+                }
+                line.append(Character(UnicodeScalar(byte)))
+            }
+
+            if foundNewline {
+                // Calculate position to seek to (start position + bytes up to char after newline)
+                let startPosition = try offset() - UInt64(data.count)
+                try seek(toOffset: startPosition + UInt64(newlineIndex + 1))
                 return line
             }
-            line.append(Character(UnicodeScalar(byte)))
+
+            // No newline found, continue reading
+            if data.count < bufferSize {
+                return line.isEmpty ? nil : line
+            }
         }
-        return line.isEmpty ? nil : line
     }
 }
