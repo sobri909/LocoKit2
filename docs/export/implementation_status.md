@@ -89,15 +89,16 @@ Current status of the export/import system implementation.
 - [x] Two-phase import process
 - [x] Edge relationship restoration
 - [x] Place/item relationship preservation
-- [ ] Sample FK constraint resolution
-- [ ] Sample continuity
+- [x] Sample FK constraint resolution
+- [x] Sample continuity
 - [ ] Incremental progress
 - [ ] Error recovery
 
 ### Edge Relationship Testing
+- [x] Edge preservation during import/export
+- [x] Bidirectional relationship verification
+- [x] Timeline continuity 
 - [ ] Complex edge scenarios
-- [ ] Bidirectional relationship verification
-- [ ] Timeline continuity
 - [ ] Edge case date ranges
 - [ ] Keeper status preservation
 - [ ] Visit/trip transitions

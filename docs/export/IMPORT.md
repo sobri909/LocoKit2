@@ -30,18 +30,27 @@ During this phase, all records are imported with null edge relationships to avoi
    - All derived/computed data included
 
 ### Phase 2: Edge Restoration  
-After all core data is imported, a single transaction restores edge relationships:
+The import process uses a two-phase approach for handling edge relationships to maintain database constraints:
+
+1. During item import:
+   - Items are imported with null edge relationships
+   - Original edge relationships preserved in temporary JSONL file
+   - Each record captures itemId, previousId, and nextId
+   - Ensures valid database state during import
+
+2. After items imported:
 ```sql
 UPDATE TimelineItemBase 
 SET previousItemId = ?, nextItemId = ?
 WHERE id = ?
 ```
 
-Key points:
-- Processes edge records in batches of 100
+- Edge relationships restored from JSONL records
+- Processed in batches of 100 records
 - Single transaction per batch for safety
 - Foreign key constraints enforced
 - No dependency on edge healing system
+- Temp file removed after successful restore
 
 ## Special Cases
 
