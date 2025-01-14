@@ -51,6 +51,7 @@ Current status of the export/import system implementation.
 - [ ] Progress tracking
 - [ ] Sample FK constraint handling
 - [ ] LastSaved checks for incremental imports
+- [ ] Rebuild rtree indexes
 
 ## Future Work
 
