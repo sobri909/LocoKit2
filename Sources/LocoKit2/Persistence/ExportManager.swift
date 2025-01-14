@@ -10,6 +10,7 @@ import GRDB
 
 @PersistenceActor
 public final class ExportManager {
+    public static let schemaVersion = "2.0.0"
     public static let highlander = ExportManager()
 
     private(set) var exportInProgress = false
@@ -110,13 +111,19 @@ public final class ExportManager {
         )
 
         let metadata = ExportMetadata(
-            exportDate: .now,
-            version: LocomotionManager.locoKitVersion,
+            schemaVersion: ExportManager.schemaVersion,
+            exportMode: .bucketed,
+            exportType: .full,
+            sessionStartDate: .now,
+            sessionFinishDate: nil, // will be set when export completes
+            itemsCompleted: false,
+            placesCompleted: false,
+            samplesCompleted: false,
             stats: stats
         )
 
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.prettyPrinted]
         let data = try encoder.encode(metadata)
         try data.write(to: metadataURL)
     }
@@ -142,13 +149,16 @@ public final class ExportManager {
 
         // export each bucket
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.prettyPrinted]
 
         for (prefix, places) in bucketedPlaces {
             let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
             let data = try encoder.encode(places)
             try data.write(to: bucketURL)
         }
+
+        // Mark places as completed
+        try finaliseMetadata(placesCompleted: true)
 
         // Continue with items export
         try await exportItems()
@@ -183,13 +193,16 @@ public final class ExportManager {
 
         // export each month's items
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.prettyPrinted]
 
         for (monthKey, items) in monthlyItems {
             let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
             let data = try encoder.encode(items)
             try data.write(to: monthURL)
         }
+
+        // Mark items as completed
+        try finaliseMetadata(placesCompleted: true, itemsCompleted: true)
 
         // Continue with samples export
         try await exportSamples()
@@ -221,13 +234,16 @@ public final class ExportManager {
 
         // Export each week's samples to its own file
         let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.outputFormatting = [.prettyPrinted]
 
         for (weekId, samples) in weekSamples {
             let weekURL = samplesURL.appendingPathComponent("\(weekId).json")
             let data = try encoder.encode(samples)
             try data.write(to: weekURL)
         }
+
+        // Update metadata with success
+        try finaliseMetadata(placesCompleted: true, itemsCompleted: true, samplesCompleted: true)
 
         // Export complete - clear state
         exportInProgress = false
@@ -236,7 +252,41 @@ public final class ExportManager {
 
     // MARK: - Error handling
 
+    private func finaliseMetadata(placesCompleted: Bool = false, itemsCompleted: Bool = false, samplesCompleted: Bool = false) throws {
+        guard let metadataURL else {
+            throw PersistenceError.exportNotInitialised
+        }
+
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted]
+
+        // Read existing metadata
+        let data = try Data(contentsOf: metadataURL)
+        let metadata = try decoder.decode(ExportMetadata.self, from: data)
+
+        // Update with completion status
+        let updatedMetadata = ExportMetadata(
+            schemaVersion: metadata.schemaVersion,
+            exportMode: metadata.exportMode,
+            exportType: metadata.exportType,
+            sessionStartDate: metadata.sessionStartDate,
+            sessionFinishDate: samplesCompleted ? .now : nil,  // Only set finish time if fully complete
+            itemsCompleted: itemsCompleted,
+            placesCompleted: placesCompleted,
+            samplesCompleted: samplesCompleted,
+            stats: metadata.stats
+        )
+
+        // Write updated metadata
+        let updatedData = try encoder.encode(updatedMetadata)
+        try updatedData.write(to: metadataURL)
+    }
+
     private func cleanupFailedExport() {
+        // Leave completion flags as-is but ensure finish time is set
+        try? finaliseMetadata()
+
         if let currentExportURL {
             try? FileManager.default.removeItem(at: currentExportURL)
         }
