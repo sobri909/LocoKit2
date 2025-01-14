@@ -146,6 +146,16 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
     }
 
+    public var hasAssignment: Bool {
+        if let visit {
+            return visit.placeId != nil
+        }
+        if let trip {
+            return trip.activityType != nil
+        }
+        return false
+    }
+
     public var assignmentConfirmed: Bool {
         if let visit {
             return visit.confirmedPlace
