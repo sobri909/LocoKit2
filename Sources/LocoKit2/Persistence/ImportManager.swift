@@ -133,13 +133,20 @@ public final class ImportManager {
                     let places = try JSONDecoder().decode([Place].self, from: fileData)
                     print("Loaded \(places.count) places from \(fileURL.lastPathComponent)")
 
-                    // Process all places in the file
-                    for place in places {
+                    for var place in places {
+                        var rtree = PlaceRTree(
+                            latMin: place.latitude,
+                            latMax: place.latitude,
+                            lonMin: place.longitude,
+                            lonMax: place.longitude
+                        )
+                        try rtree.save(db)
+                        place.rtreeId = rtree.id
                         try place.save(db)
                     }
                 } catch {
                     logger.error(error, subsystem: .database)
-                    continue // Log and continue on errors
+                    continue
                 }
             }
         }
@@ -304,13 +311,26 @@ public final class ImportManager {
                                 logger.error("Orphaning sample due to missing parent item: \(itemId)")
                                 sample.timelineItemId = nil
                             }
+
+                            // Create RTree record if we have valid coordinates
+                            if let coordinate = sample.coordinate, !sample.disabled {
+                                var rtree = SampleRTree(
+                                    latMin: coordinate.latitude,
+                                    latMax: coordinate.latitude,
+                                    lonMin: coordinate.longitude,
+                                    lonMax: coordinate.longitude
+                                )
+                                try rtree.save(db)
+                                sample.rtreeId = rtree.id
+                            }
+
                             try sample.save(db)
                         }
                     }
                 }
             } catch {
                 logger.error(error, subsystem: .database)
-                continue // Log and continue on file errors
+                continue
             }
         }
     }
