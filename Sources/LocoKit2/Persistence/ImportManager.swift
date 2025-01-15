@@ -89,7 +89,6 @@ public final class ImportManager {
         
         coordinator.coordinate(readingItemAt: metadataURL, error: &coordError) { url in
             do {
-                print("Attempting to read metadata from: \(url)")
                 let data = try Data(contentsOf: url)
                 metadata = try JSONDecoder().decode(ExportMetadata.self, from: data)
             } catch {
@@ -124,7 +123,7 @@ public final class ImportManager {
             options: [.skipsHiddenFiles]
         ).filter { $0.pathExtension == "json" }
 
-        print("Found place files: \(placeFiles)")
+        print("Found place files: \(placeFiles.count)")
 
         try await Database.pool.write { db in
             for fileURL in placeFiles {
@@ -170,7 +169,7 @@ public final class ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        print("Found item files: \(itemFiles)")
+        print("Found item files: \(itemFiles.count)")
 
         // Remove any existing edge records file
         try? FileManager.default.removeItem(at: edgesURL)
@@ -285,7 +284,7 @@ public final class ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        print("Found sample files: \(sampleFiles)")
+        print("Found sample files: \(sampleFiles.count)")
 
         // Process each week's file
         for fileURL in sampleFiles {
