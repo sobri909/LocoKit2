@@ -68,6 +68,7 @@ extension TimelineItem {
         if !samplesToConfirm.isEmpty {
             do {
                 let changedSamples = try await Database.pool.write { [samplesToConfirm] db in
+                    // Update the samples
                     var changed: [LocomotionSample] = []
                     for var sample in samplesToConfirm where sample.confirmedActivityType != confirmedType {
                         try sample.updateChanges(db) {
@@ -75,6 +76,15 @@ extension TimelineItem {
                         }
                         changed.append(sample)
                     }
+
+                    // Update the trip's type and uncertainty state
+                    if var mutableTrip = trip {
+                        try mutableTrip.updateChanges(db) {
+                            $0.confirmedActivityType = confirmedType
+                            $0.uncertainActivityType = false
+                        }
+                    }
+
                     return changed
                 }
 
