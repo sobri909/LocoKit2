@@ -50,7 +50,14 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
     }
 
     public mutating func updateUncertainty(from results: ClassifierResults) {
-        uncertainActivityType = activityType == nil || results.bestMatch.score < 0.75
+        // If we have a confirmed type, we can't be uncertain
+        guard confirmedActivityType == nil else {
+            uncertainActivityType = false
+            return
+        }
+        
+        // Only check classifier confidence for unconfirmed types
+        uncertainActivityType = classifiedActivityType == nil || results.bestMatch.score < 0.75
     }
 
     private static func calculateDistance(from samples: [LocomotionSample]) -> CLLocationDistance {
