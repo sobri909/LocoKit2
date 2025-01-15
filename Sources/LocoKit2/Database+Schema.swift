@@ -121,6 +121,7 @@ extension Database {
                 table.column("confirmedActivityType", .integer)
                 table.column("uncertainActivityType", .boolean).notNull().defaults(to: true)
                     .check { $0 == true || Column("classifiedActivityType") != nil || Column("confirmedActivityType") != nil }
+                    .check { $0 == false || Column("confirmedActivityType") == nil }
             }
 
             // MARK: - LocomotionSample
