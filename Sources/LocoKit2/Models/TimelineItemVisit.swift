@@ -177,6 +177,16 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         return Radius(mean: boundedMean, sd: boundedSD)
     }
 
+    public mutating func setUncertainty(_ uncertain: Bool) {
+        if uncertain {
+            // Can only be uncertain if not confirmed
+            uncertainPlace = confirmedPlace ? false : uncertain
+        } else {
+            // Can only be certain if have a place
+            uncertainPlace = placeId == nil ? true : uncertain
+        }
+    }
+    
     public mutating func copyMetadata(from otherVisit: TimelineItemVisit) {
         placeId = otherVisit.placeId
         confirmedPlace = otherVisit.confirmedPlace

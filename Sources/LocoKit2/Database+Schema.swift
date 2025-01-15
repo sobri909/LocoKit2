@@ -104,7 +104,7 @@ extension Database {
                 table.column("confirmedPlace", .boolean).notNull()
                     .check { $0 == false || Column("placeId") != nil }
                 table.column("uncertainPlace", .boolean).notNull().defaults(to: true)
-                    .check { $0 == true || Column("placeId") != nil }
+                    .check { ($0 == true && Column("confirmedPlace") == false) || ($0 == false && Column("placeId") != nil) }
 
                 table.column("customTitle", .text).indexed()
                 table.column("streetAddress", .text).indexed()
