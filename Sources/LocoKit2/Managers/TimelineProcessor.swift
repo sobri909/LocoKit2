@@ -33,6 +33,11 @@ public final class TimelineProcessor {
         await process(list)
     }
 
+    public static func process(itemIds: [String]) async {
+        let list = TimelineLinkedList(fromItemIds: itemIds)
+        await process(list)
+    }
+
     public static func process(_ list: TimelineLinkedList) async {
         var lastResult: MergeResult?
         do {
