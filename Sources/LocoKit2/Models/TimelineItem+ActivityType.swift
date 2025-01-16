@@ -31,8 +31,9 @@ extension TimelineItem {
                 // update trip uncertainty if this is a trip and we have combined results
                 if let combinedResults = results.combinedResults {
                     if var mutableTrip = trip {
-                        mutableTrip.updateUncertainty(from: combinedResults)
-                        try mutableTrip.save(db)
+                        try mutableTrip.updateChanges(db) {
+                            $0.updateUncertainty(from: combinedResults)
+                        }
                     }
                 }
 

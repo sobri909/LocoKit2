@@ -339,7 +339,7 @@ public final class TimelineRecorder {
     }
 
     private func createTimelineItem(from sample: inout LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
-        var newItem = TimelineItemBase(from: &sample)
+        var newItem = TimelineItemBase(from: sample)
 
         // keep the list linked
         newItem.previousItemId = previousItemId
@@ -355,14 +355,15 @@ public final class TimelineRecorder {
             newVisit = nil
         }
 
-        let itemCopy = newItem
-        let sampleCopy = sample
         do {
-            try await Database.pool.write {
-                try itemCopy.save($0)
+            try await Database.pool.write { [newItem, sample] in
+                try newItem.save($0)
                 try newVisit?.save($0)
                 try newTrip?.save($0)
-                try sampleCopy.save($0)
+                var mutableSample = sample
+                try mutableSample.updateChanges($0) {
+                    $0.timelineItemId = newItem.id
+                }
             }
 
         } catch {

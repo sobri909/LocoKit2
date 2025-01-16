@@ -73,11 +73,10 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
         self.endDate = nil
     }
 
-    init(from sample: inout LocomotionSample) {
+    init(from sample: LocomotionSample) {
         self.isVisit = sample.movingState == .stationary
         self.startDate = sample.date
         self.endDate = sample.date
-        sample.timelineItemId = id
     }
 
 }
