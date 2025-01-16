@@ -191,9 +191,9 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
             visit = nil
         }
 
-        try base.save(db)
-        try visit?.save(db)
-        try trip?.save(db)
+        try base.insert(db)
+        try visit?.insert(db)
+        try trip?.insert(db)
         for var sample in samples {
             try sample.updateChanges(db) {
                 $0.timelineItemId = base.id
