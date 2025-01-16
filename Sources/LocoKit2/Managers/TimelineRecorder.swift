@@ -286,14 +286,14 @@ public final class TimelineRecorder {
         if let lastRecordSampleCall, lastRecordSampleCall.age < 1 { return }
         lastRecordSampleCall = .now
 
-        var sample = await loco.createASample()
+        let sample = await loco.createASample()
 
         do {
             try await Database.pool.write { [sample] in
                 try sample.save($0)
             }
             
-            await processSample(&sample)
+            await processSample(sample)
             await sample.saveRTree()
 
             // reset the fallback
@@ -306,11 +306,11 @@ public final class TimelineRecorder {
         latestSampleId = sample.id
     }
 
-    private func processSample(_ sample: inout LocomotionSample) async {
+    private func processSample(_ sample: LocomotionSample) async {
 
         /** first timeline item **/
         guard let workingItem = currentItem() else {
-            let newItemBase = await createTimelineItem(from: &sample)
+            let newItemBase = await createTimelineItem(from: sample)
             currentItemId = newItemBase.id
             return
         }
@@ -320,25 +320,25 @@ public final class TimelineRecorder {
 
         /** stationary -> moving || moving -> stationary **/
         if currentlyMoving != previouslyMoving {
-            let newItemBase = await createTimelineItem(from: &sample, previousItemId: workingItem.id)
+            let newItemBase = await createTimelineItem(from: sample, previousItemId: workingItem.id)
             currentItemId = newItemBase.id
             return
         }
 
         /** stationary -> stationary || moving -> moving **/
-        sample.timelineItemId = workingItem.id
-
         do {
-            let sampleCopy = sample
-            try await Database.pool.write {
-                try sampleCopy.save($0)
+            try await Database.pool.write { [sample] in
+                var mutableSample = sample
+                try mutableSample.updateChanges($0) {
+                    $0.timelineItemId = workingItem.id
+                }
             }
         } catch {
             logger.error(error, subsystem: .database)
         }
     }
 
-    private func createTimelineItem(from sample: inout LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
+    private func createTimelineItem(from sample: LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
         var newItem = TimelineItemBase(from: sample)
 
         // keep the list linked
