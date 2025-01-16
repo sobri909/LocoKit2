@@ -103,7 +103,8 @@ extension TimelineProcessor {
             }
         }
 
-        TimelineRecorder.highlander.updateCurrentItemId()
+        // Process all affected items after healing edges
+        await process(itemIds: itemsToHeal)
 
         return newItem
     }
