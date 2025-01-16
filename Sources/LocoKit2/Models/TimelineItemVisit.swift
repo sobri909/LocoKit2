@@ -135,6 +135,9 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
                 }
             }
 
+            // Process timeline changes after place assignment
+            await TimelineProcessor.processFrom(itemId: itemId)
+
         } catch {
             logger.error(error, subsystem: .database)
         }
