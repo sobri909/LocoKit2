@@ -99,15 +99,15 @@ extension TimelineItem {
 
         // if we're forcing it to stationary, extract all the stationary segments
         if confirmedType == .stationary, let segments {
-            var newItems: [TimelineItem] = []
+            var itemsToProcess: [TimelineItem] = [self]
             for segment in segments where segment.activityType == .stationary {
                 if let newItem = try await TimelineProcessor.extractItem(for: segment, isVisit: true) {
-                    newItems.append(newItem)
+                    itemsToProcess.append(newItem)
                 }
             }
 
             // cleanup after all that damage
-            await TimelineProcessor.process(newItems)
+            await TimelineProcessor.process(itemsToProcess)
 
         } else {
             // need to reprocess from self after the changes
