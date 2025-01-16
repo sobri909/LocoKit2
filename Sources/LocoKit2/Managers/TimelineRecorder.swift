@@ -357,9 +357,9 @@ public final class TimelineRecorder {
 
         do {
             try await Database.pool.write { [newItem, sample] in
-                try newItem.save($0)
-                try newVisit?.save($0)
-                try newTrip?.save($0)
+                try newItem.insert($0)
+                try newVisit?.insert($0)
+                try newTrip?.insert($0)
                 var mutableSample = sample
                 try mutableSample.updateChanges($0) {
                     $0.timelineItemId = newItem.id
