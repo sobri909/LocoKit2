@@ -290,7 +290,7 @@ public final class TimelineRecorder {
 
         do {
             try await Database.pool.write { [sample] in
-                try sample.save($0)
+                try sample.insert($0)
             }
             
             await processSample(sample)
