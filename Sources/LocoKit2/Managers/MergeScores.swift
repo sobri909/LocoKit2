@@ -155,6 +155,7 @@ public final class MergeScores {
         // a path with nil type can't consume anyone
         guard let scoringType = consumerType else { return .impossible }
 
+        // TODO: this is bad. it means background/foreground processing acts different. grr
         // check consumee's classifier results for compatibility with consumer's type
         guard let classifierResults = await consumee.samples?.first?.classifierResults,
               let typeResult = classifierResults[scoringType] else {

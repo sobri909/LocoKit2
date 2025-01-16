@@ -121,6 +121,7 @@ extension TimelineItem {
         } else {
             await cleanupTripSamples()
         }
+        await TimelineProcessor.processFrom(itemId: self.id)
     }
 
     private func cleanupTripSamples() async {
