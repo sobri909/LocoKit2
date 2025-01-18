@@ -188,6 +188,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     public mutating func copyMetadata(from otherVisit: TimelineItemVisit) {
         placeId = otherVisit.placeId
         confirmedPlace = otherVisit.confirmedPlace
+        setUncertainty(otherVisit.uncertainPlace)
         customTitle = otherVisit.customTitle
         streetAddress = otherVisit.streetAddress
     }
