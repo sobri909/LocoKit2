@@ -159,7 +159,7 @@ public final class MergeScores {
         // check consumee's classifier results for compatibility with consumer's type
         guard let classifierResults = await consumee.samples?.first?.classifierResults,
               let typeResult = classifierResults[scoringType] else {
-            return .medium
+            return .veryLow
         }
 
         // convert score to percentage for easier thresholds
