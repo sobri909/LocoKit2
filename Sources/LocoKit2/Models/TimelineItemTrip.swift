@@ -38,6 +38,11 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         self.distance = distance
         self.classifiedActivityType = Self.calculateModeActivityType(from: samples)
         self.confirmedActivityType = Self.calculateConfirmedActivityType(from: samples)
+        
+        // if we have a confirmed type, we can't be uncertain
+        if confirmedActivityType != nil {
+            uncertainActivityType = false
+        }
     }
 
     // MARK: - Updating
@@ -47,6 +52,11 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         self.speed = Self.calculateSpeed(from: samples, distance: distance)
         self.classifiedActivityType = Self.calculateModeActivityType(from: samples)
         self.confirmedActivityType = Self.calculateConfirmedActivityType(from: samples)
+
+        // if we have a confirmed type, we can't be uncertain
+        if confirmedActivityType != nil {
+            uncertainActivityType = false
+        }
     }
 
     public mutating func updateUncertainty(from results: ClassifierResults) {
