@@ -14,10 +14,10 @@ extension TimelineProcessor {
     // MARK: - Item extraction
 
     @discardableResult
-    public static func extractItem(for segment: ItemSegment, isVisit: Bool) async throws -> TimelineItem? {
         guard try await segment.validateIsContiguous() else {
             throw TimelineError.invalidSegment("Segment fails validateIsContiguous()")
         }
+    public static func extractItem(for segment: ItemSegment, isVisit: Bool, placeId: String? = nil, confirmedPlace: Bool = true) async throws -> TimelineItem? {
 
         // get overlapping items
         let overlappers = try await Database.pool.read { db in
@@ -78,8 +78,19 @@ extension TimelineProcessor {
             }
 
             // create the new item
-            let newItem = try TimelineItem.createItem(from: segment.samples, isVisit: isVisit, db: db)
+            var newItem = try TimelineItem.createItem(from: segment.samples, isVisit: isVisit, db: db)
             itemsToHeal.append(newItem.id)
+
+            // assign place if provided
+            if isVisit, let placeId {
+                try newItem.visit?.updateChanges(db) {
+                    $0.placeId = placeId
+                    $0.confirmedPlace = confirmedPlace
+                    if confirmedPlace {
+                        $0.setUncertainty(false)
+                    }
+                }
+            }
 
             // delete items
             for var item in itemsToDelete {
