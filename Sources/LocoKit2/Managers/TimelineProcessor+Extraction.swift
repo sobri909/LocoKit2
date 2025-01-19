@@ -15,7 +15,7 @@ extension TimelineProcessor {
 
     @discardableResult
     public static func extractVisit(for segment: ItemSegment, placeId: String, confirmedPlace: Bool) async throws -> TimelineItem? {
-        return extractItem(for: segment, isVisit: true, placeId: placeId, confirmedPlace: confirmedPlace)
+        return try await extractItem(for: segment, isVisit: true, placeId: placeId, confirmedPlace: confirmedPlace)
     }
 
     @discardableResult
