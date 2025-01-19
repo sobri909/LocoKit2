@@ -81,7 +81,7 @@ public final class TimelineLinkedList: AsyncSequence {
     }
 
     public var itemIds: [String] {
-        return Array(timelineItems.keys)
+        return Array(observers.keys)
     }
 
     // MARK: - Private
