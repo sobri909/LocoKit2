@@ -111,7 +111,7 @@ extension TimelineProcessor {
     }
 
     private static func edgeSteal(forVisitItem visitItem: TimelineItem, tripItem: TimelineItem, in list: TimelineLinkedList,
-                                excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
+                                  excluding: Set<LocomotionSample>) async throws -> LocomotionSample? {
         guard visitItem.isVisit, let visit = visitItem.visit, tripItem.isTrip else { return nil }
 
         // check if items could theoretically merge
@@ -146,6 +146,9 @@ extension TimelineProcessor {
         // only attempt moving visit edge if moving trip edge failed
         let edgeNextDuration = abs(visitEdge.date.timeIntervalSince(visitEdgeNext.date))
         if edgeNextDuration > .minutes(2) { return nil }
+
+        // Don't steal edge if it would make the visit invalid
+        guard let visitSamples = visitItem.samples, visitSamples.count > 1 else { return nil }
 
         if !excluding.contains(visitEdge), !visit.contains(tripEdgeLocation, sd: 1) {
             try await visitEdge.assignTo(itemId: tripItem.id)
