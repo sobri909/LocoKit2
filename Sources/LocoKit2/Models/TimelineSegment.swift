@@ -29,8 +29,6 @@ public final class TimelineSegment: Sendable {
     nonisolated(unsafe)
     private var changesTask: Task<Void, Never>?
 
-    @ObservationIgnored
-    nonisolated(unsafe)
     private let updateDebouncer = Debouncer()
 
     public init(dateRange: DateInterval, shouldReprocessOnUpdate: Bool = false) {
