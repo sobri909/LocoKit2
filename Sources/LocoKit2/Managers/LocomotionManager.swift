@@ -1,6 +1,6 @@
 //
 //  LocomotionManager.swift
-//
+//  LocoKit2
 //
 //  Created by Matt Greenfield on 26/2/24.
 //
@@ -460,7 +460,6 @@ public final class LocomotionManager: @unchecked Sendable {
                 }
             }
         }
-
 
         func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
             print("locationManagerDidPauseLocationUpdates()")
