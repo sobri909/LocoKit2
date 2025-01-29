@@ -143,7 +143,7 @@ public final class MergeScores {
         let consumerType = consumerTrip.activityType
         let consumeeType = consumeeTrip.activityType
 
-        // no types means it's a random guess
+        // no types means it's a random guess (possibly in background)
         if consumerType == nil && consumeeType == nil { return .medium }
 
         // perfect type match
