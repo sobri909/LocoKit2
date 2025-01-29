@@ -305,11 +305,8 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     // MARK: - Updating Visit and Trip
 
-    private mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
-        guard samplesChanged else {
-            print("[\(debugShortId)] updateFrom(samples:) skipping; no reason to update")
-            return
-        }
+    internal mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
+        guard samplesChanged else { return }
 
         let oldBase = base
         let oldTrip = trip
