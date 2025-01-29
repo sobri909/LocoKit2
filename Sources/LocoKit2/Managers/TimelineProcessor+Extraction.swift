@@ -20,6 +20,9 @@ extension TimelineProcessor {
 
     @discardableResult
     public static func extractItem(for segment: ItemSegment, isVisit: Bool, placeId: String? = nil, confirmedPlace: Bool = true) async throws -> TimelineItem? {
+//        guard try await segment.validateIsContiguous() else {
+//            throw TimelineError.invalidSegment("Segment fails validateIsContiguous()")
+//        }
 
         // get overlapping items
         let overlappers = try await Database.pool.read { db in
