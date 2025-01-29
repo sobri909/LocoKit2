@@ -88,8 +88,15 @@ public final class TimelineLinkedList: AsyncSequence {
 
     private var timelineItems: [String: TimelineItem] = [:]
 
-    private func receivedItem(_ item: TimelineItem) {
-        timelineItems[item.id] = item
+    private func receivedItem(_ item: TimelineItem) async {
+        var mutableItem = item
+
+        // is it stale?
+        if mutableItem.samplesChanged, let samples = mutableItem.samples {
+            await mutableItem.updateFrom(samples: samples)
+        }
+        
+        timelineItems[item.id] = mutableItem
     }
 
     private var observers: [String: AnyCancellable] = [:]
