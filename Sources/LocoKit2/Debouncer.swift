@@ -30,19 +30,21 @@ final class Debouncer: Sendable {
         }
 
         func debounce(duration: TimeInterval, force forceInterval: TimeInterval = .infinity, _ action: @escaping @Sendable () async -> Void) {
-            if let lastUpdate = lastUpdateTime, lastUpdate.age > forceInterval {
-                lastUpdateTime = .now
-                currentTask?.cancel()
-                currentTask = Task { await action() }
-                return
-            }
-
-            // Otherwise normal debounce behavior
+            // Cancel any existing task
             currentTask?.cancel()
+
+            // Create a single new task that handles both force and normal cases
             currentTask = Task {
-                try await Task.sleep(for: .seconds(duration))
-                lastUpdateTime = .now
-                await action()
+                if let lastUpdate = lastUpdateTime, lastUpdate.age > forceInterval {
+                    // Force case: update time but still use Task for execution
+                    lastUpdateTime = .now
+                    await action()
+                } else {
+                    // Normal case: wait then execute
+                    try await Task.sleep(for: .seconds(duration))
+                    lastUpdateTime = .now
+                    await action()
+                }
             }
         }
     }
