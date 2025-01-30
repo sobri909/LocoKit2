@@ -310,4 +310,36 @@ extension TimelineProcessor {
         }
     }
 
+    // MARK: - Db inconsistency fix
+    // probably unnecessary / dead code, used only once to fix a bad state during development
+    // but keeping it around... just in case
+
+    static func sanitiseCircularReferences() async throws {
+        // Find items with both edges pointing to the same item
+        let circularItems = try await Database.pool.read { db in
+            try TimelineItem
+                .itemRequest(includeSamples: false)
+                .filter(sql: """
+                    nextItemId IS NOT NULL AND 
+                    previousItemId IS NOT NULL AND
+                    nextItemId = previousItemId
+                    """)
+                .fetchAll(db)
+        }
+
+        if !circularItems.isEmpty {
+            logger.info("Breaking \(circularItems.count) circular edge references", subsystem: .timeline)
+
+            // Break the cycles by nulling the next edge
+            try await Database.pool.write { db in
+                for var item in circularItems {
+                    logger.info("Breaking circular reference on item: \(item.id) next/prev: \(item.base.nextItemId ?? "nil")", subsystem: .timeline)
+                    try item.base.updateChanges(db) {
+                        $0.nextItemId = nil
+                    }
+                }
+            }
+        }
+    }
+
 }
