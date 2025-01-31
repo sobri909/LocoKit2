@@ -18,8 +18,11 @@ extension TimelineItem {
         }
     }
 
+    /// A descriptive title for the timeline item.
+    /// - Returns: The item's title string.
+    /// - Note: Will return "Error" if called on an item without loaded samples.
     public var title: String {
-        get throws {
+        do {
             if try isDataGap {
                 return "Data Gap"
             }
@@ -41,6 +44,10 @@ extension TimelineItem {
             }
 
             return "Brief Stop"
+            
+        } catch {
+            logger.error(error, subsystem: .timeline)
+            return "Error"
         }
     }
 
