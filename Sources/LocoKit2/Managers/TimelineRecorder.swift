@@ -222,13 +222,6 @@ public final class TimelineRecorder {
             return
         }
 
-        print("""
-            Sleep cycle probability:
-            - Place: \(place.name)
-            - Visit duration: \(visitDuration / 60) mins
-            - Combined probability: \(String(format: "%.3f", probability))
-            """)
-
         // Map probability to duration (6-60 seconds)
         let shortCycleThreshold = 0.3 // probability threshold for 6s sleep cycles
 
