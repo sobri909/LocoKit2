@@ -334,6 +334,15 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
     }
 
+    // MARK: - Change detection
+
+    public func hasChanged(from other: TimelineItem) -> Bool {
+        if base != other.base { return true }
+        if isVisit, visit != other.visit { return true }
+        if isTrip, trip != other.trip { return true }
+        return false
+    }
+
     // MARK: - Codable
 
     enum CodingKeys: CodingKey {

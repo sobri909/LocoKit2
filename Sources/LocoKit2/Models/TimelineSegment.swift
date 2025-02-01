@@ -94,41 +94,42 @@ public final class TimelineSegment: Sendable {
     private var lastCurrentItemId: String?
 
     private func update(from updatedItems: [TimelineItem]) async {
-        var mutableItems = updatedItems
+        let oldItems = timelineItems
+        var newItems = updatedItems
 
         // load/copy samples
-        for index in mutableItems.indices {
-            let itemCopy = mutableItems[index]
-            if itemCopy.samplesChanged || potentiallyStaleData {
-                await mutableItems[index].fetchSamples()
+        for index in newItems.indices {
+            let newItem = newItems[index]
+            if newItem.samplesChanged || potentiallyStaleData {
+                await newItems[index].fetchSamples()
 
             } else {
-                // copy over existing samples if available
-                let localItem = timelineItems.first { $0.id == itemCopy.id }
-                if let localItem, let samples = localItem.samples {
-                    mutableItems[index].samples = samples
+                let oldItem = oldItems.first { $0.id == newItem.id }
+
+                // copy over existing samples if item hasn't changed
+                if let oldItem, let samples = oldItem.samples, !newItem.hasChanged(from: oldItem) {
+                    newItems[index].samples = samples
 
                 } else { // need to fetch samples
-                    await mutableItems[index].fetchSamples()
+                    await newItems[index].fetchSamples()
                 }
             }
         }
 
-        let oldItems = timelineItems
-        self.timelineItems = mutableItems
+        self.timelineItems = newItems
 
         // early return if we're not supposed to modify the items at all
         guard shouldReprocessOnUpdate else { return }
         guard UIApplication.shared.applicationState == .active else { return }
 
         // first classify
-        await classifyItems(mutableItems)
+        await classifyItems(newItems)
 
         let recorder = await TimelineRecorder.highlander
         let currentItemId = await recorder.currentItemId
 
         // don't reprocess if currentItem is in segment and isn't a keeper
-        if let currentItemId, let currentItem = mutableItems.first(where: { $0.id == currentItemId }) {
+        if let currentItemId, let currentItem = newItems.first(where: { $0.id == currentItemId }) {
             do {
                 if try !currentItem.isWorthKeeping { return }
             } catch {
@@ -140,13 +141,13 @@ public final class TimelineSegment: Sendable {
         // if there's no currentItem, always process
         guard let currentItemId else {
             lastCurrentItemId = nil
-            await TimelineProcessor.process(mutableItems)
+            await TimelineProcessor.process(newItems)
             return
         }
 
         // check if anything besides currentItem changed
         let oldWithoutCurrent = oldItems.filter { $0.id != currentItemId }
-        let newWithoutCurrent = mutableItems.filter { $0.id != currentItemId }
+        let newWithoutCurrent = newItems.filter { $0.id != currentItemId }
 
         // if only currentItem changed, skip processing
         if oldWithoutCurrent == newWithoutCurrent { return }
@@ -154,7 +155,7 @@ public final class TimelineSegment: Sendable {
         // something else changed - do the processing
         lastCurrentItemId = currentItemId
         potentiallyStaleData = false
-        await TimelineProcessor.process(mutableItems)
+        await TimelineProcessor.process(newItems)
     }
 
     private func classifyItems(_ items: [TimelineItem]) async {
