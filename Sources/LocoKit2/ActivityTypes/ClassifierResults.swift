@@ -33,8 +33,9 @@ public final class ClassifierResults:  Sendable {
 
     // MARK: -
 
-    public var bestMatch: ClassifierResultItem {
-        return resultItems.first ?? ClassifierResultItem(name: .unknown, score: 0)
+    public var bestMatch: ClassifierResultItem? {
+        guard let first = resultItems.first, first.score > 0 else { return nil }
+        return first
     }
     
     public var scoresTotal: Double {

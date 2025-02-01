@@ -18,14 +18,16 @@ extension TimelineItem {
             self.samples = try await Database.pool.write { db in
                 var updatedSamples: [LocomotionSample] = []
                 for var mutableSample in samples {
-                    if let result = results.perSampleResults[mutableSample.id] {
-                        if mutableSample.classifiedActivityType != result.bestMatch.activityType {
-                            try mutableSample.updateChanges(db) {
-                                $0.classifiedActivityType = result.bestMatch.activityType
-                            }
+                    defer { updatedSamples.append(mutableSample) }
+
+                    guard let result = results.perSampleResults[mutableSample.id] else { continue }
+                    guard let bestMatch = result.bestMatch else { continue }
+
+                    if mutableSample.classifiedActivityType != bestMatch.activityType {
+                        try mutableSample.updateChanges(db) {
+                            $0.classifiedActivityType = bestMatch.activityType
                         }
                     }
-                    updatedSamples.append(mutableSample)
                 }
 
                 // update trip uncertainty if this is a trip and we have combined results
