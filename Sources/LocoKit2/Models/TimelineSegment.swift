@@ -26,9 +26,6 @@ public final class TimelineSegment: Sendable {
     public private(set) var timelineItems: [TimelineItem] = []
 
     @ObservationIgnored
-    public var potentiallyStaleData = false
-
-    @ObservationIgnored
     nonisolated(unsafe)
     private var changesTask: Task<Void, Never>?
 
@@ -100,7 +97,7 @@ public final class TimelineSegment: Sendable {
         // load/copy samples
         for index in newItems.indices {
             let newItem = newItems[index]
-            if newItem.samplesChanged || potentiallyStaleData {
+            if newItem.samplesChanged {
                 await newItems[index].fetchSamples()
 
             } else {
@@ -154,7 +151,6 @@ public final class TimelineSegment: Sendable {
 
         // something else changed - do the processing
         lastCurrentItemId = currentItemId
-        potentiallyStaleData = false
         await TimelineProcessor.process(newItems)
     }
 
