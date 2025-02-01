@@ -10,6 +10,7 @@ import CoreLocation
 
 extension TimelineItem {
 
+    @TimelineActor
     public func pruneSamples() async throws {
         if isVisit {
             try await pruneVisitSamples()
@@ -18,6 +19,7 @@ extension TimelineItem {
         }
     }
 
+    @TimelineActor
     public func pruneTripSamples() async throws {
         guard isTrip, let trip = trip, let samples else {
             throw TimelineError.invalidItem("Can only prune Trips with samples")
@@ -62,6 +64,7 @@ extension TimelineItem {
           """)
     }
 
+    @TimelineActor
     private func pruneVisitSamples() async throws {
         guard isVisit, let dateRange = dateRange, let samples = samples else {
             throw TimelineError.invalidItem("Can only prune Visits with samples")

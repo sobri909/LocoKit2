@@ -16,14 +16,17 @@ import GRDB
 /// TimelineSegment automatically observes timeline changes via TimelineObserver and manages
 /// data loading/processing for its date range. Applications should manage TimelineSegment
 /// lifecycle in accordance with UI state and foreground/background transitions.
+@MainActor
 @Observable
 public final class TimelineSegment: Sendable {
 
     public let dateRange: DateInterval
     public let shouldReprocessOnUpdate: Bool
 
-    @MainActor
     public private(set) var timelineItems: [TimelineItem] = []
+
+    @ObservationIgnored
+    public var potentiallyStaleData = false
 
     @ObservationIgnored
     nonisolated(unsafe)
@@ -45,7 +48,7 @@ public final class TimelineSegment: Sendable {
     // MARK: -
 
     public func pruneSamples() async {
-        for item in await timelineItems {
+        for item in timelineItems {
             do {
                 try await item.pruneSamples()
             } catch {
@@ -96,12 +99,12 @@ public final class TimelineSegment: Sendable {
         // load/copy samples
         for index in mutableItems.indices {
             let itemCopy = mutableItems[index]
-            if itemCopy.samplesChanged {
+            if itemCopy.samplesChanged || potentiallyStaleData {
                 await mutableItems[index].fetchSamples()
 
             } else {
                 // copy over existing samples if available
-                let localItem = await timelineItems.first { $0.id == itemCopy.id }
+                let localItem = timelineItems.first { $0.id == itemCopy.id }
                 if let localItem, let samples = localItem.samples {
                     mutableItems[index].samples = samples
 
@@ -111,14 +114,12 @@ public final class TimelineSegment: Sendable {
             }
         }
 
-        let oldItems = await timelineItems
-        await MainActor.run {
-            self.timelineItems = mutableItems
-        }
+        let oldItems = timelineItems
+        self.timelineItems = mutableItems
 
         // early return if we're not supposed to modify the items at all
         guard shouldReprocessOnUpdate else { return }
-        guard await UIApplication.shared.applicationState == .active else { return }
+        guard UIApplication.shared.applicationState == .active else { return }
 
         // first classify
         await classifyItems(mutableItems)
@@ -152,6 +153,7 @@ public final class TimelineSegment: Sendable {
 
         // something else changed - do the processing
         lastCurrentItemId = currentItemId
+        potentiallyStaleData = false
         await TimelineProcessor.process(mutableItems)
     }
 
