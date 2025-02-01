@@ -230,14 +230,18 @@ public final class TimelineRecorder {
             """)
 
         // Map probability to duration (6-60 seconds)
+        let shortCycleThreshold = 0.3 // probability threshold for 6s sleep cycles
+
         switch probability {
-        case 0.5...1.0:  // High probability (>50%)
+        case shortCycleThreshold...1.0:  // high probability
             await loco.setSleepCycleDuration(6)
-        case 0.01..<0.5: // Scale between 1-50%
-            let normalized = (probability - 0.01) / 0.49
+
+        case 0.01..<shortCycleThreshold: // common probability range
+            let normalised = (probability - 0.01) / (shortCycleThreshold - 0.01)
             // Use cube root (0.33) for aggressive curve towards shorter cycles
-            let curved = pow(normalized, 0.33)
+            let curved = pow(normalised, 0.33)
             await loco.setSleepCycleDuration(60 - (curved * 54))
+
         default:         // Very low probability (<1%)
             await loco.setSleepCycleDuration(60)
         }
