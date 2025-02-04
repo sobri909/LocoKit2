@@ -57,18 +57,29 @@ extension TimelineItem {
         }
     }
 
-    public func startString(dateStyle: DateFormatter.Style = .none, timeStyle: DateFormatter.Style = .short, relative: Bool = false) -> String? {
+    public func startString(
+        dateStyle: DateFormatter.Style = .none,
+        timeStyle: DateFormatter.Style = .short,
+        relative: Bool = false,
+        format: String? = nil) -> String?
+    {
         guard let startDate = dateRange?.start else { return nil }
         return Self.dateString(
             for: startDate,
             timeZone: startTimeZone ?? TimeZone.current,
             dateStyle: dateStyle,
             timeStyle: timeStyle,
-            relative: relative
+            relative: relative,
+            format: format
         )
     }
 
-    public func endString(dateStyle: DateFormatter.Style = .none, timeStyle: DateFormatter.Style = .short, relative: Bool = false) -> String? {
+    public func endString(
+        dateStyle: DateFormatter.Style = .none,
+        timeStyle: DateFormatter.Style = .short,
+        relative: Bool = false,
+        format: String? = nil) -> String?
+    {
         guard let endDate = dateRange?.end else { return nil }
         return Self.dateString(
             for: endDate,
@@ -79,13 +90,29 @@ extension TimelineItem {
         )
     }
 
-    public static func dateString(for date: Date, timeZone: TimeZone = TimeZone.current, dateStyle: DateFormatter.Style = .none,
-                                  timeStyle: DateFormatter.Style = .short, relative: Bool = false) -> String? {
+    public static func dateString(
+        for date: Date,
+        timeZone: TimeZone = TimeZone.current,
+        dateStyle: DateFormatter.Style = .none,
+        timeStyle: DateFormatter.Style = .short,
+        relative: Bool = false,
+        format: String? = nil) -> String?
+    {
         dateFormatter.timeZone = timeZone
         dateFormatter.doesRelativeDateFormatting = relative
         dateFormatter.dateStyle = dateStyle
         dateFormatter.timeStyle = timeStyle
-        return dateFormatter.string(from: date)
+        
+        if let format {
+            let oldFormat = dateFormatter.dateFormat
+            dateFormatter.dateFormat = format
+            let result = dateFormatter.string(from: date)
+            dateFormatter.dateFormat = oldFormat
+            return result
+
+        } else {
+            return dateFormatter.string(from: date)
+        }
     }
 
     static let dateFormatter = DateFormatter()
