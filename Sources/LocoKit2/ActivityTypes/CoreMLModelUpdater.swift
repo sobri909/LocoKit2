@@ -108,7 +108,7 @@ public final class CoreMLModelUpdater {
 
             if let model {
                 // backfill r-tree for old dbs or restores from backup
-                // Task.detached {
+                // Task {
                 //     await store.backfillSampleRTree(batchSize: CoreMLModelWrapper.modelMaxTrainingSamples[0]!)
                 // }
 
