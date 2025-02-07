@@ -17,10 +17,12 @@ public final class TimelineRecorder {
 
     public var legacyDbMode = false
 
-    public func startRecording() async {
+    public func startRecording() {
         startWatchingLoco()
-        await loco.startRecording()
-        await startFallbackSampleTimer()
+        Task {
+            await loco.startRecording()
+            await startFallbackSampleTimer()
+        }
     }
 
     public func stopRecording() async {
