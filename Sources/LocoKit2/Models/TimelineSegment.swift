@@ -96,6 +96,8 @@ public final class TimelineSegment: Sendable {
 
         // load/copy samples
         for index in newItems.indices {
+            if Task.isCancelled { return }
+
             let newItem = newItems[index]
             if newItem.samplesChanged {
                 await newItems[index].fetchSamples()
@@ -119,11 +121,21 @@ public final class TimelineSegment: Sendable {
         guard shouldReprocessOnUpdate else { return }
         guard UIApplication.shared.applicationState == .active else { return }
 
-        // first classify
-        await classifyItems(newItems)
+        Task {
+            await classifyItems(newItems)
+            await processItems(newItems, oldItems: oldItems)
+        }
+    }
 
-        let recorder = await TimelineRecorder.highlander
-        let currentItemId = await recorder.currentItemId
+    private func classifyItems(_ items: [TimelineItem]) async {
+        var mutableItems = items
+        for index in mutableItems.indices {
+            await mutableItems[index].classifySamples()
+        }
+    }
+
+    private func processItems(_ newItems: [TimelineItem], oldItems: [TimelineItem]) async {
+        let currentItemId = await TimelineRecorder.highlander.currentItemId
 
         // don't reprocess if currentItem is in segment and isn't a keeper
         if let currentItemId, let currentItem = newItems.first(where: { $0.id == currentItemId }) {
@@ -152,13 +164,6 @@ public final class TimelineSegment: Sendable {
         // something else changed - do the processing
         lastCurrentItemId = currentItemId
         await TimelineProcessor.process(newItems)
-    }
-
-    private func classifyItems(_ items: [TimelineItem]) async {
-        var mutableItems = items
-        for index in mutableItems.indices {
-            await mutableItems[index].classifySamples()
-        }
     }
 
 }
