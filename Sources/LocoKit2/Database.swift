@@ -33,7 +33,6 @@ public final class Database: @unchecked Sendable {
     private lazy var config: Configuration = {
         var config = Configuration()
         config.busyMode = .timeout(30)
-        config.defaultTransactionKind = .immediate
         config.maximumReaderCount = 12
 
 //        config.prepareDatabase { db in
