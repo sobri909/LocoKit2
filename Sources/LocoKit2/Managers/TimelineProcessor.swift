@@ -29,12 +29,12 @@ public final class TimelineProcessor {
     }
 
     public static func process(_ items: [TimelineItem]) async {
-        let list = TimelineLinkedList(fromItems: items)
+        let list = await TimelineLinkedList(fromItems: items)
         await process(list)
     }
 
     public static func process(itemIds: [String]) async {
-        let list = TimelineLinkedList(fromItemIds: itemIds)
+        let list = await TimelineLinkedList(fromItemIds: itemIds)
         await process(list)
     }
 

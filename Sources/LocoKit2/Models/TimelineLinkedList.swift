@@ -1,12 +1,11 @@
 //
 //  TimelineLinkedList.swift
-//
+//  LocoKit2
 //
 //  Created by Matt Greenfield on 6/6/24.
 //
 
 import Foundation
-import Combine
 import GRDB
 
 @TimelineActor
@@ -20,7 +19,7 @@ public final class TimelineLinkedList: AsyncSequence {
             if let seedItem {
                 self.seedItem = seedItem
                 timelineItems[seedItemId] = seedItem
-                observers[seedItemId] = addObserverFor(itemId: seedItemId)
+                observers[seedItemId] = await addObserverFor(itemId: seedItemId)
             } else {
                 return nil
             }
@@ -31,21 +30,23 @@ public final class TimelineLinkedList: AsyncSequence {
         }
     }
 
-    public convenience init(fromItems: [TimelineItem]) {
-        self.init(fromItemIds: fromItems.map { $0.id })
+    public convenience init(fromItems: [TimelineItem]) async {
+        await self.init(fromItemIds: fromItems.map { $0.id })
     }
 
-    public init(fromItemIds: [String]) {
+    public init(fromItemIds: [String]) async {
         for itemId in fromItemIds {
-            observers[itemId] = addObserverFor(itemId: itemId)
+            observers[itemId] = await addObserverFor(itemId: itemId)
         }
     }
 
     public func itemFor(itemId: String) async -> TimelineItem? {
         if let cached = timelineItems[itemId] { return cached }
 
-        if observers[itemId] == nil {
-            observers[itemId] = addObserverFor(itemId: itemId)
+        await MainActor.run {
+            if observers[itemId] == nil {
+                observers[itemId] = addObserverFor(itemId: itemId)
+            }
         }
 
         do {
@@ -81,7 +82,9 @@ public final class TimelineLinkedList: AsyncSequence {
     }
 
     public var itemIds: [String] {
-        return Array(observers.keys)
+        get async {
+            return await Array(observers.keys)
+        }
     }
 
     // MARK: - Private
@@ -99,10 +102,11 @@ public final class TimelineLinkedList: AsyncSequence {
         timelineItems[item.id] = mutableItem
     }
 
-    private var observers: [String: AnyCancellable] = [:]
+    @MainActor
+    private var observers: [String: AnyDatabaseCancellable] = [:]
 
-    nonisolated
-    private func addObserverFor(itemId: String) -> AnyCancellable {
+    @MainActor
+    private func addObserverFor(itemId: String) -> AnyDatabaseCancellable {
         return ValueObservation
             .trackingConstantRegion {
                 try TimelineItem
@@ -111,12 +115,10 @@ public final class TimelineLinkedList: AsyncSequence {
                     .fetchOne($0)
             }
             .shared(in: Database.pool)
-            .publisher()
-            .sink { completion in
-                if case .failure(let error) = completion {
-                    logger.error(error, subsystem: .database)
-                }
-            } receiveValue: { [weak self] item in
+            .start { error in
+                logger.error(error, subsystem: .database)
+
+            } onChange: { [weak self] item in
                 if let self, let item {
                     Task { await self.receivedItem(item) }
                 }
