@@ -53,9 +53,12 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         self.classifiedActivityType = Self.calculateModeActivityType(from: samples)
         self.confirmedActivityType = Self.calculateConfirmedActivityType(from: samples)
 
-        // if we have a confirmed type, we can't be uncertain
+        // 1. uncertainActivityType must be false if we have confirmedActivityType
+        // 2. uncertainActivityType must be true if we have no activity type
         if confirmedActivityType != nil {
             uncertainActivityType = false
+        } else if classifiedActivityType == nil {
+            uncertainActivityType = true
         }
     }
 
