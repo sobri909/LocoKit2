@@ -72,6 +72,8 @@ extension Place {
                         $0.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
                         $0.visitDurations = Histogram.forDurations(intervals: visitDurations)
                     }
+                    
+                    Task { await mutableSelf.updateRTree() }
                 }
             }
 
