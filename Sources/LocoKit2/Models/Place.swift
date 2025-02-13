@@ -73,19 +73,35 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     }
 
     @PlacesActor
-    public func fetchLocalTimezone() async {
-        if secondsFromGMT != nil { return }
+    public func updateFromReverseGeocode() async {
+        if secondsFromGMT != nil && streetAddress != nil { return }
 
         do {
-            guard let timeZone = try await CLGeocoder().reverseGeocodeLocation(center.location).first?.timeZone else {
-                return
+            let placemarks = try await CLGeocoder().reverseGeocodeLocation(center.location)
+            guard let placemark = placemarks.first else { return }
+
+            // attempt to construct a useful streetAddress
+            let streetAddress = if placemark.name == placemark.postalCode {
+                placemark.thoroughfare
+                    ?? placemark.subLocality
+                    ?? placemark.locality
+                    ?? placemark.subAdministrativeArea
+                    ?? placemark.administrativeArea
+                    ?? placemark.postalCode
+            } else {
+                placemark.name
             }
 
             do {
                 try await Database.pool.write { [self] db in
                     var mutableSelf = self
                     try mutableSelf.updateChanges(db) {
-                        $0.secondsFromGMT = timeZone.secondsFromGMT()
+                        if let timeZone = placemark.timeZone {
+                            $0.secondsFromGMT = timeZone.secondsFromGMT()
+                        }
+                        if let streetAddress {
+                            $0.streetAddress = streetAddress
+                        }
                     }
                 }
 
