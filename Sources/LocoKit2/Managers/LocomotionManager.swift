@@ -478,6 +478,9 @@ public final class LocomotionManager: @unchecked Sendable {
         }
 
         func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+            if let clError = error as? CLError, clError.code == .locationUnknown {
+                return
+            }
             logger.error(error, subsystem: .locomotion)
         }
     }
