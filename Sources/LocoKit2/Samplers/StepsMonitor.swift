@@ -20,7 +20,7 @@ public final class StepsMonitor: Sendable {
             guard let self else { return }
 
             if let error {
-                logger.error(error, subsystem: .misc)
+                logger.error(error, subsystem: .locomotion)
             }
 
             if let pedometerData {

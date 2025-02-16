@@ -149,7 +149,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func requestMotionAuthorization() async {
         await withCheckedContinuation { continuation in
             motionAuthPedometer.queryPedometerData(from: .now - .hours(1), to: .now) { data, error in
-                if let error { logger.error(error, subsystem: .misc) }
+                if let error { logger.error(error, subsystem: .locomotion) }
                 self.motionAuthorizationStatus = CMMotionActivityManager.authorizationStatus()
                 self.motionAuthPedometer.stopUpdates()
                 continuation.resume()
@@ -478,7 +478,7 @@ public final class LocomotionManager: @unchecked Sendable {
         }
 
         func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-            logger.error(error, subsystem: .misc)
+            logger.error(error, subsystem: .locomotion)
         }
     }
 

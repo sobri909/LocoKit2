@@ -9,8 +9,8 @@ import os.log
 import Logging
 import LoggingFormatAndPipe
 
-public enum Subsystem: String {
-    case misc, database, appgroup, timeline, activitytypes, places
+public enum Subsystem: String, CaseIterable {
+    case misc, lifecycle, locomotion, database, appgroup, timeline, activitytypes, places, ui
 }
 
 internal let logger = DebugLogger.logger
