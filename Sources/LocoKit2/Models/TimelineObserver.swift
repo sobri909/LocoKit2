@@ -80,7 +80,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
                     OR trip.ROWID IN (\(tripRowIds))
             """
         do {
-            let dateRanges = try await Database.pool
+            let dateRanges = try Database.pool
                 .read { try Row.fetchAll($0, sql: query) }
                 .compactMap { row -> DateInterval? in
                     guard let startDate = row["startDate"] as Date? else { return nil }
