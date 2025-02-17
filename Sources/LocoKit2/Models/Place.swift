@@ -109,6 +109,11 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                 logger.error(error, subsystem: .database)
             }
 
+        } catch let error as CLError {
+            if error.code != .network {
+                logger.error(error, subsystem: .places)
+            }
+            
         } catch {
             logger.error(error, subsystem: .places)
         }
