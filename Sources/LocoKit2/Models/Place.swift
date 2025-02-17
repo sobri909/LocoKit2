@@ -73,12 +73,13 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     }
 
     @PlacesActor
-    public func updateFromReverseGeocode() async {
-        if secondsFromGMT != nil && streetAddress != nil { return }
+    @discardableResult
+    public func updateFromReverseGeocode() async throws -> Bool {
+        if secondsFromGMT != nil && streetAddress != nil { return false }
 
         do {
             let placemarks = try await CLGeocoder().reverseGeocodeLocation(center.location)
-            guard let placemark = placemarks.first else { return }
+            guard let placemark = placemarks.first else { return false }
 
             // attempt to construct a useful streetAddress
             let streetAddress = if placemark.name == placemark.postalCode {
@@ -104,19 +105,21 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                         }
                     }
                 }
+                return true
 
             } catch {
                 logger.error(error, subsystem: .database)
             }
 
         } catch let error as CLError {
-            if error.code != .network {
-                logger.error(error, subsystem: .places)
-            }
+            if error.code == .network { throw error }
+            logger.error(error, subsystem: .places)
             
         } catch {
             logger.error(error, subsystem: .places)
         }
+        
+        return false
     }
 
     // MARK: - RTree
