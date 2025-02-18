@@ -83,9 +83,15 @@ public struct Histogram: Hashable, Sendable, Codable {
         return (start, middle, end, count: maxBin.count)
     }
 
+    public var valueRange: ClosedRange<Double>? {
+        guard let binWidth, let first = bins.first, let last = bins.last else { return nil }
+        return first.start ... last.start + binWidth
+    }
+
     /// Calculate a smoothed probability for the given value using kernel density estimation
     public func probability(for value: Double) -> Double? {
         guard let binWidth, !bins.isEmpty else { return nil }
+        guard let range = valueRange, range.contains(value) else { return nil }
 
         // Estimate SD from bins
         let weightedSum = bins.reduce(0.0) { sum, bin -> Double in
