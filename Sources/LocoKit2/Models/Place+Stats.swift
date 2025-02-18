@@ -13,6 +13,8 @@ extension Place {
     @PlacesActor
     public mutating func updateVisitStats() async {
         do {
+            let currentItemId = await TimelineRecorder.highlander.currentItemId
+
             let visits = try await Database.pool.read { [id] db in
                 try TimelineItem
                     .itemRequest(includeSamples: true, includePlaces: true)
@@ -54,9 +56,13 @@ extension Place {
                 let boundedMean = radius.mean.clamped(min: Place.minimumPlaceRadius, max: Place.maximumPlaceRadius)
                 let boundedSD = radius.sd.clamped(min: 0, max: Place.maximumPlaceRadius)
 
+                // use all visits for counts, samples, and arrival times
                 let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
-                let visitEnds = confirmedVisits.compactMap { $0.dateRange?.end }
-                let visitDurations = confirmedVisits.compactMap { $0.dateRange?.duration }
+
+                // filter out currentItem for leaving times and durations
+                let statsVisits = confirmedVisits.filter { $0.id != currentItemId }
+                let visitEnds = statsVisits.compactMap { $0.dateRange?.end }
+                let visitDurations = statsVisits.compactMap { $0.dateRange?.duration }
 
                 try await Database.pool.write { [self] db in
                     var mutableSelf = self
