@@ -334,6 +334,38 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
     }
 
+    // MARK: - Predictions
+
+    public func predictedLeavingTime() -> Date? {
+        guard let place, let duration = dateRange?.duration else { return nil }
+
+        let timeStep: TimeInterval = 60
+        var timeForward: TimeInterval = 0
+        var highestProb: Double = 0
+        var peakTime: Date?
+
+        while true {
+            let testDate = Date() + timeForward
+            let testDuration = duration + timeForward
+
+            // get probability for this timepoint
+            guard let currentProb = place.leavingProbabilityFor(duration: testDuration, date: testDate) else {
+                return peakTime // nil means we've hit the end of our histogram data
+            }
+
+            // increasing probability - might be heading toward a peak
+            if currentProb > highestProb {
+                highestProb = currentProb
+                peakTime = testDate
+
+            } else if peakTime != nil {
+                return peakTime // must've passed the peak
+            }
+
+            timeForward += timeStep
+        }
+    }
+    
     // MARK: - Change detection
 
     public func hasChanged(from other: TimelineItem) -> Bool {
