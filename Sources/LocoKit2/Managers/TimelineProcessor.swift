@@ -12,8 +12,8 @@ import GRDB
 @TimelineActor
 public final class TimelineProcessor {
 
-    public static let debugLogging = true
-    
+    public static var debugLogging = false
+
     public static let maximumModeShiftSpeed = CLLocationSpeed(kmh: 2)
 
     private static let maxProcessingListSize = 21
