@@ -336,34 +336,56 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     // MARK: - Predictions
 
-    public func predictedLeavingTime() -> Date? {
+    public struct LeavingTime {
+        public let date: Date
+        public let probability: Double
+    }
+
+    public func predictedLeavingTimes() -> [LeavingTime]? {
         guard let place, let duration = dateRange?.duration else { return nil }
 
+        let startDate: Date = .now
         let timeStep: TimeInterval = 60
         var timeForward: TimeInterval = 0
-        var highestProb: Double = 0
-        var peakTime: Date?
+        var times: [LeavingTime] = []
+        var currentPeak: (time: Date, prob: Double)?
+        var previousProb: Double = 0
+        var isIncreasing = true
 
         while true {
-            let testDate = Date() + timeForward
+            let testDate = startDate + timeForward
             let testDuration = duration + timeForward
 
             // get probability for this timepoint
             guard let currentProb = place.leavingProbabilityFor(duration: testDuration, date: testDate) else {
-                return peakTime // nil means we've hit the end of our histogram data
+                break // hit end of histogram data
             }
 
-            // increasing probability - might be heading toward a peak
-            if currentProb > highestProb {
-                highestProb = currentProb
-                peakTime = testDate
 
-            } else if peakTime != nil {
-                return peakTime // must've passed the peak
+            if isIncreasing {
+                if let peak = currentPeak, currentProb < peak.prob {
+                    // found a peak - record it and switch to decreasing
+                    times.append(LeavingTime(date: peak.time, probability: peak.prob))
+                    isIncreasing = false
+                } else {
+                    currentPeak = (testDate, currentProb)
+                }
+            } else if currentProb > previousProb {
+                // switched back to increasing
+                isIncreasing = true
+                currentPeak = (testDate, currentProb)
             }
 
+            previousProb = currentProb
             timeForward += timeStep
         }
+
+        // Add final peak if we were still increasing
+        if isIncreasing, let peak = currentPeak {
+            times.append(LeavingTime(date: peak.time, probability: peak.prob))
+        }
+
+        return times.isEmpty ? nil : times
     }
     
     // MARK: - Change detection
