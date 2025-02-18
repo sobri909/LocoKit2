@@ -99,9 +99,9 @@ extension Place {
         calendar.timeZone = localTimeZone ?? .current
         let timeOfDay = date.sinceStartOfDay(in: calendar)
 
-        // Get probabilities from both histograms
-        let timeBasedProbability = leavingTimes.probability(for: timeOfDay) ?? 0
-        let durationBasedProbability = visitDurations.probability(for: visitDuration) ?? 0
+        // both need to have non-nil probabilities for AND probability to make sense
+        guard let timeBasedProbability = leavingTimes.probability(for: timeOfDay) else { return nil }
+        guard let durationBasedProbability = visitDurations.probability(for: visitDuration) else { return nil }
 
         // Using AND probability for most conservative estimate
         return timeBasedProbability * durationBasedProbability
