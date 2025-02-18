@@ -88,7 +88,7 @@ extension Place {
         }
     }
 
-    public func calculateLeavingProbability(visitDuration: TimeInterval, at date: Date = .now) -> Double? {
+    public func leavingProbabilityFor(duration: TimeInterval, date: Date = .now) -> Double? {
         guard let leavingTimes = leavingTimes,
               let visitDurations = visitDurations else {
             return nil
@@ -101,7 +101,7 @@ extension Place {
 
         // both need to have non-nil probabilities for AND probability to make sense
         guard let timeBasedProbability = leavingTimes.probability(for: timeOfDay) else { return nil }
-        guard let durationBasedProbability = visitDurations.probability(for: visitDuration) else { return nil }
+        guard let durationBasedProbability = visitDurations.probability(for: duration) else { return nil }
 
         // Using AND probability for most conservative estimate
         return timeBasedProbability * durationBasedProbability

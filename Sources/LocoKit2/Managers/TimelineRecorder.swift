@@ -219,7 +219,7 @@ public final class TimelineRecorder {
 
         // Calculate combined probability
         let visitDuration = -dateRange.start.timeIntervalSinceNow
-        guard let probability = place.calculateLeavingProbability(visitDuration: visitDuration) else {
+        guard let probability = place.leavingProbabilityFor(duration: visitDuration) else {
             await updateSleepCycleDurationFallback()
             return
         }
