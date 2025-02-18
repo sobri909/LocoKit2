@@ -92,13 +92,13 @@ extension TimelineItem {
 
     public static func dateString(
         for date: Date,
-        timeZone: TimeZone = TimeZone.current,
+        timeZone: TimeZone? = nil,
         dateStyle: DateFormatter.Style = .none,
         timeStyle: DateFormatter.Style = .short,
         relative: Bool = false,
         format: String? = nil) -> String?
     {
-        dateFormatter.timeZone = timeZone
+        dateFormatter.timeZone = timeZone ?? .current
         dateFormatter.doesRelativeDateFormatting = relative
         dateFormatter.dateStyle = dateStyle
         dateFormatter.timeStyle = timeStyle
