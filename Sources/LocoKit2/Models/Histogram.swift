@@ -13,7 +13,11 @@ public struct Histogram: Hashable, Sendable, Codable {
 
     public struct Bin: Hashable, Sendable, Codable {
         public let start: Double
+        public let end: Double
         public let count: Int
+        
+        public var width: Double { end - start }
+        public var middle: Double { start + (width / 2) }
     }
 
     // MARK: - Init
@@ -30,79 +34,74 @@ public struct Histogram: Hashable, Sendable, Codable {
     }
 
     public init?(values: [Double], minimumBinWidth: Double? = nil) {
-        if values.isEmpty { return nil }
+        guard let minValue = values.min(), let maxValue = values.max() else { return nil }
 
-        var binWidth = Self.computeBinWidth(for: values)
-        if let minimumBinWidth {
-            binWidth = max(binWidth, minimumBinWidth)
-        }
+        let binCount = Self.numberOfBins(for: values)
+        let binWidth = (maxValue - minValue) / Double(binCount)
 
-        // create bins
-        var counts: [Double: Int] = [:]
-
-        // find range
-        let minValue = values.min()!
-        let maxValue = values.max()!
-        let start = floor(minValue / binWidth) * binWidth
-        let end = floor(maxValue / binWidth) * binWidth
-
-        // create all bins in range
-        var current = start
-        while current <= end {
-            counts[current] = 0
-            current += binWidth
-        }
-
-        // fill in actual counts
+        // create fixed array of empty bins
+        var counts = Array(repeating: 0, count: binCount)
+        
+        // bucket values into bins
         for value in values {
-            let binStart = floor(value / binWidth) * binWidth
-            counts[binStart, default: 0] += 1
+            let bucketDouble = (value - minValue) / binWidth
+            var bucket = Int(bucketDouble)
+            
+            // handle edge case where value exactly equals maxValue
+            if bucket == binCount {
+                bucket = binCount - 1
+            }
+            
+            if bucket >= 0 && bucket < binCount {
+                counts[bucket] += 1
+            }
         }
-
-        bins = counts.map { Bin(start: $0.key, count: $0.value) }
-            .sorted { $0.start < $1.start }
+        
+        // create final bins with proper start/end/count
+        bins = (0..<binCount).map { i in
+            let start = minValue + (Double(i) * binWidth)
+            let end = start + binWidth
+            return Bin(start: start, end: end, count: counts[i])
+        }
     }
 
     // MARK: -
 
     public var binWidth: Double? {
-        guard bins.count >= 2 else { return nil }
-        return bins[1].start - bins[0].start
+        return bins[safe: 0]?.width
     }
 
     public var totalCount: Int {
         bins.reduce(0) { $0 + $1.count }
     }
 
+    public var maxCount: Int {
+        bins.map(\.count).max() ?? 0
+    }
+
     public var mostCommonBin: (start: Double, middle: Double, end: Double, count: Int)? {
-        guard let maxBin = bins.max(by: { $0.count < $1.count }),
-              let binWidth = binWidth else { return nil }
-        let start = maxBin.start
-        let end = start + binWidth
-        let middle = start + (binWidth / 2)
-        return (start, middle, end, count: maxBin.count)
+        guard let maxBin = bins.max(by: { $0.count < $1.count }) else { return nil }
+        return (maxBin.start, maxBin.middle, maxBin.end, count: maxBin.count)
     }
 
     public var valueRange: ClosedRange<Double>? {
-        guard let binWidth, let first = bins.first, let last = bins.last else { return nil }
-        return first.start ... last.start + binWidth
+        guard let first = bins.first, let last = bins.last else { return nil }
+        return first.start ... last.end
     }
 
     /// Calculate a smoothed probability for the given value using kernel density estimation
     public func probability(for value: Double) -> Double? {
-        guard let binWidth, !bins.isEmpty else { return nil }
+        guard !bins.isEmpty else { return nil }
         guard let range = valueRange, range.contains(value) else { return nil }
 
         // Estimate SD from bins
         let weightedSum = bins.reduce(0.0) { sum, bin -> Double in
-            let binCenter = bin.start + binWidth / 2
-            return sum + (binCenter * Double(bin.count))
+            return sum + (bin.middle * Double(bin.count))
         }
         let mean = weightedSum / Double(totalCount)
 
         let weightedSqSum = bins.reduce(0.0) { sum, bin -> Double in
-            let binCenter = bin.start + binWidth / 2
-            let diff = binCenter - mean
+            let diff = bin.middle - mean
             return sum + (diff * diff * Double(bin.count))
         }
         let sd = sqrt(weightedSqSum / Double(totalCount - 1))
@@ -115,8 +114,7 @@ public struct Histogram: Hashable, Sendable, Codable {
 
         // Calculate kernel contributions
         let kernelContributions = bins.map { bin -> Double in
-            let binCenter = bin.start + binWidth / 2
-            let z = (value - binCenter) / h
+            let z = (value - bin.middle) / h
             return Double(bin.count) * exp(-0.5 * z * z) * gaussianConstant
         }
 
@@ -127,6 +125,12 @@ public struct Histogram: Hashable, Sendable, Codable {
     }
 
     // MARK: - FD calc
+
+    private static func numberOfBins(for values: [Double]) -> Int {
+        let proposedWidth = computeBinWidth(for: values)
+        guard let max = values.max(), let min = values.min() else { return 1 }
+        return Int(ceil((max - min) / proposedWidth))
+    }
 
     private static func computeBinWidth(for values: [Double]) -> Double {
         guard values.count > 1 else { return 1.0 } // sensible default depends on usage
