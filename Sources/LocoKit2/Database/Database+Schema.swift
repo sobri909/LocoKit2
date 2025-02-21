@@ -43,6 +43,7 @@ extension Database {
                 table.column("arrivalTimes", .blob)
                 table.column("leavingTimes", .blob)
                 table.column("visitDurations", .blob)
+                table.column("occupancyTimes", .blob)
             }
 
             try db.create(

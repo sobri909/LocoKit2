@@ -46,6 +46,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public var arrivalTimes: Histogram?
     public var leavingTimes: Histogram?
     public var visitDurations: Histogram?
+    public var occupancyTimes: [Histogram]?
 
     // MARK: - Computed properties
 
@@ -247,14 +248,17 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
         // Histograms with MessagePack
         let decoder = JSONDecoder()
-        if let arrivalData = row["arrivalTimes"] as? Data {
-            arrivalTimes = try? decoder.decode(Histogram.self, from: arrivalData)
+        if let data = row["arrivalTimes"] as? Data {
+            arrivalTimes = try? decoder.decode(Histogram.self, from: data)
         }
-        if let leavingData = row["leavingTimes"] as? Data {
-            leavingTimes = try? decoder.decode(Histogram.self, from: leavingData)
+        if let data = row["leavingTimes"] as? Data {
+            leavingTimes = try? decoder.decode(Histogram.self, from: data)
         }
-        if let durationData = row["visitDurations"] as? Data {
-            visitDurations = try? decoder.decode(Histogram.self, from: durationData)
+        if let data = row["visitDurations"] as? Data {
+            visitDurations = try? decoder.decode(Histogram.self, from: data)
+        }
+        if let data = row["occupancyTimes"] as? Data {
+            occupancyTimes = try? decoder.decode([Histogram].self, from: data)
         }
     }
 
@@ -293,6 +297,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         container["arrivalTimes"] = try? encoder.encode(arrivalTimes)
         container["leavingTimes"] = try? encoder.encode(leavingTimes)
         container["visitDurations"] = try? encoder.encode(visitDurations)
+        container["occupancyTimes"] = try? encoder.encode(occupancyTimes)
     }
 
 }
