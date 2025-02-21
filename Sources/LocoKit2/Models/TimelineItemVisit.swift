@@ -118,16 +118,13 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
             }
 
             // update stats for the new place
-            Task {
-                var mutablePlace = place
-                await mutablePlace.updateVisitStats()
-            }
+            Task { await place.updateVisitStats() }
 
             // update stats for the previous place if there was one
             if let previousPlaceId {
                 Task {
                     do {
-                        var previousPlace = try await Database.pool.read { try Place.fetchOne($0, id: previousPlaceId) }
+                        let previousPlace = try await Database.pool.read { try Place.fetchOne($0, id: previousPlaceId) }
                         await previousPlace?.updateVisitStats()
                     } catch {
                         logger.error(error, subsystem: .database)
