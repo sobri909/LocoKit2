@@ -26,15 +26,21 @@ public struct Histogram: Hashable, Sendable, Codable {
         var calendar = Calendar.current
         calendar.timeZone = timeZone
         let timesOfDay = dates.map { $0.sinceStartOfDay(in: calendar) }
-        return Histogram(values: timesOfDay, minimumBinWidth: 60.0) // minimum 1 minute bins
+        return Histogram(values: timesOfDay)
     }
 
     public static func forDurations(intervals: [TimeInterval]) -> Histogram? {
-        return Histogram(values: intervals, minimumBinWidth: 60.0)
+        return Histogram(values: intervals)
     }
 
-    public init?(values: [Double], minimumBinWidth: Double? = nil) {
+    public init?(values: [Double]) {
         guard let minValue = values.min(), let maxValue = values.max() else { return nil }
+
+        // if all values are equal, create a single zero-width bin
+        if minValue == maxValue {
+            bins = [Bin(start: minValue, end: minValue, count: values.count)]
+            return
+        }
 
         let binCount = Self.numberOfBins(for: values)
         let binWidth = (maxValue - minValue) / Double(binCount)
