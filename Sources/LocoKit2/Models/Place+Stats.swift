@@ -11,7 +11,7 @@ import GRDB
 extension Place {
 
     @PlacesActor
-    public mutating func updateVisitStats() async {
+    public func updateVisitStats() async {
         do {
             let currentItemId = await TimelineRecorder.highlander.currentItemId
 
@@ -49,6 +49,8 @@ extension Place {
             let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
             let samples = confirmedVisits.flatMap { $0.samples ?? [] }
 
+            let occupancyTimes = buildOccupancyTimes(from: confirmedVisits, in: calendar)
+
             // Only update if we have valid data to update with
             if let center = samples.weightedCenter() {
                 let radius = samples.radius(from: center.location)
@@ -64,7 +66,7 @@ extension Place {
                 let visitEnds = statsVisits.compactMap { $0.dateRange?.end }
                 let visitDurations = statsVisits.compactMap { $0.dateRange?.duration }
 
-                try await Database.pool.write { [self] db in
+                try await Database.pool.write { [self, occupancyTimes] db in
                     var mutableSelf = self
                     try mutableSelf.updateChanges(db) {
                         $0.visitCount = visits.count
@@ -77,6 +79,7 @@ extension Place {
                         $0.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
                         $0.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
                         $0.visitDurations = Histogram.forDurations(intervals: visitDurations)
+                        $0.occupancyTimes = occupancyTimes
                     }
                     
                     Task { await mutableSelf.updateRTree() }
@@ -105,6 +108,39 @@ extension Place {
 
         // Using AND probability for most conservative estimate
         return timeBasedProbability * durationBasedProbability
+    }
+    
+    private func buildOccupancyTimes(from visits: [TimelineItem], in calendar: Calendar) -> [Histogram] {
+        var dayOfWeekValues: [[Double]] = Array(repeating: [], count: 8) // 0 = all days, 1-7 = weekdays
+        
+        // walk through each visit in 1-min steps
+        for visit in visits {
+            guard let range = visit.dateRange else { continue }
+            var current = range.start
+            
+            while current <= range.end {
+                let timeOfDay = current.sinceStartOfDay(in: calendar)
+                
+                // add to all days (index 0)
+                dayOfWeekValues[0].append(timeOfDay)
+                
+                // add to specific weekday (index 1-7)
+                let weekday = calendar.component(.weekday, from: current)
+                dayOfWeekValues[weekday].append(timeOfDay)
+                
+                current += .minutes(1)
+            }
+        }
+        
+        // create Histograms in order (all days first, then each weekday)
+        var histograms: [Histogram] = []
+        for values in dayOfWeekValues where !values.isEmpty {
+            if let histogram = Histogram(values: values) {
+                histograms.append(histogram)
+            }
+        }
+
+        return histograms
     }
 
 }
