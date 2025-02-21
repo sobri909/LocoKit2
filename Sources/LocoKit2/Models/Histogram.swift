@@ -12,6 +12,12 @@ public struct Histogram: Hashable, Sendable, Codable {
     public let bins: [Bin]
 
     public struct Bin: Hashable, Sendable, Codable {
+        public init(start: Double, end: Double, count: Int) {
+            self.start = start
+            self.end = end
+            self.count = count
+        }
+        
         public let start: Double
         public let end: Double
         public let count: Int
@@ -50,9 +56,8 @@ public struct Histogram: Hashable, Sendable, Codable {
         
         // bucket values into bins
         for value in values {
-            let bucketDouble = (value - minValue) / binWidth
-            var bucket = Int(bucketDouble)
-            
+            var bucket = Int((value - minValue) / binWidth)
+
             // handle edge case where value exactly equals maxValue
             if bucket == binCount {
                 bucket = binCount - 1
