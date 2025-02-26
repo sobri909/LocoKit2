@@ -11,11 +11,11 @@ import BackgroundTasks
 @MainActor
 public enum TasksManager {
 
-    enum TaskState: String, Codable, CaseIterable, Sendable {
+    enum TaskState: String, Codable, CaseIterable {
         case running, expired, unfinished, completed, scheduled, registered
     }
     
-    struct TaskStatus: Codable, Identifiable, Sendable {
+    struct TaskStatus: Codable, Identifiable {
         var identifier: String
         var state: TaskState
         var minimumDelay: TimeInterval
@@ -100,21 +100,20 @@ public enum TasksManager {
         
         updateTaskState(identifier, state: .running)
 
-        // Create detached task for the heavy work
-        let workTask = Task.detached { [self] in
+        let workTask = Task.detached {
             do {
                 try await taskDefinition.workHandler()
 
-                // Jump back to main actor for state updates
                 await MainActor.run {
-                    self.updateTaskState(identifier, state: .completed)
-                    self.scheduleTask(identifier: identifier)
+                    updateTaskState(identifier, state: .completed)
+                    scheduleTask(identifier: identifier)
                     task.setTaskCompleted(success: true)
                 }
+
             } catch {
                 await MainActor.run {
-                    self.updateTaskState(identifier, state: .unfinished)
-                    self.scheduleTask(identifier: identifier)
+                    updateTaskState(identifier, state: .unfinished)
+                    scheduleTask(identifier: identifier)
                     task.setTaskCompleted(success: false)
                     logger.error(error, subsystem: .tasks)
                 }
@@ -124,7 +123,7 @@ public enum TasksManager {
         task.expirationHandler = {
             workTask.cancel()
             Task { @MainActor in
-                self.updateTaskState(identifier, state: .expired)
+                updateTaskState(identifier, state: .expired)
                 task.setTaskCompleted(success: false)
             }
         }
