@@ -5,39 +5,15 @@
 //
 
 import Foundation
-@preconcurrency
-import BackgroundTasks
+@preconcurrency import BackgroundTasks
+import GRDB
 
 @MainActor
 public enum TasksManager {
 
-    enum TaskState: String, Codable, CaseIterable {
-        case running, expired, unfinished, completed, scheduled, registered
-    }
-    
-    struct TaskStatus: Codable, Identifiable {
-        var identifier: String
-        var state: TaskState
-        var minimumDelay: TimeInterval
-        var lastUpdated: Date
-        var lastStarted: Date?
-        var lastExpired: Date?
-        var lastCompleted: Date?
-        var id: String { return identifier }
-        var overdueBy: TimeInterval {
-            guard let lastCompleted else { return 0 }
-            return lastCompleted.age - minimumDelay
-        }
-    }
-    
-    // status tracking
-    
-    init() {
-        loadTaskStatuses()
-    }
     static var taskStatuses: [String: TaskStatus] = [:]
     static var taskDefinitions: [String: TaskDefinition] = [:]
-    
+
     // MARK: - Task Management
     
     public static func add(task: TaskDefinition) {
@@ -88,7 +64,7 @@ public enum TasksManager {
             try BGTaskScheduler.shared.submit(request)
             updateTaskState(identifier, state: .scheduled)
         } catch {
-            logger.error("Could not schedule: \(error.localizedDescription)", subsystem: .tasks)
+            logger.error(error, subsystem: .tasks)
         }
     }
 
@@ -129,7 +105,7 @@ public enum TasksManager {
         }
     }
 
-    private static func updateTaskState(_ identifier: String, state: TaskState) {
+    private static func updateTaskState(_ identifier: String, state: TaskStatus.TaskState) {
         guard let taskDefinition = taskDefinitions[identifier] else { return }
         
         var status = taskStatuses[identifier] ?? TaskStatus(
@@ -151,7 +127,13 @@ public enum TasksManager {
         }
 
         switch state {
-        case .running, .expired, .completed:
+        case .running:
+            status.lastStarted = .now
+        case .expired:
+            status.lastExpired = .now
+            status.lastStarted = .now
+        case .completed:
+            status.lastCompleted = .now
             status.lastStarted = .now
         default:
             break
