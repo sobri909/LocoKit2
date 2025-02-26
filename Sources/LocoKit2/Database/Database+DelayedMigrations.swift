@@ -15,5 +15,17 @@ extension Database {
                 table.add(column: "occupancyTimes", .blob).notNull().defaults(to: Data())
             }
         }
+        
+        migrator.registerMigration("TaskStatus") { db in
+            try? db.create(table: "TaskStatus") { table in
+                table.primaryKey("identifier", .text)
+                table.column("state", .text).notNull()
+                table.column("minimumDelay", .double).notNull()
+                table.column("lastUpdated", .datetime).notNull()
+                table.column("lastStarted", .datetime)
+                table.column("lastExpired", .datetime)
+                table.column("lastCompleted", .datetime)
+            }
+        }
     }
 }

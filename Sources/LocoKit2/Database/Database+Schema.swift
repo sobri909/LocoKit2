@@ -194,6 +194,18 @@ extension Database {
                 table.column("longitudeMax", .double).notNull().indexed()
                 table.column("longitudeMin", .double).notNull().indexed()
             }
+
+            // MARK: - TaskStatus
+
+            try db.create(table: "TaskStatus") { table in
+                table.primaryKey("identifier", .text)
+                table.column("state", .text).notNull()
+                table.column("minimumDelay", .double).notNull()
+                table.column("lastUpdated", .datetime).notNull()
+                table.column("lastStarted", .datetime)
+                table.column("lastExpired", .datetime)
+                table.column("lastCompleted", .datetime)
+            }
         }
     }
 }

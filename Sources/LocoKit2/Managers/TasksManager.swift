@@ -1,5 +1,6 @@
 //
 //  TasksManager.swift
+//  LocoKit2
 //
 //  Created on 2025-02-25.
 //
@@ -11,7 +12,6 @@ import GRDB
 @MainActor
 public enum TasksManager {
 
-    static var taskStatuses: [String: TaskStatus] = [:]
     static var taskDefinitions: [String: TaskDefinition] = [:]
 
     // MARK: - Task Management
@@ -19,7 +19,7 @@ public enum TasksManager {
     public static func add(task: TaskDefinition) {
         taskDefinitions[task.identifier] = task
         registerTask(identifier: task.identifier)
-        updateTaskState(task.identifier, state: .registered)
+        updateTaskStateFor(identifier: task.identifier, to: .registered)
     }
 
     public static func scheduleTasks() {
@@ -43,7 +43,7 @@ public enum TasksManager {
         let request = BGProcessingTaskRequest(identifier: identifier)
         
         // determine earliest begin date based on last execution
-        let status = taskStatuses[identifier]
+        let status = try? getTaskStatusFor(identifier: identifier)
         let minimumDelay = taskDefinition.minimumDelay
         
         if let lastCompleted = status?.lastCompleted {
@@ -62,7 +62,7 @@ public enum TasksManager {
         
         do {
             try BGTaskScheduler.shared.submit(request)
-            updateTaskState(identifier, state: .scheduled)
+            updateTaskStateFor(identifier: identifier, to: .scheduled)
         } catch {
             logger.error(error, subsystem: .tasks)
         }
@@ -74,21 +74,21 @@ public enum TasksManager {
             return
         }
         
-        updateTaskState(identifier, state: .running)
+        updateTaskStateFor(identifier: identifier, to: .running)
 
         let workTask = Task.detached {
             do {
                 try await taskDefinition.workHandler()
 
                 await MainActor.run {
-                    updateTaskState(identifier, state: .completed)
+                    updateTaskStateFor(identifier: identifier, to: .completed)
                     scheduleTask(identifier: identifier)
                     task.setTaskCompleted(success: true)
                 }
 
             } catch {
                 await MainActor.run {
-                    updateTaskState(identifier, state: .unfinished)
+                    updateTaskStateFor(identifier: identifier, to: .unfinished)
                     scheduleTask(identifier: identifier)
                     task.setTaskCompleted(success: false)
                     logger.error(error, subsystem: .tasks)
@@ -99,62 +99,72 @@ public enum TasksManager {
         task.expirationHandler = {
             workTask.cancel()
             Task { @MainActor in
-                updateTaskState(identifier, state: .expired)
+                updateTaskStateFor(identifier: identifier, to: .expired)
                 task.setTaskCompleted(success: false)
             }
         }
     }
 
-    private static func updateTaskState(_ identifier: String, state: TaskStatus.TaskState) {
+    // MARK: - TaskStatus handling
+
+    private static func getTaskStatusFor(identifier: String) throws -> TaskStatus? {
+        return try Database.pool.read {
+            try TaskStatus.fetchOne($0, key: identifier)
+        }
+    }
+
+    private static func updateTaskStateFor(identifier: String, to state: TaskStatus.TaskState) {
         guard let taskDefinition = taskDefinitions[identifier] else { return }
-        
-        var status = taskStatuses[identifier] ?? TaskStatus(
-            identifier: identifier,
-            state: state,
-            minimumDelay: taskDefinition.minimumDelay,
-            lastUpdated: .now
-        )
-        
+
+        do {
+            guard let status = try getTaskStatusFor(identifier: identifier) else {
+                // no existing TaskStatus, so create and save a new one
+                var status = TaskStatus(
+                    identifier: identifier,
+                    state: state,
+                    minimumDelay: taskDefinition.minimumDelay,
+                    lastUpdated: .now
+                )
+                update(taskStatus: &status, state: state)
+                try Database.pool.write {
+                    try status.insert($0)
+                }
+                return
+            }
+
+            try Database.pool.write { db in
+                var mutableStatus = status
+                try mutableStatus.updateChanges(db) { status in
+                    update(taskStatus: &status, state: state)
+                }
+            }
+
+        } catch {
+            logger.error(error, subsystem: .tasks)
+        }
+    }
+
+    private static func update(taskStatus status: inout TaskStatus, state: TaskStatus.TaskState) {
         status.state = state
         status.lastUpdated = .now
-        
-        let taskName = identifier.split(separator: ".").last.map(String.init) ?? identifier
-
-        if state == .unfinished {
-            logger.error("\(state.rawValue): \(taskName)", subsystem: .tasks)
-        } else {
-            logger.info("\(state.rawValue): \(taskName)", subsystem: .tasks)
-        }
 
         switch state {
         case .running:
             status.lastStarted = .now
         case .expired:
             status.lastExpired = .now
-            status.lastStarted = .now
         case .completed:
             status.lastCompleted = .now
-            status.lastStarted = .now
         default:
             break
         }
-        
-        taskStatuses[identifier] = status
-        saveTaskStatuses()
-    }
-    
-    // MARK: - Persistence
-    
-    private static func loadTaskStatuses() {
-        if let data = UserDefaults.standard.data(forKey: "taskStatuses"),
-           let statuses = try? JSONDecoder().decode([String: TaskStatus].self, from: data) {
-            taskStatuses = statuses
+
+        let taskName = status.identifier.split(separator: ".").last.map(String.init) ?? status.identifier
+        if state == .unfinished {
+            logger.error("\(state.rawValue): \(taskName)", subsystem: .tasks)
+        } else {
+            logger.info("\(state.rawValue): \(taskName)", subsystem: .tasks)
         }
     }
-    
-    private static func saveTaskStatuses() {
-        if let data = try? JSONEncoder().encode(taskStatuses) {
-            UserDefaults.standard.set(data, forKey: "taskStatuses")
-        }
-    }
+
 }
