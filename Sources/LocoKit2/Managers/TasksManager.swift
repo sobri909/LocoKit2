@@ -144,8 +144,7 @@ public final class TasksManager {
         status.state = state
         status.lastUpdated = .now
         
-        // extract task name from identifier (last part after the final dot)
-        let taskName = identifier.split(separator: ".").last ?? identifier
+        let taskName = identifier.split(separator: ".").last.map(String.init) ?? identifier
 
         if state == .unfinished {
             logger.error("\(state.rawValue): \(taskName)", subsystem: .tasks)
@@ -154,12 +153,10 @@ public final class TasksManager {
         }
 
         switch state {
-        case .running:
+        case .running, .expired, .completed:
             status.lastStarted = .now
-        case .expired:
-            status.lastExpired = .now
-        case .completed:
-            status.lastCompleted = .now
+        default:
+            break
         }
         
         taskStatuses[identifier] = status
