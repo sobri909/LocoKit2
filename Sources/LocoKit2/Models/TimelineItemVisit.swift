@@ -7,7 +7,7 @@
 
 import Foundation
 import CoreLocation
-@preconcurrency import GRDB
+import GRDB
 
 public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 

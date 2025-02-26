@@ -7,7 +7,7 @@
 
 import Foundation
 import CoreLocation
-@preconcurrency import GRDB
+import GRDB
 
 public enum PlaceSource { case google, foursquare, mapbox }
 
