@@ -92,7 +92,7 @@ extension TimelineItem {
                 }
 
                 // queue updates for the ML models
-                await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(changedSamples)
+                await CoreMLModelUpdater.queueUpdatesForModelsContaining(changedSamples)
 
             } catch {
                 logger.error(error, subsystem: .database)
@@ -145,7 +145,7 @@ extension TimelineItem {
             }
 
             if !updatedSamples.isEmpty {
-                await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(updatedSamples)
+                await CoreMLModelUpdater.queueUpdatesForModelsContaining(updatedSamples)
             }
 
         } catch {
@@ -185,7 +185,7 @@ extension TimelineItem {
             }
 
             if !updatedSamples.isEmpty {
-                await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(updatedSamples)
+                await CoreMLModelUpdater.queueUpdatesForModelsContaining(updatedSamples)
             }
 
         } catch {

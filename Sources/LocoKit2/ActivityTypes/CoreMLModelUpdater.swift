@@ -16,13 +16,11 @@ import CreateML
 #endif
 
 @ActivityTypesActor
-public final class CoreMLModelUpdater {
-
-    public static var highlander = CoreMLModelUpdater()
+public enum CoreMLModelUpdater {
 
     // MARK: - Queueing Model Updates
 
-    public func queueUpdatesForModelsContaining(_ samples: [LocomotionSample]) {
+    public static func queueUpdatesForModelsContaining(_ samples: [LocomotionSample]) {
         var lastD2Model: ActivityTypesModel?
         var models: Set<ActivityTypesModel> = []
 
@@ -41,12 +39,9 @@ public final class CoreMLModelUpdater {
             models.insert(ActivityTypesModel.fetchModelFor(coordinate: coordinate, depth: 0))
         }
 
-        print("queueUpdatesForModelsContaining(samples:) models: \(models.count)")
-
         do {
             try Database.pool.write { db in
                 for var model in models {
-                    print("queueUpdatesForModelsContaining(samples:) model: \(model.geoKey)")
                     try model.updateChanges(db) {
                         $0.needsUpdate = true
                     }
@@ -77,23 +72,26 @@ public final class CoreMLModelUpdater {
         while true {
             if Task.isCancelled { throw CancellationError() }
             
-            // get prioritized model to update (one at a time)
+            // get prioritised model to update (one at a time)
             let model = await fetchNextModelToUpdate()
             
             // no more models to update? we're done
             guard let model else { return }
             
             logger.info("UPDATING MODEL: \(model.geoKey)", subsystem: .activitytypes)
-            highlander.updateModel(geoKey: model.geoKey)
+            updateModel(geoKey: model.geoKey)
             logger.info("UPDATED MODEL: \(model.geoKey)", subsystem: .activitytypes)
         }
     }
     
     private static func fetchNextModelToUpdate() async -> ActivityTypesModel? {
-        // CD0 update intervals
-        let cd0UpdateInterval: TimeInterval = 7 * 24 * 60 * 60 // 7 days
-        let cd0FrequentUpdateInterval: TimeInterval = 24 * 60 * 60 // 1 day
-        
+
+        // CD0 update interval for already "complete" models
+        let cd0UpdateInterval: TimeInterval = .days(7)
+
+        // CD0 update interval for "incomplete" moels
+        let cd0FrequentUpdateInterval: TimeInterval = .days(1)
+
         do {
             return try await Database.pool.read { db in
                 try ActivityTypesModel
@@ -114,91 +112,14 @@ public final class CoreMLModelUpdater {
                     .order(Column("depth").desc, Column("totalSamples").asc)
                     .fetchOne(db)
             }
+            
         } catch {
             logger.error(error, subsystem: .database)
             return nil
         }
     }
 
-    // MARK: - Model Updating
-
-    var backgroundTaskExpired = false
-
-    private var onUpdatesComplete: ((Bool) -> Void)?
-
-    public func updateQueuedModels(task: BGProcessingTask, currentClassifier classifier: ActivityClassifier?, onComplete: ((Bool) -> Void)? = nil) {
-        if let onComplete {
-            onUpdatesComplete = onComplete
-        }
-
-        // not allowed to continue?
-        if backgroundTaskExpired {
-            backgroundTaskExpired = false
-            onUpdatesComplete?(true)
-            return
-        }
-
-        // catch background expiration
-        if task.expirationHandler == nil {
-            backgroundTaskExpired = false
-            task.expirationHandler = {
-                self.backgroundTaskExpired = true
-                task.setTaskCompleted(success: false)
-            }
-        }
-
-        // do the current CD2 first, if it needs it
-        let currentModel = classifier?.models.first { $0.value.geoKey.hasPrefix("CD2") }?.value
-        if let currentModel, currentModel.needsUpdate {
-            update(model: currentModel, in: task, currentClassifier: classifier)
-            return
-        }
-
-        // CD0 update intervals
-        let cd0UpdateInterval: TimeInterval = 7 * 24 * 60 * 60 // 7 days
-        let cd0FrequentUpdateInterval: TimeInterval = 24 * 60 * 60 // 1 day
-
-        // check for any queued model, prioritising by depth and completeness
-        do {
-            let model = try Database.pool.read { db in
-                try ActivityTypesModel
-                    .fetchOne(
-                        db,
-                        sql: """
-                        needsUpdate = 1 AND 
-                        (depth > 0 OR 
-                         (depth = 0 AND 
-                          (lastUpdated IS NULL OR 
-                           (totalSamples < ? AND lastUpdated < datetime('now', '-\(Int(cd0FrequentUpdateInterval)) seconds')) OR
-                           (totalSamples >= ? AND lastUpdated < datetime('now', '-\(Int(cd0UpdateInterval)) seconds'))
-                          )
-                         )
-                        )
-                        ORDER BY depth DESC, totalSamples ASC
-                        """,
-                        arguments: [ActivityTypesModel.modelMinTrainingSamples[0]!, ActivityTypesModel.modelMinTrainingSamples[0]!]
-                    )
-            }
-
-            if let model {
-                // backfill r-tree for old dbs or restores from backup
-                // Task {
-                //     await store.backfillSampleRTree(batchSize: CoreMLModelWrapper.modelMaxTrainingSamples[0]!)
-                // }
-
-                update(model: model, in: task, currentClassifier: classifier)
-                return
-            }
-        } catch {
-            logger.error(error, subsystem: .database)
-        }
-
-        // job's finished
-        onUpdatesComplete?(false)
-        task.setTaskCompleted(success: true)
-    }
-
-    public func updateModel(geoKey: String) {
+    public static func updateModel(geoKey: String) {
         do {
             let model = try Database.pool.read {
                 try ActivityTypesModel.fetchOne($0, key: geoKey)
@@ -214,18 +135,14 @@ public final class CoreMLModelUpdater {
     // MARK: - Model building
 
 #if targetEnvironment(simulator)
-    public func update(model: ActivityTypesModel, in task: BGProcessingTask? = nil, currentClassifier classifier: ActivityClassifier? = nil) {
+    static func update(model: ActivityTypesModel) {
         print("SIMULATOR DOESN'T SUPPORT MODEL UPDATES")
     }
 #else
-    public func update(model: ActivityTypesModel, in task: BGProcessingTask? = nil, currentClassifier classifier: ActivityClassifier? = nil) {
+    static func update(model: ActivityTypesModel) {
         if model.geoKey.hasPrefix("B") { return }
-
-        defer {
-            if let task {
-                updateQueuedModels(task: task, currentClassifier: classifier)
-            }
-        }
+        
+        if Task.isCancelled { return }
 
         print("UPDATING: \(model.geoKey)")
 
@@ -334,7 +251,7 @@ public final class CoreMLModelUpdater {
     }
 #endif
 
-    private func fetchTrainingSamples(for model: ActivityTypesModel) throws -> [LocomotionSample] {
+    private static func fetchTrainingSamples(for model: ActivityTypesModel) throws -> [LocomotionSample] {
         return try Database.pool.read { db in
             var query = LocomotionSample
                 .filter(sql: """
@@ -366,7 +283,7 @@ public final class CoreMLModelUpdater {
         }
     }
 
-    private func exportCSV(samples: [LocomotionSample], appendingTo: URL? = nil) throws -> (URL, Int, Set<ActivityType>) {
+    private static func exportCSV(samples: [LocomotionSample], appendingTo: URL? = nil) throws -> (URL, Int, Set<ActivityType>) {
         let modelFeatures = [
             "confirmedActivityType", "stepHz", "xyAcceleration", "zAcceleration", "movingState",
             "verticalAccuracy", "horizontalAccuracy", "speed", "course",

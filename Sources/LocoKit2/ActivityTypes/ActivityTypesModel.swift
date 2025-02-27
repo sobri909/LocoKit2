@@ -144,7 +144,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
             // if model needs update, queue a task to update it
             if model.needsUpdate {
                 let geoKey = model.geoKey
-                Task { CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
+                Task { CoreMLModelUpdater.updateModel(geoKey: geoKey) }
             }
             return model
         }
@@ -164,7 +164,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
 
         // queue it for update
         let geoKey = model.geoKey
-        Task { CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
+        Task { CoreMLModelUpdater.updateModel(geoKey: geoKey) }
 
         return model
     }

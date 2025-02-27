@@ -97,7 +97,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
                 return changed
             }
 
-            await CoreMLModelUpdater.highlander.queueUpdatesForModelsContaining(changedSamples)
+            await CoreMLModelUpdater.queueUpdatesForModelsContaining(changedSamples)
 
         } catch {
             logger.error(error, subsystem: .database)
