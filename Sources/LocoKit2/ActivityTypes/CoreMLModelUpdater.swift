@@ -20,7 +20,7 @@ public final class CoreMLModelUpdater {
 
     public static var highlander = CoreMLModelUpdater()
 
-    var backgroundTaskExpired = false
+    // MARK: - Queueing Model Updates
 
     public func queueUpdatesForModelsContaining(_ samples: [LocomotionSample]) {
         var lastD2Model: ActivityTypesModel?
@@ -57,6 +57,72 @@ public final class CoreMLModelUpdater {
             logger.error(error, subsystem: .database)
         }
     }
+
+    // MARK: - Background Task Management
+
+    @MainActor
+    public static func registerModelUpdatesTask() {
+        let taskDefinition = TaskDefinition(
+            identifier: "com.bigpaua.Arc.modelUpdates",
+            minimumDelay: .hours(1),
+            requiresNetwork: false,
+            requiresPower: true,
+            workHandler: processModelsForBackground
+        )
+        
+        TasksManager.add(task: taskDefinition)
+    }
+    
+    private static func processModelsForBackground() async throws {
+        while true {
+            if Task.isCancelled { throw CancellationError() }
+            
+            // get prioritized model to update (one at a time)
+            let model = await fetchNextModelToUpdate()
+            
+            // no more models to update? we're done
+            guard let model else { return }
+            
+            logger.info("UPDATING MODEL: \(model.geoKey)", subsystem: .activitytypes)
+            highlander.updateModel(geoKey: model.geoKey)
+            logger.info("UPDATED MODEL: \(model.geoKey)", subsystem: .activitytypes)
+        }
+    }
+    
+    private static func fetchNextModelToUpdate() async -> ActivityTypesModel? {
+        // CD0 update intervals
+        let cd0UpdateInterval: TimeInterval = 7 * 24 * 60 * 60 // 7 days
+        let cd0FrequentUpdateInterval: TimeInterval = 24 * 60 * 60 // 1 day
+        
+        do {
+            return try await Database.pool.read { db in
+                try ActivityTypesModel
+                    .filter(
+                        sql: """
+                        needsUpdate = 1 AND 
+                        (depth > 0 OR 
+                         (depth = 0 AND 
+                          (lastUpdated IS NULL OR 
+                           (totalSamples < ? AND lastUpdated < datetime('now', '-\(Int(cd0FrequentUpdateInterval)) seconds')) OR
+                           (totalSamples >= ? AND lastUpdated < datetime('now', '-\(Int(cd0UpdateInterval)) seconds'))
+                          )
+                         )
+                        )
+                        """,
+                        arguments: [ActivityTypesModel.modelMinTrainingSamples[0]!, ActivityTypesModel.modelMinTrainingSamples[0]!]
+                    )
+                    .order(Column("depth").desc, Column("totalSamples").asc)
+                    .fetchOne(db)
+            }
+        } catch {
+            logger.error(error, subsystem: .database)
+            return nil
+        }
+    }
+
+    // MARK: - Model Updating
+
+    var backgroundTaskExpired = false
 
     private var onUpdatesComplete: ((Bool) -> Void)?
 
