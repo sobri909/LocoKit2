@@ -43,10 +43,18 @@ public final class CoreMLModelUpdater {
 
         print("queueUpdatesForModelsContaining(samples:) models: \(models.count)")
 
-        for model in models {
-            print("queueUpdatesForModelsContaining(samples:) model: \(model.geoKey)")
-            model.needsUpdate = true
-            model.save()
+        do {
+            try Database.pool.write { db in
+                for var model in models {
+                    print("queueUpdatesForModelsContaining(samples:) model: \(model.geoKey)")
+                    try model.updateChanges(db) {
+                        $0.needsUpdate = true
+                    }
+                }
+            }
+
+        } catch {
+            logger.error(error, subsystem: .database)
         }
     }
 
@@ -197,11 +205,15 @@ public final class CoreMLModelUpdater {
 
             guard samplesCount > 0, includedTypes.count > 1 else {
                 print("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))")
-                model.totalSamples = samplesCount
-                model.accuracyScore = nil
-                model.lastUpdated = Date()
-                model.needsUpdate = false
-                model.save()
+                try? Database.pool.write { db in
+                    var mutableModel = model
+                    try mutableModel.updateChanges(db) {
+                        $0.totalSamples = samplesCount
+                        $0.accuracyScore = nil
+                        $0.lastUpdated = .now
+                        $0.needsUpdate = false
+                    }
+                }
                 return
             }
 
@@ -219,7 +231,7 @@ public final class CoreMLModelUpdater {
             let classifier = try MLBoostedTreeClassifier(trainingData: dataFrame, targetColumn: "confirmedActivityType")
 
             do {
-                try FileManager.default.createDirectory(at: ActivityTypesModel.modelsDir, withIntermediateDirectories: true, attributes: nil)
+                try FileManager.default.createDirectory(at: MLModelCache.modelsDir, withIntermediateDirectories: true, attributes: nil)
             } catch {
                 logger.error("Couldn't create MLModels directory", subsystem: .activitytypes)
             }
@@ -231,14 +243,18 @@ public final class CoreMLModelUpdater {
             let compiledModelFile = try MLModel.compileModel(at: tempModelFile)
 
             // save model to final dest
-            _ = try manager.replaceItemAt(model.modelURL, withItemAt: compiledModelFile)
+            _ = try manager.replaceItemAt(MLModelCache.getModelURLFor(filename: model.filename), withItemAt: compiledModelFile)
 
             // update metadata
-            model.totalSamples = samplesCount
-            model.accuracyScore = (1.0 - classifier.validationMetrics.classificationError)
-            model.lastUpdated = .now
-            model.needsUpdate = false
-            model.save()
+            try? Database.pool.write { db in
+                var mutableModel = model
+                try mutableModel.updateChanges(db) {
+                    $0.totalSamples = samplesCount
+                    $0.accuracyScore = (1.0 - classifier.validationMetrics.classificationError)
+                    $0.lastUpdated = .now
+                    $0.needsUpdate = false
+                }
+            }
 
             logger.info("UPDATED: \(model.geoKey) (samples: \(model.totalSamples), accuracy: \(String(format: "%.2f", model.accuracyScore!)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
 
@@ -334,6 +350,5 @@ public final class CoreMLModelUpdater {
 
         return (csvFile, samplesAdded, includedTypes)
     }
-
 
 }

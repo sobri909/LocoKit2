@@ -177,6 +177,9 @@ public final class ActivityClassifier {
     }
 
     public func invalidateModel(geoKey: String) {
+        if let model = models.first(where: { $0.value.geoKey == geoKey })?.value {
+            MLModelCache.invalidateModelFor(filename: model.filename)
+        }
         models = models.filter { $0.value.geoKey != geoKey }
     }
 

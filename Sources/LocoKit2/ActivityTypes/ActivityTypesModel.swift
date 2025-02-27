@@ -1,18 +1,18 @@
 //
 //  ActivityTypesModel.swift
-//  
+//  LocoKit2
 //
-//  Created by Matt Greenfield on 26/10/22.
+//  Created on 2025-02-27.
 //
 
 import Foundation
 import CoreML
 import CoreLocation
-import BackgroundTasks
-import Surge
 import GRDB
 
-public final class ActivityTypesModel: Record, Hashable, Identifiable {
+public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
+
+    // MARK: - Configuration Constants
 
     // [Depth: Samples]
     static let modelMaxTrainingSamples: [Int: Int] = [
@@ -36,64 +36,86 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
     static let numberOfLatBucketsDepth2 = 200
     static let numberOfLongBucketsDepth2 = 200
 
-    static let modelsDir: URL = {
-        return try! FileManager.default
-            .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            .appendingPathComponent("MLModels", isDirectory: true)
-    }()
-
-    // MARK: -
-
-    public var id: String { geoKey }
-    public internal(set) var geoKey: String = ""
-    public internal(set) var filename: String = ""
-    public internal(set) var depth: Int
-    public internal(set) var latitudeRange: ClosedRange<Double>
-    public internal(set) var longitudeRange: ClosedRange<Double>
-    public internal(set) var lastUpdated: Date?
-    public internal(set) var accuracyScore: Double?
-    public internal(set) var totalSamples: Int = 0
-
+    // MARK: - Properties
+    
+    public let geoKey: String
+    public let filename: String
+    
+    public let depth: Int
+    public let latitudeMin: Double
+    public let latitudeMax: Double
+    public let longitudeMin: Double
+    public let longitudeMax: Double
+    
+    public var lastUpdated: Date?
+    public var accuracyScore: Double?
+    public var totalSamples: Int = 0
     public var needsUpdate = false
 
-    // MARK: - Fetching
+    // MARK: - Computed Properties
+    
+    public var id: String { geoKey }
+    
+    public var latitudeRange: ClosedRange<Double> { latitudeMin...latitudeMax }
+    public var longitudeRange: ClosedRange<Double> { longitudeMin...longitudeMax }
+    
+    public var latitudeWidth: Double { return latitudeMax - latitudeMin }
+    public var longitudeWidth: Double { return longitudeMax - longitudeMin }
 
-    public static func fetchModelFor(coordinate: CLLocationCoordinate2D, depth: Int) -> ActivityTypesModel {
-        var request = ActivityTypesModel
-            .filter(Column("depth") == depth)
-        if depth > 0 {
-            request = request
-                .filter(Column("latitudeMin") <= coordinate.latitude && Column("latitudeMax") >= coordinate.latitude)
-                .filter(Column("longitudeMin") <= coordinate.longitude && Column("longitudeMax") >= coordinate.longitude)
-        }
-
-        if let model = try? Database.pool.read({ try request.fetchOne($0) }) {
-
-            // TODO: this shouldn't be here
-            if model.needsUpdate {
-                let geoKey = model.geoKey
-                Task { await CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
-            }
-
-            return model
-        }
-
-        // create if missing
-        let model = ActivityTypesModel(coordinate: coordinate, depth: depth)
-        logger.info("New Core ML model: [\(model.geoKey)]", subsystem: .activitytypes)
-        model.needsUpdate = true
-        model.save()
-
-        // fire it off for update
-        let geoKey = model.geoKey
-        Task { await CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
-
-        return model
+    public var centerCoordinate: CLLocationCoordinate2D {
+        return Self.centerFrom(latMin: latitudeMin, latMax: latitudeMax, lonMin: longitudeMin, lonMax: longitudeMax)
+    }
+    
+    public var completenessScore: Double {
+        return min(1.0, Double(totalSamples) / Double(Self.modelMinTrainingSamples[depth]!))
     }
 
-    // MARK: - Init
-
-    internal convenience init(bundledURL: URL) {
+    // MARK: - Initializers
+    
+    public init(
+        geoKey: String, 
+        depth: Int, 
+        latitudeRange: ClosedRange<Double>, 
+        longitudeRange: ClosedRange<Double>, 
+        filename: String? = nil, 
+        needsUpdate: Bool = true,
+        lastUpdated: Date? = nil,
+        accuracyScore: Double? = nil,
+        totalSamples: Int = 0
+    ) {
+        self.geoKey = geoKey
+        self.depth = depth
+        self.latitudeMin = latitudeRange.lowerBound
+        self.latitudeMax = latitudeRange.upperBound
+        self.longitudeMin = longitudeRange.lowerBound
+        self.longitudeMax = longitudeRange.upperBound
+        self.needsUpdate = needsUpdate
+        self.lastUpdated = lastUpdated
+        self.accuracyScore = accuracyScore
+        self.totalSamples = totalSamples
+        
+        if let filename {
+            self.filename = filename
+        } else {
+            let center = Self.centerFrom(latMin: latitudeMin, latMax: latitudeMax, lonMin: longitudeMin, lonMax: longitudeMax)
+            self.filename = Self.inferredFilename(for: geoKey, depth: depth, coordinate: center)
+        }
+    }
+    
+    public init(coordinate: CLLocationCoordinate2D, depth: Int) {
+        let latitudeRange = Self.latitudeRangeFor(depth: depth, coordinate: coordinate)
+        let longitudeRange = Self.longitudeRangeFor(depth: depth, coordinate: coordinate)
+        let geoKey = Self.inferredGeoKey(depth: depth, coordinate: coordinate)
+        
+        self.init(
+            geoKey: geoKey,
+            depth: depth,
+            latitudeRange: latitudeRange,
+            longitudeRange: longitudeRange
+        )
+    }
+    
+    public init(bundledURL: URL) {
         let coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0)
         self.init(
             geoKey: "BD0 0.00,0.00",
@@ -105,93 +127,113 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         )
     }
 
-    internal convenience init(coordinate: CLLocationCoordinate2D, depth: Int) {
-        self.init(
-            depth: depth,
-            latitudeRange: Self.latitudeRangeFor(depth: depth, coordinate: coordinate),
-            longitudeRange: Self.longitudeRangeFor(depth: depth, coordinate: coordinate)
-        )
-    }
-
-    internal init(geoKey: String? = nil, depth: Int, latitudeRange: ClosedRange<Double>, longitudeRange: ClosedRange<Double>, filename: String? = nil, needsUpdate: Bool = true) {
-        self.depth = depth
-        self.latitudeRange = latitudeRange
-        self.longitudeRange = longitudeRange
-        self.needsUpdate = needsUpdate
-
-        super.init()
-
-        self.geoKey = geoKey ?? inferredGeoKey
-        self.filename = filename ?? inferredFilename
-    }
-
-    // MARK: - FetchableRecord
-
-    public required init(row: Row) throws {
-        geoKey = row["geoKey"]
-        depth = row["depth"]
-        latitudeRange = (row["latitudeMin"] as! Double)...(row["latitudeMax"] as! Double)
-        longitudeRange = (row["longitudeMin"] as! Double)...(row["longitudeMax"] as! Double)
-
-        lastUpdated = row["lastUpdated"]
-        needsUpdate = row["needsUpdate"]
-
-        accuracyScore = row["accuracyScore"]
-        totalSamples = row["totalSamples"]
-        filename = row["filename"]
-
-        try super.init(row: row)
-    }
-
-    // MARK: -
-
-    private var inferredGeoKey: String {
-        return String(format: "CD\(depth) %.2f,%.2f", centerCoordinate.latitude, centerCoordinate.longitude)
-    }
-
-    private var inferredFilename: String {
-        return String(format: "CD\(depth)_%.2f_%.2f", centerCoordinate.latitude, centerCoordinate.longitude) + ".mlmodelc"
-    }
-
-    var latitudeWidth: Double { return latitudeRange.upperBound - latitudeRange.lowerBound }
-    var longitudeWidth: Double { return longitudeRange.upperBound - longitudeRange.lowerBound }
-
-    var centerCoordinate: CLLocationCoordinate2D {
-        return CLLocationCoordinate2D(
-            latitude: latitudeRange.lowerBound + latitudeWidth * 0.5,
-            longitude: longitudeRange.lowerBound + longitudeWidth * 0.5
-        )
-    }
-
-    // MARK: - MLModel loading
-
+    // MARK: - Model Fetching
+    
     @ActivityTypesActor
-    private lazy var model: MLModel? = {
-        do {
-            return try MLModel(contentsOf: modelURL)
-        } catch {
-            if !needsUpdate {
-                needsUpdate = true
-                save()
-                print("[\(self.geoKey)] Queued update, because missing model file")
+    public static func fetchModelFor(coordinate: CLLocationCoordinate2D, depth: Int) -> ActivityTypesModel {
+        var request = ActivityTypesModel
+            .filter(Column("depth") == depth)
+        if depth > 0 {
+            request = request
+                .filter(Column("latitudeMin") <= coordinate.latitude && Column("latitudeMax") >= coordinate.latitude)
+                .filter(Column("longitudeMin") <= coordinate.longitude && Column("longitudeMax") >= coordinate.longitude)
+        }
+
+        // try to fetch existing model
+        if let model = try? Database.pool.read({ try request.fetchOne($0) }) {
+            // if model needs update, queue a task to update it
+            if model.needsUpdate {
+                let geoKey = model.geoKey
+                Task { CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
             }
-            return nil
+            return model
         }
-    }()
 
-    public var modelURL: URL {
-        if filename.hasPrefix("B") {
-            return Bundle.main.url(forResource: filename, withExtension: nil)!
+        // create if missing
+        let model = ActivityTypesModel(coordinate: coordinate, depth: depth)
+        logger.info("New Core ML model: [\(model.geoKey)]", subsystem: .activitytypes)
+        
+        // save the new model
+        do {
+            try Database.pool.write { db in
+                try model.insert(db)
+            }
+        } catch {
+            logger.error(error, subsystem: .database)
         }
-        return Self.modelsDir.appendingPathComponent(filename)
+
+        // queue it for update
+        let geoKey = model.geoKey
+        Task { CoreMLModelUpdater.highlander.updateModel(geoKey: geoKey) }
+
+        return model
     }
-
+    
+    // MARK: - Utility Functions
+    
     @ActivityTypesActor
     public func reloadModel() throws {
-        self.model = try MLModel(contentsOf: modelURL)
+        try MLModelCache.reloadModelFor(filename: filename)
+    }
+    
+    public func contains(coordinate: CLLocationCoordinate2D) -> Bool {
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return false }
+        guard coordinate.latitude != 0 || coordinate.longitude != 0 else { return false }
+
+        if !latitudeRange.contains(coordinate.latitude) { return false }
+        if !longitudeRange.contains(coordinate.longitude) { return false }
+
+        return true
+    }
+    
+    // MARK: - Classification
+    
+    @ActivityTypesActor
+    public func classify(_ sample: LocomotionSample) -> ClassifierResults {
+        do {
+            let model = try MLModelCache.modelFor(filename: filename)
+            let input = sample.coreMLFeatureProvider
+            
+            let output = try model.prediction(from: input, options: MLPredictionOptions())
+            return results(for: output)
+            
+        } catch {
+            logger.error(error, subsystem: .activitytypes)
+            return ClassifierResults(resultItems: [])
+        }
+    }
+    
+    private func results(for classifierOutput: MLFeatureProvider) -> ClassifierResults {
+        let scores = classifierOutput.featureValue(for: "confirmedActivityTypeProbability")!.dictionaryValue as! [Int: Double]
+        var items: [ClassifierResultItem] = []
+        for (name, score) in scores {
+            items.append(ClassifierResultItem(name: ActivityType(rawValue: name)!, score: score))
+        }
+        return ClassifierResults(resultItems: items)
+    }
+    
+    // MARK: - Geographic Calculations
+    
+    private static func centerFrom(latMin: Double, latMax: Double, lonMin: Double, lonMax: Double) -> CLLocationCoordinate2D {
+        return CLLocationCoordinate2D(
+            latitude: latMin + (latMax - latMin) * 0.5,
+            longitude: lonMin + (lonMax - lonMin) * 0.5
+        )
+    }
+    
+    private static func inferredGeoKey(depth: Int, coordinate: CLLocationCoordinate2D) -> String {
+        return String(format: "CD\(depth) %.2f,%.2f", coordinate.latitude, coordinate.longitude)
     }
 
-    static func latitudeRangeFor(depth: Int, coordinate: CLLocationCoordinate2D) -> ClosedRange<Double> {
+    private static func inferredFilename(for geoKey: String, depth: Int, centerLat: Double, centerLon: Double) -> String {
+        return String(format: "CD\(depth)_%.2f_%.2f", centerLat, centerLon) + ".mlmodelc"
+    }
+    
+    private static func inferredFilename(for geoKey: String, depth: Int, coordinate: CLLocationCoordinate2D) -> String {
+        return inferredFilename(for: geoKey, depth: depth, centerLat: coordinate.latitude, centerLon: coordinate.longitude)
+    }
+    
+    public static func latitudeRangeFor(depth: Int, coordinate: CLLocationCoordinate2D) -> ClosedRange<Double> {
         switch depth {
         case 2:
             let bucketSize = latitudeBinSizeFor(depth: 1)
@@ -214,7 +256,7 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         }
     }
 
-    static func longitudeRangeFor(depth: Int, coordinate: CLLocationCoordinate2D) -> ClosedRange<Double> {
+    public static func longitudeRangeFor(depth: Int, coordinate: CLLocationCoordinate2D) -> ClosedRange<Double> {
         switch depth {
         case 2:
             let bucketSize = Self.longitudeBinSizeFor(depth: 1)
@@ -237,7 +279,7 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         }
     }
 
-    static func latitudeBinSizeFor(depth: Int) -> Double {
+    public static func latitudeBinSizeFor(depth: Int) -> Double {
         let depth0 = 180.0 / Double(Self.numberOfLatBucketsDepth0)
         let depth1 = depth0 / Double(Self.numberOfLatBucketsDepth1)
         let depth2 = depth1 / Double(Self.numberOfLatBucketsDepth2)
@@ -249,7 +291,7 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         }
     }
 
-    static func longitudeBinSizeFor(depth: Int) -> Double {
+    public static func longitudeBinSizeFor(depth: Int) -> Double {
         let depth0 = 360.0 / Double(Self.numberOfLongBucketsDepth0)
         let depth1 = depth0 / Double(Self.numberOfLongBucketsDepth1)
         let depth2 = depth1 / Double(Self.numberOfLongBucketsDepth2)
@@ -259,92 +301,6 @@ public final class ActivityTypesModel: Record, Hashable, Identifiable {
         case 1: return depth1
         default: return depth0
         }
-    }
-
-    // MARK: - DiscreteClassifier
-
-    @ActivityTypesActor
-    public func classify(_ sample: LocomotionSample) -> ClassifierResults {
-        guard let model else {
-            totalSamples = 0 // if file used to exist, sample count will be wrong and will cause incorrect weighting
-//            print("[\(geoKey)] classify(classifiable:) NO MODEL!")
-            return ClassifierResults(resultItems: [])
-        }
-        let input = sample.coreMLFeatureProvider
-
-        do {
-            let output = try model.prediction(from: input, options: MLPredictionOptions())
-            return results(for: output)
-
-        } catch {
-            logger.error(error, subsystem: .activitytypes)
-            return ClassifierResults(resultItems: [])
-        }
-    }
-
-    public func contains(coordinate: CLLocationCoordinate2D) -> Bool {
-        guard CLLocationCoordinate2DIsValid(coordinate) else { return false }
-        guard coordinate.latitude != 0 || coordinate.longitude != 0 else { return false }
-
-        if !latitudeRange.contains(coordinate.latitude) { return false }
-        if !longitudeRange.contains(coordinate.longitude) { return false }
-
-        return true
-    }
-
-    public var completenessScore: Double {
-        return min(1.0, Double(totalSamples) / Double(Self.modelMinTrainingSamples[depth]!))
-    }
-
-    // MARK: - Core ML classifying
-
-    private func results(for classifierOutput: MLFeatureProvider) -> ClassifierResults {
-        let scores = classifierOutput.featureValue(for: "confirmedActivityTypeProbability")!.dictionaryValue as! [Int: Double]
-        var items: [ClassifierResultItem] = []
-        for (name, score) in scores {
-            items.append(ClassifierResultItem(name: ActivityType(rawValue: name)!, score: score))
-        }
-        return ClassifierResults(resultItems: items)
-    }
-
-    // MARK: - Saving
-
-    public func save() {
-        if geoKey.hasPrefix("B") { return }
-        do {
-            try Database.pool.write { try self.save($0) }
-        } catch {
-            logger.error(error, subsystem: .database)
-        }
-    }
-
-    // MARK: - PersistableRecord
-
-    public static override var databaseTableName: String { return "ActivityTypesModel" }
-
-    public override func encode(to container: inout PersistenceContainer) {
-        container["geoKey"] = geoKey
-        container["depth"] = depth
-        container["lastUpdated"] = lastUpdated
-        container["needsUpdate"] = needsUpdate
-        container["totalSamples"] = totalSamples
-        container["accuracyScore"] = accuracyScore
-        container["filename"] = filename
-
-        container["latitudeMin"] = latitudeRange.lowerBound
-        container["latitudeMax"] = latitudeRange.upperBound
-        container["longitudeMin"] = longitudeRange.lowerBound
-        container["longitudeMax"] = longitudeRange.upperBound
-    }
-
-    // MARK: - Hashable
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(geoKey)
-    }
-
-    public static func ==(lhs: ActivityTypesModel, rhs: ActivityTypesModel) -> Bool {
-        return lhs.hashValue == rhs.hashValue
     }
 
 }
