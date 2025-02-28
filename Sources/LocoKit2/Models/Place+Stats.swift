@@ -13,6 +13,8 @@ extension Place {
     @PlacesActor
     public func updateVisitStats() async {
         do {
+            logger.info("UPDATING: \(name)", subsystem: .places)
+
             let currentItemId = await TimelineRecorder.currentItemId
 
             let visits = try await Database.pool.read { [id] db in
@@ -35,6 +37,7 @@ extension Place {
                         $0.visitDurations = nil
                     }
                 }
+                logger.info("UPDATED: \(name)", subsystem: .places)
                 return
             }
 
@@ -84,6 +87,8 @@ extension Place {
                     
                     Task { await mutableSelf.updateRTree() }
                 }
+
+                logger.info("UPDATED: \(name)", subsystem: .places)
             }
 
         } catch {

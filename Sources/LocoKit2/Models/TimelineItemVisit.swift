@@ -105,34 +105,35 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
                     $0.setUncertainty(uncertain)
                     $0.customTitle = nil
                 }
-                var mutablePlace = place
-                try mutablePlace.updateChanges(db) {
-                    $0.isStale = true
-                }
-                if let previousPlaceId {
-                    var previousPlace = try Place.fetchOne(db, id: previousPlaceId)
-                    try previousPlace?.updateChanges(db) {
-                        $0.isStale = true
-                    }
-                }
             }
 
-            // update stats for the new place
-            Task { await place.updateVisitStats() }
+            Task {
+                await place.markStale()
 
-            // update stats for the previous place if there was one
-            if let previousPlaceId {
-                Task {
+                // only update immediately if user-confirmed and visit count is low
+                if confirm && place.visitCount < 30 {
+                    await place.updateVisitStats()
+                }
+                
+                if let previousPlaceId {
                     do {
                         let previousPlace = try await Database.pool.read { try Place.fetchOne($0, id: previousPlaceId) }
-                        await previousPlace?.updateVisitStats()
+                        if let previousPlace {
+                            await previousPlace.markStale()
+                            
+                            // same immediate update criteria for previous place
+                            if confirm && previousPlace.visitCount < 30 {
+                                await previousPlace.updateVisitStats()
+                            }
+                        }
+
                     } catch {
                         logger.error(error, subsystem: .database)
                     }
                 }
             }
 
-            // Process timeline changes after place assignment
+            // process timeline changes after place assignment
             await TimelineProcessor.processFrom(itemId: itemId)
 
         } catch {

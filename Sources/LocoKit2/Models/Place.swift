@@ -123,6 +123,22 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         return false
     }
 
+    // MARK: - Update Management
+    
+    @PlacesActor
+    public func markStale() async {
+        do {
+            try await Database.pool.write { db in
+                var mutableSelf = self
+                try mutableSelf.updateChanges(db) {
+                    $0.isStale = true
+                }
+            }
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
+    }
+    
     // MARK: - RTree
 
     public func updateRTree() async {
