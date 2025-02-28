@@ -92,7 +92,7 @@ extension TimelineItem {
                 }
 
                 // queue updates for the ML models
-                await CoreMLModelUpdater.queueUpdatesForModelsContaining(changedSamples)
+                await ActivityTypesManager.queueUpdatesForModelsContaining(changedSamples)
 
             } catch {
                 logger.error(error, subsystem: .database)
@@ -145,7 +145,7 @@ extension TimelineItem {
             }
 
             if !updatedSamples.isEmpty {
-                await CoreMLModelUpdater.queueUpdatesForModelsContaining(updatedSamples)
+                await ActivityTypesManager.queueUpdatesForModelsContaining(updatedSamples)
             }
 
         } catch {
@@ -185,7 +185,7 @@ extension TimelineItem {
             }
 
             if !updatedSamples.isEmpty {
-                await CoreMLModelUpdater.queueUpdatesForModelsContaining(updatedSamples)
+                await ActivityTypesManager.queueUpdatesForModelsContaining(updatedSamples)
             }
 
         } catch {

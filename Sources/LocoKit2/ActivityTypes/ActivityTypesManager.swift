@@ -1,5 +1,5 @@
 //
-//  CoreMLModelUpdater.swift
+//  ActivityTypesManager.swift
 //  
 //
 //  Created by Matt Greenfield on 5/11/22.
@@ -16,7 +16,7 @@ import CreateML
 #endif
 
 @ActivityTypesActor
-public enum CoreMLModelUpdater {
+public enum ActivityTypesManager {
 
     // MARK: - Queueing Model Updates
 
