@@ -243,7 +243,7 @@ public enum ActivityTypesManager {
 
             try model.reloadModel()
 
-            ActivityClassifier.highlander.invalidateModel(geoKey: model.geoKey)
+            ActivityClassifier.invalidateModel(geoKey: model.geoKey)
 
         } catch {
             logger.error(error, subsystem: .activitytypes)

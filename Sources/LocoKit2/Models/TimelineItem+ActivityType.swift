@@ -11,7 +11,7 @@ extension TimelineItem {
 
     public mutating func classifySamples() async {
         guard let samples else { return }
-        guard let results = await ActivityClassifier.highlander.results(for: samples) else { return }
+        guard let results = await ActivityClassifier.results(for: samples) else { return }
         let trip = self.trip
 
         do {

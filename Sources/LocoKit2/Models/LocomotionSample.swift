@@ -154,7 +154,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     public var classifierResults: ClassifierResults? {
         get async {
-            return await ActivityClassifier.highlander.results(for: self)
+            return await ActivityClassifier.results(for: self)
         }
     }
 

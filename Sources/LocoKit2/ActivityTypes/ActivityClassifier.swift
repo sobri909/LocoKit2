@@ -13,20 +13,18 @@ import Surge
 import GRDB
 
 @ActivityTypesActor
-public final class ActivityClassifier {
-
-    public static let highlander = ActivityClassifier()
-
+public enum ActivityClassifier {
+    
     // MARK: - Classifying
 
-    public func canClassify(_ coordinate: CLLocationCoordinate2D? = nil) -> Bool {
+    public static func canClassify(_ coordinate: CLLocationCoordinate2D? = nil) -> Bool {
         if let coordinate {
             refreshModels(for: coordinate)
         }
         return !models.isEmpty
     }
 
-    public func results(for sample: LocomotionSample) async -> ClassifierResults? {
+    public static func results(for sample: LocomotionSample) async -> ClassifierResults? {
         if let cached = cache.object(forKey: sample.id as NSString) {
             return cached
         }
@@ -80,7 +78,7 @@ public final class ActivityClassifier {
         return combinedResults
     }
 
-    public func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) async -> (combinedResults: ClassifierResults?, perSampleResults: [String: ClassifierResults])? {
+    public static func results(for samples: [LocomotionSample], timeout: TimeInterval? = nil) async -> (combinedResults: ClassifierResults?, perSampleResults: [String: ClassifierResults])? {
         if samples.isEmpty { return nil }
 
         // no Core ML in background plz
@@ -132,17 +130,17 @@ public final class ActivityClassifier {
 
     // MARK: - Results caching
 
-    private let cache = NSCache<NSString, ClassifierResults>()
+    private static let cache = NSCache<NSString, ClassifierResults>()
 
-    private func set(results: ClassifierResults, sampleId: String) {
+    private static func set(results: ClassifierResults, sampleId: String) {
         cache.setObject(results, forKey: sampleId as NSString)
     }
 
     // MARK: - Fetching models
 
-    public private(set) var models: [Int: ActivityTypesModel] = [:] // index = priority
+    public private(set) static var models: [Int: ActivityTypesModel] = [:] // index = priority
 
-    private func refreshModels(for coordinate: CLLocationCoordinate2D) {
+    private static func refreshModels(for coordinate: CLLocationCoordinate2D) {
         var updated = models.filter { (key, classifier) in
             return classifier.contains(coordinate: coordinate)
         }
@@ -176,7 +174,7 @@ public final class ActivityClassifier {
         models = updated
     }
 
-    public func invalidateModel(geoKey: String) {
+    public static func invalidateModel(geoKey: String) {
         if let model = models.first(where: { $0.value.geoKey == geoKey })?.value {
             MLModelCache.invalidateModelFor(filename: model.filename)
         }
