@@ -10,7 +10,7 @@ import CoreLocation
 import GRDB
 
 @TimelineActor
-public final class TimelineProcessor {
+public enum TimelineProcessor {
 
     public static var debugLogging = false
 
@@ -84,8 +84,6 @@ public final class TimelineProcessor {
         }
     }
 
-    private init() {}
-
     private static func processingList(fromItemId: String) async throws -> TimelineLinkedList? {
         guard let list = await TimelineLinkedList(fromItemId: fromItemId) else { return nil }
         guard let seedItem = list.seedItem else { return nil }
@@ -108,4 +106,5 @@ public final class TimelineProcessor {
 
         return list
     }
+    
 }
