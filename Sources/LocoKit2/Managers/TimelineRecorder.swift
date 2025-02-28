@@ -9,15 +9,15 @@ import Foundation
 import GRDB
 
 @TimelineActor
-public final class TimelineRecorder {
+public enum TimelineRecorder {
 
-    public static let highlander = TimelineRecorder()
+    public static var legacyDbMode = false
 
-    // MARK: - Public
+    public static func startup() {
+        Database.pool.add(transactionObserver: TimelineObserver.highlander)
+    }
 
-    public var legacyDbMode = false
-
-    public func startRecording() {
+    public static func startRecording() {
         startWatchingLoco()
         Task {
             await loco.startRecording()
@@ -25,12 +25,12 @@ public final class TimelineRecorder {
         }
     }
 
-    public func stopRecording() async {
+    public static func stopRecording() async {
         await loco.stopRecording()
         await stopFallbackSampleTimer()
     }
 
-    public var isRecording: Bool {
+    public static var isRecording: Bool {
         get async {
             return await loco.recordingState != .off
         }
@@ -38,13 +38,13 @@ public final class TimelineRecorder {
 
     // MARK: -
 
-    public private(set) var currentItemId: String? {
+    public static private(set) var currentItemId: String? {
         didSet {
             Task { await loco.appGroup?.save() }
         }
     }
 
-    public func currentItem(includeSamples: Bool = false, includePlaces: Bool = false) -> TimelineItem? {
+    public static func currentItem(includeSamples: Bool = false, includePlaces: Bool = false) -> TimelineItem? {
         do {
             let item = try Database.pool.read {
                 try TimelineItem
@@ -68,9 +68,9 @@ public final class TimelineRecorder {
         return nil
     }
 
-    public private(set) var latestSampleId: String?
+    public static private(set) var latestSampleId: String?
 
-    public func latestSample() -> LocomotionSample? {
+    public static func latestSample() -> LocomotionSample? {
         guard let latestSampleId else { return nil }
         return try? Database.pool.read {
             try LocomotionSample.fetchOne($0, id: latestSampleId)
@@ -79,20 +79,20 @@ public final class TimelineRecorder {
 
     // MARK: -
 
-    public private(set) var currentLegacyItemId: String? {
+    public static private(set) var currentLegacyItemId: String? {
         didSet {
             Task { await loco.appGroup?.save() }
         }
     }
 
-    public func currentLegacyItem() -> LegacyItem? {
+    public static func currentLegacyItem() -> LegacyItem? {
         guard let currentLegacyItemId else { return nil }
         return try? Database.legacyPool?.read { try LegacyItem.fetchOne($0, id: currentLegacyItemId) }
     }
 
-    public private(set) var latestLegacySampleId: String?
+    public static private(set) var latestLegacySampleId: String?
 
-    public var latestLegacySample: LegacySample? {
+    public static var latestLegacySample: LegacySample? {
         guard let latestLegacySampleId else { return nil }
         return try? Database.pool.read {
             try LegacySample.fetchOne($0, id: latestLegacySampleId)
@@ -101,15 +101,11 @@ public final class TimelineRecorder {
 
     // MARK: - Private
 
-    private init() {
-        Database.pool.add(transactionObserver: TimelineObserver.highlander)
-    }
+    private static let loco = LocomotionManager.highlander
 
-    private let loco = LocomotionManager.highlander
+    private static var watchingLoco = false
 
-    private var watchingLoco = false
-
-    private func startWatchingLoco() {
+    private static func startWatchingLoco() {
         if watchingLoco { return }
         watchingLoco = true
         
@@ -134,7 +130,7 @@ public final class TimelineRecorder {
         }
     }
 
-    public func updateCurrentItemId() {
+    public static func updateCurrentItemId() {
         if legacyDbMode {
             updateCurrentLegacyItemId()
             return
@@ -149,7 +145,7 @@ public final class TimelineRecorder {
         }
     }
 
-    private func updateCurrentLegacyItemId() {
+    private static func updateCurrentLegacyItemId() {
         currentLegacyItemId = try? Database.legacyPool?.read {
             try LegacyItem
                 .filter(Column("deleted") == false && Column("disabled") == false)
@@ -159,12 +155,12 @@ public final class TimelineRecorder {
         }
     }
 
-    private var previousRecordingState: RecordingState?
-    private var recordingEnded: Date?
+    private static var previousRecordingState: RecordingState?
+    private static var recordingEnded: Date?
 
     // MARK: -
 
-    private func recordingStateChanged(_ recordingState: RecordingState) async {
+    private static func recordingStateChanged(_ recordingState: RecordingState) async {
         // we're only here for changes
         if recordingState == previousRecordingState {
             return
@@ -203,7 +199,7 @@ public final class TimelineRecorder {
         }
     }
 
-    private func updateSleepCycleDuration(_ recordingState: RecordingState) async {
+    private static func updateSleepCycleDuration(_ recordingState: RecordingState) async {
         // ensure sleep cycles are short for when sleeping next starts
         if recordingState == .recording {
             await loco.setSleepCycleDuration(6)
@@ -242,7 +238,7 @@ public final class TimelineRecorder {
         }
     }
 
-    private func updateSleepCycleDurationFallback() async {
+    private static func updateSleepCycleDurationFallback() async {
         guard let recordingEnded else {
             await loco.setSleepCycleDuration(6)
             return
@@ -258,7 +254,7 @@ public final class TimelineRecorder {
         }
     }
 
-    var canStartSleeping: Bool {
+    static var canStartSleeping: Bool {
         get async {
             guard let currentItem = currentItem() else {
                 return false
@@ -276,9 +272,9 @@ public final class TimelineRecorder {
 
     // MARK: - Sample recording
 
-    private var lastRecordSampleCall: Date?
+    private static var lastRecordSampleCall: Date?
 
-    private func recordSample() async {
+    private static func recordSample() async {
         guard await isRecording else { return }
 
         // minimum 1 second between samples plz
@@ -305,7 +301,7 @@ public final class TimelineRecorder {
         latestSampleId = sample.id
     }
 
-    private func processSample(_ sample: LocomotionSample) async {
+    private static func processSample(_ sample: LocomotionSample) async {
 
         /** first timeline item **/
         guard let workingItem = currentItem() else {
@@ -337,7 +333,7 @@ public final class TimelineRecorder {
         }
     }
 
-    private func createTimelineItem(from sample: LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
+    private static func createTimelineItem(from sample: LocomotionSample, previousItemId: String? = nil) async -> TimelineItemBase {
         var newItem = TimelineItemBase(from: sample)
 
         // keep the list linked
@@ -374,37 +370,36 @@ public final class TimelineRecorder {
 
     // MARK: - Fallback sample recording
 
-    private let fallbackSampleDuration: TimeInterval = 60
+    @MainActor
+    private static let fallbackSampleDuration: TimeInterval = 60
 
     @MainActor
-    private var fallbackSampleTimer: Timer?
+    private static var fallbackSampleTimer: Timer?
 
     @MainActor
-    private func startFallbackSampleTimer() {
+    private static func startFallbackSampleTimer() {
         fallbackSampleTimer?.invalidate()
-        fallbackSampleTimer = Timer.scheduledTimer(withTimeInterval: fallbackSampleDuration, repeats: false) { [weak self] _ in
-            if let self {
-                Task {
-                    // only record if we haven't had a sample in a while
-                    if let latestSample = await self.latestSample(),
-                       latestSample.date.age > self.loco.fallbackUpdateDuration {
-                        await self.recordSample()
-                    }
-                    await self.startFallbackSampleTimer()
+        fallbackSampleTimer = Timer.scheduledTimer(withTimeInterval: fallbackSampleDuration, repeats: false) { _ in
+            Task {
+                // only record if we haven't had a sample in a while
+                if let latestSample = await Self.latestSample(),
+                   await latestSample.date.age > Self.loco.fallbackUpdateDuration {
+                    await Self.recordSample()
                 }
+                await Self.startFallbackSampleTimer()
             }
         }
     }
 
     @MainActor
-    private func stopFallbackSampleTimer() {
+    private static func stopFallbackSampleTimer() {
         fallbackSampleTimer?.invalidate()
         fallbackSampleTimer = nil
     }
 
     // MARK: - Legacy db recording
 
-    private func recordLegacySample() async {
+    private static func recordLegacySample() async {
         guard await isRecording else { return }
 
         // minimum 1 second between samples plz
@@ -428,7 +423,7 @@ public final class TimelineRecorder {
         latestLegacySampleId = sample.id
     }
 
-    private func processLegacySample(_ sample: inout LegacySample) async {
+    private static func processLegacySample(_ sample: inout LegacySample) async {
 
         /** first timeline item **/
         guard let workingItem = currentLegacyItem() else {
@@ -460,7 +455,7 @@ public final class TimelineRecorder {
         }
     }
 
-    private func createLegacyTimelineItem(from sample: inout LegacySample, previousItemId: String? = nil) async -> LegacyItem {
+    private static func createLegacyTimelineItem(from sample: inout LegacySample, previousItemId: String? = nil) async -> LegacyItem {
         var newItem = LegacyItem(from: sample)
 
         // assign the sample

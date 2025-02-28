@@ -69,7 +69,7 @@ public enum TimelineProcessor {
                 lastResult = await winningMerge.doIt()
 
                 // might've deleted current item
-                TimelineRecorder.highlander.updateCurrentItemId()
+                TimelineRecorder.updateCurrentItemId()
 
                 if let lastResult {
                     list.invalidate(itemId: lastResult.kept.id)

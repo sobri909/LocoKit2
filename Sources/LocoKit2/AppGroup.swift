@@ -114,11 +114,10 @@ public final class AppGroup: @unchecked Sendable {
 
     var currentAppState: AppState {
         get async {
-            let timeline = await TimelineRecorder.highlander
             return await AppState(
                 appName: thisApp,
                 recordingStateString: loco.recordingState.stringValue,
-                currentItemId: timeline.legacyDbMode ? timeline.currentLegacyItemId : timeline.currentItemId
+                currentItemId: TimelineRecorder.legacyDbMode ? TimelineRecorder.currentLegacyItemId : TimelineRecorder.currentItemId
             )
         }
     }
@@ -179,7 +178,7 @@ public final class AppGroup: @unchecked Sendable {
         } else if let currentItemId = currentRecorder?.currentItemId, await currentAppState.currentItemId != currentItemId {
             let appState = await currentAppState
             logger.debug("Local currentItemId is stale (mine: \(appState.currentItemId ?? "nil"), theirs: \(currentItemId))")
-            await TimelineRecorder.highlander.updateCurrentItemId()
+            await TimelineRecorder.updateCurrentItemId()
         }
     }
 

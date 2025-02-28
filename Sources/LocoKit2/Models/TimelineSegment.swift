@@ -135,7 +135,7 @@ public final class TimelineSegment: Sendable {
     }
 
     private func processItems(_ newItems: [TimelineItem], oldItems: [TimelineItem]) async {
-        let currentItemId = await TimelineRecorder.highlander.currentItemId
+        let currentItemId = await TimelineRecorder.currentItemId
 
         // don't reprocess if currentItem is in segment and isn't a keeper
         if let currentItemId, let currentItem = newItems.first(where: { $0.id == currentItemId }) {

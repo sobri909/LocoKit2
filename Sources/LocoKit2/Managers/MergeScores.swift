@@ -35,7 +35,7 @@ public final class MergeScores {
         if consumer.source != consumee.source { return .impossible }
 
         // if consumee is currentItem and not a keeper, no merge allowed
-        if consumee.id == TimelineRecorder.highlander.currentItemId {
+        if consumee.id == TimelineRecorder.currentItemId {
             do {
                 if try !consumee.isWorthKeeping {
                     return .impossible

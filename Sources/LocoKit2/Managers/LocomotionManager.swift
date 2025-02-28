@@ -323,7 +323,7 @@ public final class LocomotionManager: @unchecked Sendable {
                 startStandby()
 
             } else if sleepState.shouldBeSleeping {
-                if await TimelineRecorder.highlander.canStartSleeping {
+                if await TimelineRecorder.canStartSleeping {
                     startSleeping()
                 } else {
                     restartTheFallbackTimer()
@@ -343,7 +343,7 @@ public final class LocomotionManager: @unchecked Sendable {
         case .sleeping, .deepSleeping:
             if let appGroup, await appGroup.isAnActiveRecorder, !appGroup.shouldBeTheRecorder {
                 startStandby()
-            } else if !(await TimelineRecorder.highlander.canStartSleeping) {
+            } else if !(await TimelineRecorder.canStartSleeping) {
                 startRecording()
             }
 

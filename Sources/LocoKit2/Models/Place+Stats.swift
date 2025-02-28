@@ -13,7 +13,7 @@ extension Place {
     @PlacesActor
     public func updateVisitStats() async {
         do {
-            let currentItemId = await TimelineRecorder.highlander.currentItemId
+            let currentItemId = await TimelineRecorder.currentItemId
 
             let visits = try await Database.pool.read { [id] db in
                 try TimelineItem
