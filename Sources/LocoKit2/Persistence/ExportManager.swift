@@ -9,39 +9,38 @@ import Foundation
 import GRDB
 
 @PersistenceActor
-public final class ExportManager {
+public enum ExportManager {
     public static let schemaVersion = "2.0.0"
-    public static let highlander = ExportManager()
 
-    private(set) var exportInProgress = false
+    private(set) static var exportInProgress = false
 
     // MARK: - Export paths
 
-    private var currentExportURL: URL?
+    private static var currentExportURL: URL?
 
-    private var metadataURL: URL? {
+    private static var metadataURL: URL? {
         guard let currentExportURL else { return nil }
         return currentExportURL.appendingPathComponent("metadata.json")
     }
 
-    private var placesURL: URL? {
+    private static var placesURL: URL? {
         guard let currentExportURL else { return nil }
         return currentExportURL.appendingPathComponent("places", isDirectory: true)
     }
 
-    private var itemsURL: URL? {
+    private static var itemsURL: URL? {
         guard let currentExportURL else { return nil }
         return currentExportURL.appendingPathComponent("items", isDirectory: true)
     }
 
-    private var samplesURL: URL? {
+    private static var samplesURL: URL? {
         guard let currentExportURL else { return nil }
         return currentExportURL.appendingPathComponent("samples", isDirectory: true)
     }
 
     // MARK: - Export process
 
-    public func startExport() async throws {
+    public static func startExport() async throws {
         guard !exportInProgress else {
             throw PersistenceError.exportInProgress
         }
@@ -91,7 +90,7 @@ public final class ExportManager {
 
     // MARK: - Metadata
 
-    private func writeInitialMetadata() async throws {
+    private static func writeInitialMetadata() async throws {
         guard let metadataURL else {
             throw PersistenceError.exportNotInitialised
         }
@@ -130,7 +129,7 @@ public final class ExportManager {
 
     // MARK: - Places
 
-    private func exportPlaces() async throws {
+    private static func exportPlaces() async throws {
         guard let placesURL else {
             throw PersistenceError.exportNotInitialised
         }
@@ -166,7 +165,7 @@ public final class ExportManager {
 
     // MARK: - Items
 
-    private func exportItems() async throws {
+    private static func exportItems() async throws {
         guard let itemsURL else {
             throw PersistenceError.exportNotInitialised
         }
@@ -208,7 +207,7 @@ public final class ExportManager {
         try await exportSamples()
     }
 
-    private func exportSamples() async throws {
+    private static func exportSamples() async throws {
         guard let samplesURL else {
             throw PersistenceError.exportNotInitialised
         }
@@ -252,7 +251,7 @@ public final class ExportManager {
 
     // MARK: - Error handling
 
-    private func finaliseMetadata(placesCompleted: Bool = false, itemsCompleted: Bool = false, samplesCompleted: Bool = false) throws {
+    private static func finaliseMetadata(placesCompleted: Bool = false, itemsCompleted: Bool = false, samplesCompleted: Bool = false) throws {
         guard let metadataURL else {
             throw PersistenceError.exportNotInitialised
         }
@@ -283,7 +282,7 @@ public final class ExportManager {
         try updatedData.write(to: metadataURL)
     }
 
-    private func cleanupFailedExport() {
+    private static func cleanupFailedExport() {
         // Leave completion flags as-is but ensure finish time is set
         try? finaliseMetadata()
 

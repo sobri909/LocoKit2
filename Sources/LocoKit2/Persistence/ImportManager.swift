@@ -9,16 +9,15 @@ import Foundation
 import GRDB
 
 @PersistenceActor
-public final class ImportManager {
-    public static let highlander = ImportManager()
-    
-    private(set) var importInProgress = false
-    private var importURL: URL?
-    private var bookmarkData: Data?
+public enum ImportManager {
+
+    private(set) static var importInProgress = false
+    private static var importURL: URL?
+    private static var bookmarkData: Data?
     
     // MARK: - Import process
     
-    public func startImport(withBookmark bookmark: Data) async throws {
+    public static func startImport(withBookmark bookmark: Data) async throws {
         guard !importInProgress else {
             throw PersistenceError.importInProgress
         }
@@ -55,7 +54,7 @@ public final class ImportManager {
         }
     }
     
-    private func validateImportDirectory() async throws {
+    private static func validateImportDirectory() async throws {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
         }
@@ -82,7 +81,7 @@ public final class ImportManager {
         }
     }
 
-    private func readImportMetadata(from metadataURL: URL) async throws -> ExportMetadata {
+    private static func readImportMetadata(from metadataURL: URL) async throws -> ExportMetadata {
         let coordinator = NSFileCoordinator()
         var coordError: NSError?
         var metadata: ExportMetadata?
@@ -110,7 +109,7 @@ public final class ImportManager {
 
     // MARK: - Places
 
-    private func importPlaces() async throws {
+    private static func importPlaces() async throws {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
         }
@@ -153,7 +152,7 @@ public final class ImportManager {
 
     // MARK: - Items
 
-    private func importTimelineItems() async throws {
+    private static func importTimelineItems() async throws {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
         }
@@ -217,7 +216,7 @@ public final class ImportManager {
         }
     }
 
-    private func restoreEdgeRelationships() async throws {
+    private static func restoreEdgeRelationships() async throws {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
         }
@@ -250,7 +249,7 @@ public final class ImportManager {
         try? FileManager.default.removeItem(at: edgesURL)
     }
 
-    private func loadEdgeRecords(from url: URL) async throws -> [EdgeRecord] {
+    private static func loadEdgeRecords(from url: URL) async throws -> [EdgeRecord] {
         var records: [EdgeRecord] = []
         
         // Read JSONL file line by line to avoid loading entire file into memory
@@ -269,7 +268,7 @@ public final class ImportManager {
 
     // MARK: - Samples
 
-    private func importSamples() async throws {
+    private static func importSamples() async throws {
         guard let importURL else {
             throw PersistenceError.importNotInitialised
         }
@@ -336,7 +335,7 @@ public final class ImportManager {
     
     // MARK: - Cleanup
 
-    private func cleanupSuccessfulImport() {
+    private static func cleanupSuccessfulImport() {
         if let importURL {
             importURL.stopAccessingSecurityScopedResource()
         }
@@ -345,7 +344,7 @@ public final class ImportManager {
         bookmarkData = nil
     }
 
-    private func cleanupFailedImport() {
+    private static func cleanupFailedImport() {
         if let importURL {
             importURL.stopAccessingSecurityScopedResource()
             
