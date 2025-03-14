@@ -141,10 +141,16 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
 
         // try to fetch existing model
         if let model = try? Database.pool.read({ try request.fetchOne($0) }) {
-            // if model needs update, queue a task to update it
+            // if model needs update, decide whether to update immediately or defer to background task
             if model.needsUpdate {
                 let geoKey = model.geoKey
-                Task { ActivityTypesManager.updateModel(geoKey: geoKey) }
+                
+                // update incomplete D2 models immediately
+                let shouldUpdateImmediately = model.depth == 2 && model.completenessScore < 1.0
+                
+                if shouldUpdateImmediately {
+                    Task { ActivityTypesManager.updateModel(geoKey: geoKey) }
+                }
             }
             return model
         }
@@ -162,7 +168,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
             logger.error(error, subsystem: .database)
         }
 
-        // queue it for update
+        // always update new models immediately to ensure model files exist
         let geoKey = model.geoKey
         Task { ActivityTypesManager.updateModel(geoKey: geoKey) }
 

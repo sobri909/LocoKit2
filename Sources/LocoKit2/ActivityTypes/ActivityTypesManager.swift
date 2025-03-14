@@ -17,6 +17,11 @@ import CreateML
 
 @ActivityTypesActor
 public enum ActivityTypesManager {
+    
+    // MARK: - Task Configuration
+
+    nonisolated
+    public static let taskIdentifier = "com.bigpaua.Arc.activityTypeModelUpdates"
 
     // MARK: - Queueing Model Updates
 
@@ -58,7 +63,7 @@ public enum ActivityTypesManager {
     @MainActor
     public static func registerModelUpdatesTask() {
         let taskDefinition = TaskDefinition(
-            identifier: "com.bigpaua.Arc.modelUpdates",
+            identifier: taskIdentifier,
             minimumDelay: .hours(1),
             requiresNetwork: false,
             requiresPower: true,
