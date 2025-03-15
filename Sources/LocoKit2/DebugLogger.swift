@@ -113,10 +113,11 @@ public final class DebugLogger: LoggingFormatAndPipe.Pipe, @unchecked Sendable {
             } else {
                 DebugLogger.highlander.fibn = 1
             }
+            let timestamp = self.timestampFormatter.string(from: .now)
             if level == .error {
-                return String(format: "[%@] [ERROR] \(message)", self.timestampFormatter.string(from: Date()))
+                return "[\(timestamp)] [ERROR] \(message)"
             }
-            return String(format: "[%@] \(message)", self.timestampFormatter.string(from: Date()))
+            return "[\(timestamp)] \(message)"
         }
     }
 
