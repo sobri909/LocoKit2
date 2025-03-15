@@ -199,10 +199,16 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
         do {
             let model = try MLModelCache.modelFor(filename: filename)
             let input = sample.coreMLFeatureProvider
-            
             let output = try model.prediction(from: input, options: MLPredictionOptions())
             return results(for: output)
-            
+
+        } catch let error as MLModelError {
+            // ignore .io errors since it's probably a missing file, which is fine
+            if error.code != .io {
+                logger.error(error, subsystem: .activitytypes)
+            }
+            return ClassifierResults(resultItems: [])
+
         } catch {
             logger.error(error, subsystem: .activitytypes)
             return ClassifierResults(resultItems: [])
