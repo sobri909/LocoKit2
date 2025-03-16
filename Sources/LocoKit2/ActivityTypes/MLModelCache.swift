@@ -17,16 +17,30 @@ public enum MLModelCache {
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("MLModels", isDirectory: true)
     }()
-    
-    public static func modelFor(filename: String) throws -> MLModel {
+
+    @discardableResult
+    public static func modelFor(filename: String) throws -> MLModel? {
         if let cachedModel = loadedModels[filename] {
             return cachedModel
         }
         
-        let modelURL = getModelURLFor(filename: filename)
-        let newModel = try MLModel(contentsOf: modelURL)
-        loadedModels[filename] = newModel
-        return newModel
+        do {
+            let modelURL = getModelURLFor(filename: filename)
+            let newModel = try MLModel(contentsOf: modelURL)
+            loadedModels[filename] = newModel
+            return newModel
+
+        } catch let error as MLModelError {
+            let isMissingModelFile = (error as NSError).localizedDescription.contains(".mlmodelc") &&
+                (error.code == .io || error.code == .generic)
+
+            // "file not found" errors are just noise
+            if isMissingModelFile {
+                return nil
+            }
+            
+            throw error
+        }
     }
     
     public static func getModelURLFor(filename: String) -> URL {
@@ -41,7 +55,7 @@ public enum MLModelCache {
     }
     
     public static func reloadModelFor(filename: String) throws {
-        let modelURL = getModelURLFor(filename: filename)
-        loadedModels[filename] = try MLModel(contentsOf: modelURL)
+        invalidateModelFor(filename: filename)
+        try modelFor(filename: filename)
     }
 }
