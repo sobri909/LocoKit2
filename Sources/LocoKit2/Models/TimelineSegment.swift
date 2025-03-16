@@ -81,6 +81,9 @@ public final class TimelineSegment: Sendable {
             }
             await update(from: items)
 
+        } catch is CancellationError {
+            // CancellationError is fine here; can ignore
+
         } catch {
             logger.error(error, subsystem: .database)
         }
