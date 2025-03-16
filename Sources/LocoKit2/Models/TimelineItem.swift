@@ -320,7 +320,8 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         base.samplesChanged = false
 
         do {
-            try await Database.pool.write { [base, visit, trip] db in
+            // uncancellableWrite, because cancellation here would be bad
+            try await Database.pool.uncancellableWrite { [base, visit, trip] db in
                 try base.updateChanges(db, from: oldBase)
                 if let oldVisit {
                     try visit?.updateChanges(db, from: oldVisit)
