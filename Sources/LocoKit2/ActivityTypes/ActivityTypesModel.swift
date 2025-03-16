@@ -149,6 +149,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
                 let shouldUpdateImmediately = model.depth == 2 && model.completenessScore < 1.0
                 
                 if shouldUpdateImmediately {
+                    print("IMMEDIATE UPDATE: [\(model.geoKey)] depth: \(model.depth), completeness: \(String(format: "%.2f", model.completenessScore))")
                     Task { ActivityTypesManager.updateModel(geoKey: geoKey) }
                 }
             }
