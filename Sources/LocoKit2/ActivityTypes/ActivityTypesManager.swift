@@ -83,9 +83,7 @@ public enum ActivityTypesManager {
             // no more models to update? we're done
             guard let model else { return }
             
-            logger.info("UPDATING MODEL: \(model.geoKey)", subsystem: .activitytypes)
             updateModel(geoKey: model.geoKey)
-            logger.info("UPDATED MODEL: \(model.geoKey)", subsystem: .activitytypes)
         }
     }
     

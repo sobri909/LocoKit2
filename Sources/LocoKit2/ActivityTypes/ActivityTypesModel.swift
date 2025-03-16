@@ -157,7 +157,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
 
         // create if missing
         let model = ActivityTypesModel(coordinate: coordinate, depth: depth)
-        logger.info("New Core ML model: [\(model.geoKey)]", subsystem: .activitytypes)
+        logger.info("NEW MODEL: [\(model.geoKey)]", subsystem: .activitytypes)
         
         // save the new model
         do {
