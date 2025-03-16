@@ -263,7 +263,8 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
 
         do {
-            let fetchedSamples = try await Database.pool.read { [base] in
+            // use uncancellableRead because leaving an item without samples loaded can be bad
+            let fetchedSamples = try await Database.pool.uncancellableRead { [base] in
                 try base.samples
                     .order(Column("date").asc)
                     .fetchAll($0)
