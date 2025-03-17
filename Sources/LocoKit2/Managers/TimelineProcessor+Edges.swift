@@ -1,5 +1,5 @@
 //
-//  TimelineProcessor+Edges.swift
+//  TimelineProcessor+EdgeHealing.swift
 //  LocoKit2
 //
 //  Created by Matt Greenfield on 30/11/24.
@@ -12,15 +12,7 @@ import GRDB
 @TimelineActor
 extension TimelineProcessor {
 
-    // MARK: - Edge cleansing
-
-
-        return nil
-    }
-
-    // MARK: - Edge healing
-
-    private static let edgeHealingThreshold: TimeInterval = .minutes(15)
+    static let edgeHealingThreshold: TimeInterval = .minutes(15)
 
     static func healEdges(itemId: String) async throws {
         guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) else {
@@ -35,7 +27,7 @@ extension TimelineProcessor {
             return
         }
 
-        // Check for full containment by another item first
+        // check for full containment by another item first
         let container = try await Database.pool.read { db in
             try TimelineItem
                 .itemRequest(includeSamples: false)
@@ -63,6 +55,7 @@ extension TimelineProcessor {
             return
         }
 
+        // handle previous and next edges, with integrated data gap handling
         if item.base.previousItemId == nil {
             try await healPreviousEdge(of: item)
         }
@@ -70,6 +63,9 @@ extension TimelineProcessor {
         if item.base.nextItemId == nil {
             try await healNextEdge(of: item)
         }
+        
+        // verify existing connections also meet data gap criteria
+        // try await processDataGaps(for: itemId)
     }
 
     private static func healPreviousEdge(of item: TimelineItem) async throws {
@@ -77,14 +73,19 @@ extension TimelineProcessor {
             return
         }
 
-        // find nearest in window centered on our start date
-        let nearest = try await Database.pool.read { [edgeHealingThreshold] db in
+        // use a wider search window to find nearest items regardless of threshold
+        let searchWindow: TimeInterval = .hours(24)
+        
+        // find nearest item within a larger window
+        let nearest = try await Database.pool.read { db in
             try TimelineItem.itemRequest(includeSamples: false)
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .filter(Column("id") != item.id)
-                .filter(Column("endDate") >= dateRange.start - edgeHealingThreshold)
-                .filter(Column("endDate") <= dateRange.start + edgeHealingThreshold)
-                .annotated(with: SQL(sql: "ABS(strftime('%s', endDate) - strftime('%s', ?))",arguments: [dateRange.start]).forKey("gap"))
+                .filter(Column("source") == item.source)  // only connect same sources
+                .filter(Column("endDate") >= dateRange.start - searchWindow)
+                .filter(Column("endDate") <= dateRange.start + searchWindow)
+                .annotated(with: SQL(sql: "ABS(strftime('%s', endDate) - strftime('%s', ?))",
+                                    arguments: [dateRange.start]).forKey("gap"))
                 .order(literal: "gap")
                 .fetchOne(db)
         }
@@ -108,16 +109,27 @@ extension TimelineProcessor {
                 return
             }
 
-            // we're either first or closer - take the edge
-            try await Database.pool.write { db in
-                var mutableItem = item
-                try mutableItem.base.updateChanges(db) {
-                    $0.previousItemId = nearest.id
+            // connect directly when items are temporally close
+            if abs(gap) <= edgeHealingThreshold {
+                try await Database.pool.write { db in
+                    var mutableItem = item
+                    try mutableItem.base.updateChanges(db) {
+                        $0.previousItemId = nearest.id
+                    }
                 }
+                logger.info("Direct edge connection from \(item.debugShortId) to previous \(nearest.debugShortId)", subsystem: .timeline)
+                return
+                
+            } else {
+                // represent longer gaps with explicit data gap items
+                try await createDataGapItem(between: nearest, and: item)
+                logger.info("Created data gap between \(nearest.debugShortId) and \(item.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                return
             }
 
         } else {
             logger.info("healPreviousEdge() No possible nearest item found", subsystem: .timeline)
+            return
         }
     }
 
@@ -126,14 +138,19 @@ extension TimelineProcessor {
             return
         }
 
-        // find nearest in window centered on our end date
-        let nearest = try await Database.pool.read { [edgeHealingThreshold] db in
+        // use a wider search window to find nearest items regardless of threshold
+        let searchWindow: TimeInterval = .hours(24)
+        
+        // find nearest item within a larger window
+        let nearest = try await Database.pool.read { db in
             try TimelineItem.itemRequest(includeSamples: false)
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .filter(Column("id") != item.id)
-                .filter(Column("startDate") >= dateRange.end - edgeHealingThreshold)
-                .filter(Column("startDate") <= dateRange.end + edgeHealingThreshold)
-                .annotated(with: SQL(sql: "ABS(strftime('%s', startDate) - strftime('%s', ?))",arguments: [dateRange.end]).forKey("gap"))
+                .filter(Column("source") == item.source)  // only connect same sources
+                .filter(Column("startDate") >= dateRange.end - searchWindow)
+                .filter(Column("startDate") <= dateRange.end + searchWindow)
+                .annotated(with: SQL(sql: "ABS(strftime('%s', startDate) - strftime('%s', ?))",
+                                    arguments: [dateRange.end]).forKey("gap"))
                 .order(literal: "gap")
                 .fetchOne(db)
         }
@@ -144,7 +161,7 @@ extension TimelineProcessor {
             // check if nearest already has a previous item
             if let currentPrevId = nearest.base.previousItemId,
                let currentPrev = try await TimelineItem.fetchItem(itemId: currentPrevId, includeSamples: false) {
-                let currentGap = currentPrev.timeInterval(from: nearest)
+                let currentGap = nearest.timeInterval(from: currentPrev)
 
                 // only steal if we're closer
                 if abs(gap) >= abs(currentGap) {
@@ -157,16 +174,27 @@ extension TimelineProcessor {
                 return
             }
 
-            // we're either first or closer - take the edge
-            try await Database.pool.write { db in
-                var mutableItem = item
-                try mutableItem.base.updateChanges(db) {
-                    $0.nextItemId = nearest.id
+            // connect directly when items are temporally close
+            if abs(gap) <= edgeHealingThreshold {
+                try await Database.pool.write { db in
+                    var mutableItem = item
+                    try mutableItem.base.updateChanges(db) {
+                        $0.nextItemId = nearest.id
+                    }
                 }
+                logger.info("Direct edge connection from \(item.debugShortId) to next \(nearest.debugShortId)", subsystem: .timeline)
+                return
+                
+            } else {
+                // represent longer gaps with explicit data gap items
+                try await createDataGapItem(between: item, and: nearest)
+                logger.info("Created data gap between \(item.debugShortId) and \(nearest.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                return
             }
             
         } else {
             logger.info("healNextEdge() No possible nearest item found", subsystem: .timeline)
+            return
         }
     }
 
@@ -175,7 +203,7 @@ extension TimelineProcessor {
     // but keeping it around... just in case
 
     static func sanitiseCircularReferences() async throws {
-        // Find items with both edges pointing to the same item
+        // find items with both edges pointing to the same item
         let circularItems = try await Database.pool.read { db in
             try TimelineItem
                 .itemRequest(includeSamples: false)
@@ -190,7 +218,7 @@ extension TimelineProcessor {
         if !circularItems.isEmpty {
             logger.info("Breaking \(circularItems.count) circular edge references", subsystem: .timeline)
 
-            // Break the cycles by nulling the next edge
+            // break the cycles by nulling the next edge
             try await Database.pool.write { db in
                 for var item in circularItems {
                     logger.info("Breaking circular reference on item: \(item.id) next/prev: \(item.base.nextItemId ?? "nil")", subsystem: .timeline)
