@@ -12,8 +12,6 @@ import GRDB
 @TimelineActor
 public enum TimelineProcessor {
 
-    public static var debugLogging = false
-
     public static let maximumModeShiftSpeed = CLLocationSpeed(kmh: 2)
 
     private static let maxProcessingListSize = 21
@@ -106,5 +104,24 @@ public enum TimelineProcessor {
 
         return list
     }
-    
+
+
+    // MARK: - Debug Logging
+
+    public private(set) static var debugLogging = false
+
+    nonisolated
+    public static func enableDebugLogging() {
+        Task { @TimelineActor in
+            debugLogging = true
+        }
+    }
+
+    nonisolated
+    public static func disableDebugLogging() {
+        Task { @TimelineActor in
+            debugLogging = false
+        }
+    }
+
 }
