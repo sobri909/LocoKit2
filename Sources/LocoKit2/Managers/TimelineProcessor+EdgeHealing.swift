@@ -63,9 +63,6 @@ extension TimelineProcessor {
         if item.base.nextItemId == nil {
             try await healNextEdge(of: item)
         }
-        
-        // verify existing connections also meet data gap criteria
-        // try await processDataGaps(for: itemId)
     }
 
     private static func healPreviousEdge(of item: TimelineItem) async throws {
