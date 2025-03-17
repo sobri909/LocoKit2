@@ -65,8 +65,14 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     public var localTimeZone: TimeZone? { TimeZone(secondsFromGMT: secondsFromGMT) }
 
-    // MARK: -
-
+    // MARK: - Factory Methods
+    
+    public static func dataGap(date: Date) -> LocomotionSample {
+        return LocomotionSample(date: date, movingState: .uncertain, recordingState: .off)
+    }
+    
+    // MARK: - Feature Providers
+    
     internal var coreMLFeatureProvider: CoreMLFeatureProvider {
         return CoreMLFeatureProvider(
             stepHz: stepHz,
