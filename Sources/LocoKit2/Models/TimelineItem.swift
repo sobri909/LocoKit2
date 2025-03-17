@@ -75,6 +75,10 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
             guard let dateRange else { return false }
 
+            if try isDataGap {
+                return dateRange.duration >= TimelineItemTrip.minimumValidDataGapDuration
+            }
+
             if isVisit {
                 // Visit specific validity logic
                 if samples.isEmpty { return false }
@@ -105,6 +109,10 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
             if try !isValid { return false }
 
             guard let dateRange else { return false }
+
+            if try isDataGap {
+                return dateRange.duration >= TimelineItemTrip.minimumKeeperDataGapDuration
+            }
 
             if isVisit {
                 if let visit {

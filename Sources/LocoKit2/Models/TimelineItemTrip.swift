@@ -17,6 +17,9 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
 
     public static let minimumKeeperDuration: TimeInterval = 60
     public static let minimumKeeperDistance: Double = 20
+    
+    public static let minimumValidDataGapDuration: TimeInterval = .minutes(1)
+    public static let minimumKeeperDataGapDuration: TimeInterval = .days(1)
 
     public let itemId: String
     public var lastSaved: Date = .now
