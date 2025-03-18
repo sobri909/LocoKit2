@@ -121,6 +121,22 @@ public enum ActivityTypesManager {
             return nil
         }
     }
+    
+    public static func fetchPendingModelGeoKeys() async -> [String] {
+        do {
+            return try await Database.pool.read { db in
+                let request = ActivityTypesModel
+                    .select(Column("geoKey"))
+                    .filter(Column("needsUpdate") == true)
+                    .order(Column("depth").desc, Column("totalSamples").asc)
+                return try String.fetchAll(db, request)
+            }
+            
+        } catch {
+            logger.error(error, subsystem: .database)
+            return []
+        }
+    }
 
     public static func updateModel(geoKey: String) {
         do {
