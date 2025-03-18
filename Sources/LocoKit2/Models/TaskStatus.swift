@@ -25,10 +25,23 @@ public struct TaskStatus: FetchableRecord, PersistableRecord, Identifiable, Coda
     public var lastCompleted: Date?
 
     public var id: String { identifier }
+    
+    public var shortName: String {
+        let components = identifier.split(separator: ".")
+        if let lastComponent = components.last {
+            return String(lastComponent)
+        }
+        return identifier
+    }
 
-    var overdueBy: TimeInterval {
+    public var overdueBy: TimeInterval {
         guard let lastCompleted else { return 0 }
         return lastCompleted.age - minimumDelay
+    }
+    
+    public var isOverdue: Bool {
+        guard let lastCompleted else { return false }
+        return lastCompleted.age > minimumDelay
     }
 
     public enum TaskState: String, Codable, CaseIterable, Sendable {
