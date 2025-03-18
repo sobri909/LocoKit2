@@ -162,7 +162,7 @@ public enum TasksManager {
         let taskName = status.identifier.split(separator: ".").last.map(String.init) ?? status.identifier
         if state == .unfinished {
             logger.error("\(state.rawValue): \(taskName)", subsystem: .tasks)
-        } else {
+        } else if state != .scheduled {
             logger.info("\(state.rawValue): \(taskName)", subsystem: .tasks)
         }
     }
