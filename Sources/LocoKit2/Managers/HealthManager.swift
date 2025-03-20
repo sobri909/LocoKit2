@@ -122,8 +122,9 @@ public enum HealthManager {
             do {
                 try await Database.pool.write { db in
                     var mutableItem = item.base
-                    mutableItem.stepCount = Int(steps)
-                    try mutableItem.update(db)
+                    try mutableItem.updateChanges(db) {
+                        $0.stepCount = Int(steps)
+                    }
                 }
                 
             } catch {
@@ -140,8 +141,9 @@ public enum HealthManager {
             do {
                 try await Database.pool.write { db in
                     var mutableItem = item.base
-                    mutableItem.floorsAscended = Int(flights)
-                    try mutableItem.update(db)
+                    try mutableItem.updateChanges(db) {
+                        $0.floorsAscended = Int(flights)
+                    }
                 }
                 
             } catch {
@@ -158,8 +160,9 @@ public enum HealthManager {
             do {
                 try await Database.pool.write { db in
                     var mutableItem = item.base
-                    mutableItem.activeEnergyBurned = energy
-                    try mutableItem.update(db)
+                    try mutableItem.updateChanges(db) {
+                        $0.activeEnergyBurned = energy
+                    }
                 }
                 
             } catch {
@@ -169,20 +172,39 @@ public enum HealthManager {
     }
     
     private static func fetchAndUpdateHeartRateStats(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
-        let samples = await fetchHeartRateSamples(from: startDate, to: endDate)
-        
-        if samples.isEmpty { return }
-        
-        let heartRates = samples.map { $0.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())) }
-        let average = heartRates.reduce(0, +) / Double(heartRates.count)
-        let max = heartRates.max() ?? 0
+        let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let heartRateType = HKQuantityType(.heartRate)
         
         do {
-            try await Database.pool.write { db in
-                var mutableItem = item.base
-                mutableItem.averageHeartRate = average
-                mutableItem.maxHeartRate = max
-                try mutableItem.update(db)
+            let avgDescriptor = HKStatisticsQueryDescriptor(
+                predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
+                options: .discreteAverage
+            )
+            
+            let maxDescriptor = HKStatisticsQueryDescriptor(
+                predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
+                options: .discreteMax
+            )
+            
+            // Execute queries sequentially to avoid data races
+            let avgResult = try await avgDescriptor.result(for: healthStore)
+            let maxResult = try await maxDescriptor.result(for: healthStore)
+            
+            let averageQuantity = avgResult?.averageQuantity()
+            let maxQuantity = maxResult?.maximumQuantity()
+            
+            if averageQuantity != nil || maxQuantity != nil {
+                let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+                let average = averageQuantity?.doubleValue(for: heartRateUnit)
+                let max = maxQuantity?.doubleValue(for: heartRateUnit)
+                
+                try await Database.pool.write { db in
+                    var mutableItem = item.base
+                    try mutableItem.updateChanges(db) {
+                        if let average { $0.averageHeartRate = average }
+                        if let max { $0.maxHeartRate = max }
+                    }
+                }
             }
             
         } catch {
@@ -220,7 +242,7 @@ public enum HealthManager {
             )
             
             let samples = try await descriptor.result(for: healthStore)
-            return samples.compactMap { $0 as? HKQuantitySample }
+            return samples
             
         } catch {
             logger.error(error, subsystem: .misc)
