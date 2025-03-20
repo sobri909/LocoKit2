@@ -17,7 +17,7 @@ public final class DebugLogger: LoggingFormatAndPipe.Pipe, @unchecked Sendable {
     public static let highlander = DebugLogger()
 
     public enum Subsystem: String, CaseIterable {
-        case misc, lifecycle, locomotion, database, appgroup, tasks, timeline, activitytypes, places, ui
+        case misc, lifecycle, locomotion, database, appgroup, tasks, timeline, activitytypes, places, healthkit, ui
     }
 
     public static let logger = Logger(label: "com.bigpaua.LocoKit.main") { _ in

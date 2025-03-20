@@ -9,6 +9,7 @@ import Foundation
 import CoreLocation
 import HealthKit
 import GRDB
+import UIKit
 
 @HealthActor
 public enum HealthManager {
@@ -22,35 +23,44 @@ public enum HealthManager {
     private static let cacheDuration: TimeInterval = .hours(1)
     private static let maxCacheSize = 50
     
+    private static var lastHealthUpdateTimes: [String: Date] = [:]
+    private static let healthUpdateThrottle: TimeInterval = .minutes(60)
+    
+    nonisolated private static let healthDataTypes: Set<HKQuantityType> = [
+        HKQuantityType(.stepCount),
+        HKQuantityType(.flightsClimbed),
+        HKQuantityType(.activeEnergyBurned),
+        HKQuantityType(.heartRate)
+    ]
+    
     // MARK: - Authorization
     
     public static func requestAuthorization() async -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
         
-        let typesToRead: Set<HKObjectType> = [
-            HKQuantityType(.stepCount),
-            HKQuantityType(.flightsClimbed),
-            HKQuantityType(.activeEnergyBurned),
-            HKQuantityType(.heartRate)
-        ]
-        
         do {
-            try await healthStore.requestAuthorization(toShare: [], read: typesToRead)
+            try await healthStore.requestAuthorization(toShare: [], read: healthDataTypes)
             isAuthorized = true
             return true
             
         } catch {
-            logger.error(error, subsystem: .misc)
+            logger.error(error, subsystem: .healthkit)
             return false
         }
     }
     
-    public static func checkAuthorization() -> Bool {
+    nonisolated public static func checkAuthorization() -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
         
-        let stepCountType = HKQuantityType(.stepCount)
-        let authStatus = healthStore.authorizationStatus(for: stepCountType)
-        return authStatus == .sharingAuthorized
+        let healthStore = HKHealthStore()
+        
+        for type in healthDataTypes {
+            if healthStore.authorizationStatus(for: type) == .sharingAuthorized {
+                return true
+            }
+        }
+        
+        return false
     }
     
     // MARK: - TimelineItem Health Data
@@ -112,6 +122,30 @@ public enum HealthManager {
         heartRateSamplesCache.removeAll()
     }
     
+    static func shouldUpdateHealthData(for item: TimelineItem) -> Bool {
+        if let lastUpdate = lastHealthUpdateTimes[item.id], 
+           lastUpdate.age < healthUpdateThrottle {
+            return false
+        }
+        
+        return true
+    }
+    
+    public static func fetchHealthDataIfNeeded(for item: TimelineItem) async {
+        guard item.dateRange != nil else { return }
+        
+        let isActive = await MainActor.run {
+            return UIApplication.shared.applicationState == .active
+        }
+        
+        guard isActive else { return }
+        
+        if shouldUpdateHealthData(for: item) {
+            await fetchHealthData(for: item)
+            lastHealthUpdateTimes[item.id] = .now
+        }
+    }
+    
     // MARK: - Private Helpers
     
     private static func fetchAndUpdateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
@@ -128,7 +162,7 @@ public enum HealthManager {
                 }
                 
             } catch {
-                logger.error(error, subsystem: .misc)
+                logger.error(error, subsystem: .healthkit)
             }
         }
     }
@@ -147,7 +181,7 @@ public enum HealthManager {
                 }
                 
             } catch {
-                logger.error(error, subsystem: .misc)
+                logger.error(error, subsystem: .healthkit)
             }
         }
     }
@@ -166,7 +200,7 @@ public enum HealthManager {
                 }
                 
             } catch {
-                logger.error(error, subsystem: .misc)
+                logger.error(error, subsystem: .healthkit)
             }
         }
     }
@@ -207,7 +241,7 @@ public enum HealthManager {
             }
             
         } catch {
-            logger.error(error, subsystem: .misc)
+            logger.error(error, subsystem: .healthkit)
         }
     }
     
@@ -224,7 +258,7 @@ public enum HealthManager {
             return statistics?.sumQuantity()
             
         } catch {
-            logger.error(error, subsystem: .misc)
+            logger.error(error, subsystem: .healthkit)
             return nil
         }
     }
@@ -244,7 +278,7 @@ public enum HealthManager {
             return samples
             
         } catch {
-            logger.error(error, subsystem: .misc)
+            logger.error(error, subsystem: .healthkit)
             return []
         }
     }
