@@ -186,7 +186,6 @@ public enum HealthManager {
                 options: .discreteMax
             )
             
-            // Execute queries sequentially to avoid data races
             let avgResult = try await avgDescriptor.result(for: healthStore)
             let maxResult = try await maxDescriptor.result(for: healthStore)
             
