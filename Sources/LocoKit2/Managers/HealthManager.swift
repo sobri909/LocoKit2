@@ -21,7 +21,7 @@ public enum HealthManager {
     private static let maxCacheSize = 50
     
     private static var lastHealthUpdateTimes: [String: Date] = [:]
-    private static let healthUpdateThrottle: TimeInterval = .minutes(60)
+    private static let healthUpdateThrottle: TimeInterval = .minutes(15)
     
     nonisolated
     private static let healthDataTypes: Set<HKQuantityType> = [
