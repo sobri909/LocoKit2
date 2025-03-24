@@ -71,25 +71,25 @@ public enum HealthManager {
     
     // MARK: - TimelineItem Health Data
     
-    public static func fetchHealthData(for item: TimelineItem) async {
+    public static func updateHealthData(for item: TimelineItem) async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         guard let dateRange = item.dateRange else { return }
         
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
-                await fetchAndUpdateStepCount(for: item, from: dateRange.start, to: dateRange.end)
+                await updateStepCount(for: item, from: dateRange.start, to: dateRange.end)
             }
             
             group.addTask {
-                await fetchAndUpdateFlightsClimbed(for: item, from: dateRange.start, to: dateRange.end)
+                await updateFlightsClimbed(for: item, from: dateRange.start, to: dateRange.end)
             }
             
             group.addTask {
-                await fetchAndUpdateActiveEnergy(for: item, from: dateRange.start, to: dateRange.end)
+                await updateActiveEnergy(for: item, from: dateRange.start, to: dateRange.end)
             }
             
             group.addTask {
-                await fetchAndUpdateHeartRateStats(for: item, from: dateRange.start, to: dateRange.end)
+                await updateHeartRateStats(for: item, from: dateRange.start, to: dateRange.end)
             }
 
             await group.waitForAll()
@@ -128,7 +128,7 @@ public enum HealthManager {
         heartRateSamplesCache.removeAll()
     }
     
-    public static func fetchHealthDataIfNeeded(for item: TimelineItem) async {
+    public static func updateHealthDataIfNeeded(for item: TimelineItem) async {
         guard item.dateRange != nil else { return }
         
         let isActive = await MainActor.run {
@@ -138,7 +138,7 @@ public enum HealthManager {
         guard isActive else { return }
         
         if shouldUpdateHealthData(for: item) {
-            await fetchHealthData(for: item)
+            await updateHealthData(for: item)
             lastHealthUpdateTimes[item.id] = .now
         }
     }
@@ -154,7 +154,7 @@ public enum HealthManager {
         return true
     }
 
-    private static func fetchAndUpdateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func updateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         let stepType = HKQuantityType(.stepCount)
         let sumQuantity = await fetchSum(for: stepType, from: startDate, to: endDate)
         
@@ -173,7 +173,7 @@ public enum HealthManager {
         }
     }
     
-    private static func fetchAndUpdateFlightsClimbed(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func updateFlightsClimbed(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         let flightsType = HKQuantityType(.flightsClimbed)
         let sumQuantity = await fetchSum(for: flightsType, from: startDate, to: endDate)
         
@@ -192,7 +192,7 @@ public enum HealthManager {
         }
     }
     
-    private static func fetchAndUpdateActiveEnergy(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func updateActiveEnergy(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         let energyType = HKQuantityType(.activeEnergyBurned)
         let sumQuantity = await fetchSum(for: energyType, from: startDate, to: endDate)
         
@@ -211,7 +211,7 @@ public enum HealthManager {
         }
     }
     
-    private static func fetchAndUpdateHeartRateStats(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func updateHeartRateStats(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
         let heartRateType = HKQuantityType(.heartRate)
         
