@@ -101,7 +101,7 @@ public enum HealthManager {
         heartRateSamplesCache.removeAll()
     }
     
-    public static func updateHealthDataIfNeeded(for item: TimelineItem, force: Bool = false) async {
+    public static func updateHealthData(for item: TimelineItem, force: Bool = false) async {
         guard let dateRange = item.dateRange else { return }
         
         if await UIApplication.shared.applicationState == .background { return }
