@@ -71,33 +71,6 @@ public enum HealthManager {
     
     // MARK: - TimelineItem Health Data
     
-    public static func updateHealthData(for item: TimelineItem) async {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
-        guard let dateRange = item.dateRange else { return }
-        
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                await updateStepCount(for: item, from: dateRange.start, to: dateRange.end)
-            }
-            
-            group.addTask {
-                await updateFlightsClimbed(for: item, from: dateRange.start, to: dateRange.end)
-            }
-            
-            group.addTask {
-                await updateActiveEnergy(for: item, from: dateRange.start, to: dateRange.end)
-            }
-            
-            group.addTask {
-                await updateHeartRateStats(for: item, from: dateRange.start, to: dateRange.end)
-            }
-
-            await group.waitForAll()
-        }
-    }
-    
-    // MARK: - Heart Rate Samples (in-memory cache)
-    
     public static func heartRateSamples(for item: TimelineItem) async -> [HKQuantitySample] {
         guard HKHealthStore.isHealthDataAvailable() else { return [] }
         guard let dateRange = item.dateRange else { return [] }
@@ -128,31 +101,41 @@ public enum HealthManager {
         heartRateSamplesCache.removeAll()
     }
     
-    public static func updateHealthDataIfNeeded(for item: TimelineItem) async {
-        guard item.dateRange != nil else { return }
+    public static func updateHealthDataIfNeeded(for item: TimelineItem, force: Bool = false) async {
+        guard let dateRange = item.dateRange else { return }
         
-        let isActive = await MainActor.run {
-            return UIApplication.shared.applicationState == .active
+        if await UIApplication.shared.applicationState == .background { return }
+
+        if !force, let lastUpdate = lastHealthUpdateTimes[item.id], lastUpdate.age < healthUpdateThrottle {
+            return
         }
         
-        guard isActive else { return }
+        guard HKHealthStore.isHealthDataAvailable() else { return }
         
-        if shouldUpdateHealthData(for: item) {
-            await updateHealthData(for: item)
-            lastHealthUpdateTimes[item.id] = .now
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await updateStepCount(for: item, from: dateRange.start, to: dateRange.end)
+            }
+            
+            group.addTask {
+                await updateFlightsClimbed(for: item, from: dateRange.start, to: dateRange.end)
+            }
+            
+            group.addTask {
+                await updateActiveEnergy(for: item, from: dateRange.start, to: dateRange.end)
+            }
+            
+            group.addTask {
+                await updateHeartRateStats(for: item, from: dateRange.start, to: dateRange.end)
+            }
+
+            await group.waitForAll()
         }
+        
+        lastHealthUpdateTimes[item.id] = .now
     }
     
     // MARK: - Private Helpers
-
-    private static func shouldUpdateHealthData(for item: TimelineItem) -> Bool {
-        if let lastUpdate = lastHealthUpdateTimes[item.id],
-            lastUpdate.age < healthUpdateThrottle {
-            return false
-        }
-
-        return true
-    }
 
     private static func updateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         let stepType = HKQuantityType(.stepCount)
