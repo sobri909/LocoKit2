@@ -48,6 +48,18 @@ public final class LocomotionManager: @unchecked Sendable {
     public internal(set) var motionAuthorizationStatus: CMAuthorizationStatus = {
         CMMotionActivityManager.authorizationStatus()
     }()
+    
+    public var hasNecessaryPermissions: Bool {
+        if locationAuthorizationStatus != .authorizedAlways && locationAuthorizationStatus != .authorizedWhenInUse {
+            return false
+        }
+        
+        if motionAuthorizationStatus != .authorized {
+            return false
+        }
+        
+        return true
+    }
 
     public private(set) var lastUpdated: Date?
     public private(set) var lastRawLocation: CLLocation?

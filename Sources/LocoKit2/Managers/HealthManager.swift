@@ -14,11 +14,8 @@ import UIKit
 @HealthActor
 public enum HealthManager {
     
-    // MARK: - Properties
-    
     private static let healthStore = HKHealthStore()
-    private static var isAuthorized = false
-    
+
     private static var heartRateSamplesCache: [String: (date: Date, samples: [HKQuantitySample])] = [:]
     private static let cacheDuration: TimeInterval = .hours(1)
     private static let maxCacheSize = 50
@@ -26,47 +23,56 @@ public enum HealthManager {
     private static var lastHealthUpdateTimes: [String: Date] = [:]
     private static let healthUpdateThrottle: TimeInterval = .minutes(60)
     
-    nonisolated private static let healthDataTypes: Set<HKQuantityType> = [
+    nonisolated
+    private static let healthDataTypes: Set<HKQuantityType> = [
         HKQuantityType(.stepCount),
         HKQuantityType(.flightsClimbed),
         HKQuantityType(.activeEnergyBurned),
         HKQuantityType(.heartRate)
     ]
     
-    // MARK: - Authorization
+    // MARK: - Auth
+
+    public static func requestAuthorization() async {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+
+        do {
+            try await healthStore.requestAuthorization(toShare: [], read: healthDataTypes)
+
+        } catch {
+            logger.error(error, subsystem: .healthkit)
+        }
+    }
     
-    public static func requestAuthorization() async -> Bool {
+    public static func haveAnyReadAccess() async -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else { return false }
+
+        for type in healthDataTypes {
+            if await checkReadPermission(for: type) {
+                return true
+            }
+        }
+        return false
+    }
+    
+    public static func checkReadPermission(for type: HKQuantityType) async -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
         
         do {
-            try await healthStore.requestAuthorization(toShare: [], read: healthDataTypes)
-            isAuthorized = true
-            return true
-            
+            let descriptor = HKSourceQueryDescriptor(predicate: .quantitySample(type: type, predicate: nil))
+            let sources = try await descriptor.result(for: healthStore)
+            return !sources.isEmpty
+
         } catch {
             logger.error(error, subsystem: .healthkit)
             return false
         }
     }
     
-    nonisolated public static func checkAuthorization() -> Bool {
-        guard HKHealthStore.isHealthDataAvailable() else { return false }
-        
-        let healthStore = HKHealthStore()
-        
-        for type in healthDataTypes {
-            if healthStore.authorizationStatus(for: type) == .sharingAuthorized {
-                return true
-            }
-        }
-        
-        return false
-    }
-    
     // MARK: - TimelineItem Health Data
     
     public static func fetchHealthData(for item: TimelineItem) async {
-        guard HKHealthStore.isHealthDataAvailable(), isAuthorized || checkAuthorization() else { return }
+        guard HKHealthStore.isHealthDataAvailable() else { return }
         guard let dateRange = item.dateRange else { return }
         
         await withTaskGroup(of: Void.self) { group in
@@ -93,7 +99,7 @@ public enum HealthManager {
     // MARK: - Heart Rate Samples (in-memory cache)
     
     public static func heartRateSamples(for item: TimelineItem) async -> [HKQuantitySample] {
-        guard HKHealthStore.isHealthDataAvailable(), isAuthorized || checkAuthorization() else { return [] }
+        guard HKHealthStore.isHealthDataAvailable() else { return [] }
         guard let dateRange = item.dateRange else { return [] }
         
         if let cached = heartRateSamplesCache[item.id], cached.date.age < cacheDuration {
@@ -122,15 +128,6 @@ public enum HealthManager {
         heartRateSamplesCache.removeAll()
     }
     
-    static func shouldUpdateHealthData(for item: TimelineItem) -> Bool {
-        if let lastUpdate = lastHealthUpdateTimes[item.id], 
-           lastUpdate.age < healthUpdateThrottle {
-            return false
-        }
-        
-        return true
-    }
-    
     public static func fetchHealthDataIfNeeded(for item: TimelineItem) async {
         guard item.dateRange != nil else { return }
         
@@ -147,7 +144,16 @@ public enum HealthManager {
     }
     
     // MARK: - Private Helpers
-    
+
+    private static func shouldUpdateHealthData(for item: TimelineItem) -> Bool {
+        if let lastUpdate = lastHealthUpdateTimes[item.id],
+            lastUpdate.age < healthUpdateThrottle {
+            return false
+        }
+
+        return true
+    }
+
     private static func fetchAndUpdateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         let stepType = HKQuantityType(.stepCount)
         let sumQuantity = await fetchSum(for: stepType, from: startDate, to: endDate)
