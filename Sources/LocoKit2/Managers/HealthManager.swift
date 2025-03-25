@@ -69,9 +69,9 @@ public enum HealthManager {
         }
     }
     
-    // MARK: - TimelineItem Health Data
-    
-    public static func heartRateSamples(for item: TimelineItem) async -> [HKQuantitySample] {
+    // MARK: - Fetching
+
+    public static func fetchHeartRateSamples(for item: TimelineItem) async -> [HKQuantitySample] {
         guard HKHealthStore.isHealthDataAvailable() else { return [] }
         guard let dateRange = item.dateRange else { return [] }
         
@@ -92,15 +92,9 @@ public enum HealthManager {
         
         return samples
     }
-    
-    public static func clearCache(for itemId: String) {
-        heartRateSamplesCache.removeValue(forKey: itemId)
-    }
-    
-    public static func clearAllCaches() {
-        heartRateSamplesCache.removeAll()
-    }
-    
+
+    // MARK: - Updating TimelineItem Properties
+
     public static func updateHealthData(for item: TimelineItem, force: Bool = false) async {
         guard let dateRange = item.dateRange else { return }
         
@@ -134,8 +128,6 @@ public enum HealthManager {
         
         lastHealthUpdateTimes[item.id] = .now
     }
-    
-    // MARK: - Private Helpers
 
     private static func updateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         let stepType = HKQuantityType(.stepCount)
@@ -233,7 +225,100 @@ public enum HealthManager {
             logger.error(error, subsystem: .healthkit)
         }
     }
+
+    // MARK: - Heart Rate for LocomotionSamples
     
+    private static var lastSampleHeartRateUpdateTimes: [String: Date] = [:]
+    private static let sampleHeartRateUpdateThrottle: TimeInterval = .minutes(15)
+    
+    internal static func updateHeartRateForSamples(in item: TimelineItem) async {
+        guard let samples = item.samples, !samples.isEmpty else { return }
+        guard let dateRange = item.dateRange else { return }
+
+        // throttle updates to prevent excessive HealthKit queries
+        if let lastUpdate = lastSampleHeartRateUpdateTimes[item.id], lastUpdate.age < sampleHeartRateUpdateThrottle {
+            return
+        }
+        
+        lastSampleHeartRateUpdateTimes[item.id] = .now
+
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        if await UIApplication.shared.applicationState == .background { return }
+
+        let heartRateSamples = await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
+        if heartRateSamples.isEmpty { return }
+
+        await matchHeartRateToSamples(heartRateSamples: heartRateSamples, locomotionSamples: samples)
+    }
+
+    private static func matchHeartRateToSamples(heartRateSamples: [HKQuantitySample], locomotionSamples: [LocomotionSample]) async {
+        guard !heartRateSamples.isEmpty, !locomotionSamples.isEmpty else { return }
+        
+        let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+        
+        let locomotionDict = Dictionary(grouping: locomotionSamples) { sample in
+            return Date(timeIntervalSince1970: round(sample.date.timeIntervalSince1970))
+        }
+        
+        // structure to hold sample/heart rate pairs for batch updating
+        struct HeartRateUpdate {
+            let sample: LocomotionSample
+            let heartRate: Double
+        }
+        
+        var updates: [HeartRateUpdate] = []
+        
+        for hrSample in heartRateSamples {
+            let hrValue = hrSample.quantity.doubleValue(for: heartRateUnit)
+            let hrDate = hrSample.startDate
+            
+            // try exact timestamp match first (rounded to nearest second)
+            let roundedDate = Date(timeIntervalSince1970: round(hrDate.timeIntervalSince1970))
+            if let exactMatches = locomotionDict[roundedDate] {
+                for sample in exactMatches {
+                    updates.append(HeartRateUpdate(sample: sample, heartRate: hrValue))
+                }
+                continue
+            }
+            
+            // if no exact match, find nearest sample within threshold
+            var closestSample: LocomotionSample?
+            var closestTimeDiff = TimeInterval.greatestFiniteMagnitude
+            
+            for sample in locomotionSamples {
+                let timeDiff = abs(sample.date.timeIntervalSince(hrDate))
+                if timeDiff < closestTimeDiff {
+                    closestTimeDiff = timeDiff
+                    closestSample = sample
+                }
+            }
+            
+            // only use nearest match if within 15 seconds
+            if closestTimeDiff < 15, let sample = closestSample {
+                updates.append(HeartRateUpdate(sample: sample, heartRate: hrValue))
+            }
+        }
+        
+        if !updates.isEmpty {
+            let finalUpdates = updates
+            
+            do {
+                try await Database.pool.write { db in
+                    for update in finalUpdates {
+                        var mutableSample = update.sample
+                        try mutableSample.updateChanges(db) {
+                            $0.heartRate = update.heartRate
+                        }
+                    }
+                }
+            } catch {
+                logger.error(error, subsystem: .healthkit)
+            }
+        }
+    }
+
+    // MARK: - Private Fetching
+
     private static func fetchSum(for quantityType: HKQuantityType, from startDate: Date, to endDate: Date) async -> HKQuantity? {
         let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
         
@@ -271,4 +356,5 @@ public enum HealthManager {
             return []
         }
     }
+
 }

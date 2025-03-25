@@ -300,7 +300,7 @@ public enum ActivityTypesManager {
         let modelFeatures = [
             "confirmedActivityType", "stepHz", "xyAcceleration", "zAcceleration", "movingState",
             "verticalAccuracy", "horizontalAccuracy", "speed", "course",
-            "latitude", "longitude", "altitude",
+            "latitude", "longitude", "altitude", "heartRate",
             "timeOfDay", "sinceVisitStart"
         ]
 
@@ -335,7 +335,7 @@ public enum ActivityTypesManager {
             var line = ""
             line += "\(confirmedActivityType.rawValue),\(stepHz),\(xyAcceleration),\(zAcceleration),\(sample.movingState.rawValue),"
             line += "\(location.verticalAccuracy),\(location.horizontalAccuracy),\(location.speed),\(location.course),"
-            line += "\(location.coordinate.latitude),\(location.coordinate.longitude),\(location.altitude),"
+            line += "\(location.coordinate.latitude),\(location.coordinate.longitude),\(location.altitude),\(sample.heartRate ?? -1),"
             line += "\(sample.timeOfDay),\(sample.sinceVisitStart)"
 
             try line.appendLineTo(csvFile)

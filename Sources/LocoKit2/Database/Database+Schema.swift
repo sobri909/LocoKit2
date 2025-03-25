@@ -162,6 +162,8 @@ extension Database {
                 table.column("xyAcceleration", .double)
                 table.column("zAcceleration", .double)
 
+                table.column("heartRate", .double)
+
                 table.column("classifiedActivityType", .integer)
                 table.column("confirmedActivityType", .integer)
             }

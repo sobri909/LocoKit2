@@ -325,6 +325,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         await trip?.update(from: updatedSamples)
         
         await HealthManager.updateHealthData(for: self)
+        await HealthManager.updateHeartRateForSamples(in: self)
 
         // TODO: this triggers db observers. would be nice if it didn't
         base.samplesChanged = false

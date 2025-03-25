@@ -22,6 +22,7 @@ class CoreMLFeatureProvider: MLFeatureProvider {
     var latitude: Double?
     var longitude: Double?
     var altitude: Double?
+    var heartRate: Double?
     var timeOfDay: Double
     var sinceVisitStart: Double
 
@@ -31,7 +32,7 @@ class CoreMLFeatureProvider: MLFeatureProvider {
                 "stepHz", "xyAcceleration", "zAcceleration", "movingState",
                 "verticalAccuracy", "horizontalAccuracy",
                 "speed", "course",
-                "latitude", "longitude", "altitude",
+                "latitude", "longitude", "altitude", "heartRate",
                 "timeOfDay", "sinceVisitStart"
             ]
         }
@@ -71,6 +72,9 @@ class CoreMLFeatureProvider: MLFeatureProvider {
         if (featureName == "altitude") {
             return MLFeatureValue(double: altitude ?? 0)
         }
+        if (featureName == "heartRate") {
+            return MLFeatureValue(double: heartRate ?? -1)
+        }
         if (featureName == "timeOfDay") {
             return MLFeatureValue(double: timeOfDay)
         }
@@ -85,6 +89,7 @@ class CoreMLFeatureProvider: MLFeatureProvider {
         verticalAccuracy: Double?, horizontalAccuracy: Double?,
         speed: Double?, course: Double?,
         latitude: Double?, longitude: Double?, altitude: Double?,
+        heartRate: Double? = nil,
         timeOfDay: Double, sinceVisitStart: Double
     ) {
         self.stepHz = stepHz
@@ -98,6 +103,7 @@ class CoreMLFeatureProvider: MLFeatureProvider {
         self.latitude = latitude
         self.longitude = longitude
         self.altitude = altitude
+        self.heartRate = heartRate
         self.timeOfDay = timeOfDay
         self.sinceVisitStart = sinceVisitStart
     }

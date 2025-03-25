@@ -43,6 +43,9 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     public var stepHz: Double?
     public var xyAcceleration: Double?
     public var zAcceleration: Double?
+    
+    // health data
+    public var heartRate: Double?
 
     public private(set) var location: CLLocation? = nil
     public var coordinate: CLLocationCoordinate2D? { location?.coordinate }
@@ -86,6 +89,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
             latitude: location?.coordinate.latitude,
             longitude: location?.coordinate.longitude,
             altitude: location?.altitude,
+            heartRate: heartRate,
             timeOfDay: timeOfDay,
             sinceVisitStart: sinceVisitStart
         )
@@ -143,6 +147,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         self.stepHz = try container.decodeIfPresent(Double.self, forKey: .stepHz)
         self.xyAcceleration = try container.decodeIfPresent(Double.self, forKey: .xyAcceleration)
         self.zAcceleration = try container.decodeIfPresent(Double.self, forKey: .zAcceleration)
+        self.heartRate = try container.decodeIfPresent(Double.self, forKey: .heartRate)
 
         if let latitude, let longitude {
             let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -228,6 +233,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         case stepHz
         case xyAcceleration
         case zAcceleration
+        case heartRate
 
         case rtreeId
     }
