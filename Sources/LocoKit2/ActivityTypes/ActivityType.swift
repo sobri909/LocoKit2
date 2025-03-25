@@ -37,6 +37,7 @@ public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
     case chairlift = 32
     case skiLift = 33
     case taxi = 34
+    case hotAirBalloon = 35
 
     // MARK: - Active types
 
@@ -71,6 +72,8 @@ public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
             return "cable car"
         case .skiLift:
             return "ski lift"
+        case .hotAirBalloon:
+            return "hot air balloon"
         default:
             return String(describing: self)
         }
@@ -103,6 +106,7 @@ public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
         case "chairlift": self = .chairlift
         case "skiLift": self = .skiLift
         case "taxi": self = .taxi
+        case "hotAirBalloon": self = .hotAirBalloon
         case "skateboarding": self = .skateboarding
         case "inlineSkating": self = .inlineSkating
         case "snowboarding": self = .snowboarding
@@ -129,7 +133,7 @@ public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
         .train, .bus, .motorcycle, .boat, .tram, .tractor, .tuktuk, .songthaew,
         .skateboarding, .inlineSkating, .snowboarding, .skiing, .horseback,
         .scooter, .metro, .cableCar, .funicular, .chairlift, .skiLift,
-        .taxi, .swimming, .golf, .wheelchair, .rowing, .kayaking, .surfing, .hiking, .bogus
+        .taxi, .hotAirBalloon, .swimming, .golf, .wheelchair, .rowing, .kayaking, .surfing, .hiking, .bogus
     ]
 
     public static let nonMovingTypes: [ActivityType] = [.stationary, .bogus, .unknown]
