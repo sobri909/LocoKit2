@@ -60,7 +60,6 @@ extension TimelineItem {
           - Activity type: \(activityType.displayName)
           - Total samples: \(sortedSamples.count)
           - Keeping: \(keepIndices.count) samples (\(Int((Double(keepIndices.count) / Double(sortedSamples.count)) * 100))%)
-          - Params: \(String(format: "%.1fs", maxInterval)) maxInterval, \(Int(epsilon))m epsilon
           """)
     }
 
@@ -136,9 +135,6 @@ extension TimelineItem {
               pruneVisitSamples() results:
               - Total samples: \(samples.count)
               - Keeping \(keepSamples.count) samples (\(Int((Double(keepSamples.count) / Double(samples.count)) * 100))%)
-              - Edge samples: \(samples.filter { $0.date <= startEdgeEnd || $0.date >= endEdgeStart }.count)
-              - Non-stationary: \(samples.filter { $0.activityType != .stationary }.count)
-              - Middle gaps: \(keepSamples.count - (samples.filter { $0.date <= startEdgeEnd || $0.date >= endEdgeStart }.count) - (samples.filter { $0.activityType != .stationary }.count))
               """)
     }
 
