@@ -106,7 +106,7 @@ public enum HealthManager {
 
             if let steps = sumQuantity?.doubleValue(for: .count()) {
                 do {
-                    try await Database.pool.write { db in
+                    try await Database.pool.uncancellableWrite { db in
                         var mutableItem = item.base
                         try mutableItem.updateChanges(db) {
                             $0.stepCount = Int(steps)
@@ -130,7 +130,7 @@ public enum HealthManager {
 
             if let flights = sumQuantity?.doubleValue(for: .count()) {
                 do {
-                    try await Database.pool.write { db in
+                    try await Database.pool.uncancellableWrite { db in
                         var mutableItem = item.base
                         try mutableItem.updateChanges(db) {
                             $0.floorsAscended = Int(flights)
@@ -154,7 +154,7 @@ public enum HealthManager {
 
             if let energy = sumQuantity?.doubleValue(for: .kilocalorie()) {
                 do {
-                    try await Database.pool.write { db in
+                    try await Database.pool.uncancellableWrite { db in
                         var mutableItem = item.base
                         try mutableItem.updateChanges(db) {
                             $0.activeEnergyBurned = energy
@@ -197,7 +197,7 @@ public enum HealthManager {
                 let average = averageQuantity?.doubleValue(for: heartRateUnit)
                 let max = maxQuantity?.doubleValue(for: heartRateUnit)
                 
-                try await Database.pool.write { db in
+                try await Database.pool.uncancellableWrite { db in
                     var mutableItem = item.base
                     try mutableItem.updateChanges(db) {
                         if let average { $0.averageHeartRate = average }
