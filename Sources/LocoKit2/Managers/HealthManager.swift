@@ -24,7 +24,7 @@ public enum HealthManager {
     private static let healthUpdateThrottle: TimeInterval = .minutes(15)
     
     nonisolated
-    private static let healthDataTypes: Set<HKQuantityType> = [
+    public static let healthDataTypes: Set<HKQuantityType> = [
         HKQuantityType(.stepCount),
         HKQuantityType(.flightsClimbed),
         HKQuantityType(.activeEnergyBurned),
