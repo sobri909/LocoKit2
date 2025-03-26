@@ -23,6 +23,16 @@ public enum HealthManager {
     private static var lastHealthUpdateTimes: [String: Date] = [:]
     private static let healthUpdateThrottle: TimeInterval = .minutes(15)
     
+    private static var healthKitEnabled = false
+    
+    public static func enableHealthKit() {
+        healthKitEnabled = true
+    }
+    
+    public static func disableHealthKit() {
+        healthKitEnabled = false
+    }
+    
     nonisolated
     public static let healthDataTypes: Set<HKQuantityType> = [
         HKQuantityType(.stepCount),
@@ -66,6 +76,7 @@ public enum HealthManager {
     // MARK: - Updating TimelineItem Properties
 
     public static func updateHealthData(for item: TimelineItem, force: Bool = false) async {
+        guard healthKitEnabled else { return }
         guard let dateRange = item.dateRange else { return }
         
         if await UIApplication.shared.applicationState == .background { return }
@@ -217,6 +228,7 @@ public enum HealthManager {
     private static let sampleHeartRateUpdateThrottle: TimeInterval = .minutes(15)
     
     internal static func updateHeartRateForSamples(in item: TimelineItem) async {
+        guard healthKitEnabled else { return }
         guard let samples = item.samples, !samples.isEmpty else { return }
         guard let dateRange = item.dateRange else { return }
 
