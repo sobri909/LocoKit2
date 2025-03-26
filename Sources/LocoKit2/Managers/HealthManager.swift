@@ -44,53 +44,23 @@ public enum HealthManager {
         }
     }
     
-    public static func haveAnyReadAccess() async -> Bool {
+    public static func haveAnyReadAccess() async throws -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
 
         for type in healthDataTypes {
-            if await checkReadPermission(for: type) {
+            if try await checkReadPermission(for: type) {
                 return true
             }
         }
         return false
     }
     
-    public static func checkReadPermission(for type: HKQuantityType) async -> Bool {
+    public static func checkReadPermission(for type: HKQuantityType) async throws -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
-        
-        do {
-            let descriptor = HKSourceQueryDescriptor(predicate: .quantitySample(type: type, predicate: nil))
-            let sources = try await descriptor.result(for: healthStore)
-            return !sources.isEmpty
 
-        } catch {
-            logger.error(error, subsystem: .healthkit)
-            return false
-        }
-    }
-    
-    // MARK: - Fetching
-
-    public static func fetchHeartRateSamples(for item: TimelineItem) async -> [HKQuantitySample] {
-        guard HKHealthStore.isHealthDataAvailable() else { return [] }
-        guard let dateRange = item.dateRange else { return [] }
-        
-        if let cached = heartRateSamplesCache[item.id], cached.date.age < cacheDuration {
-            return cached.samples
-        }
-        
-        let samples = await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
-        
-        if heartRateSamplesCache.count >= maxCacheSize {
-            let oldestKey = heartRateSamplesCache.min(by: { $0.value.date < $1.value.date })?.key
-            if let oldestKey {
-                heartRateSamplesCache.removeValue(forKey: oldestKey)
-            }
-        }
-        
-        heartRateSamplesCache[item.id] = (date: .now, samples: samples)
-        
-        return samples
+        let descriptor = HKSourceQueryDescriptor(predicate: .quantitySample(type: type, predicate: nil))
+        let sources = try await descriptor.result(for: healthStore)
+        return !sources.isEmpty
     }
 
     // MARK: - Updating TimelineItem Properties
@@ -130,59 +100,74 @@ public enum HealthManager {
     }
 
     private static func updateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
-        let stepType = HKQuantityType(.stepCount)
-        let sumQuantity = await fetchSum(for: stepType, from: startDate, to: endDate)
-        
-        if let steps = sumQuantity?.doubleValue(for: .count()) {
-            do {
-                try await Database.pool.write { db in
-                    var mutableItem = item.base
-                    try mutableItem.updateChanges(db) {
-                        $0.stepCount = Int(steps)
+        do {
+            let stepType = HKQuantityType(.stepCount)
+            let sumQuantity = try await fetchSum(for: stepType, from: startDate, to: endDate)
+
+            if let steps = sumQuantity?.doubleValue(for: .count()) {
+                do {
+                    try await Database.pool.write { db in
+                        var mutableItem = item.base
+                        try mutableItem.updateChanges(db) {
+                            $0.stepCount = Int(steps)
+                        }
                     }
+
+                } catch {
+                    logger.error(error, subsystem: .database)
                 }
-                
-            } catch {
-                logger.error(error, subsystem: .healthkit)
             }
+
+        } catch {
+            logger.error(error, subsystem: .healthkit)
         }
     }
     
     private static func updateFlightsClimbed(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
-        let flightsType = HKQuantityType(.flightsClimbed)
-        let sumQuantity = await fetchSum(for: flightsType, from: startDate, to: endDate)
-        
-        if let flights = sumQuantity?.doubleValue(for: .count()) {
-            do {
-                try await Database.pool.write { db in
-                    var mutableItem = item.base
-                    try mutableItem.updateChanges(db) {
-                        $0.floorsAscended = Int(flights)
+        do {
+            let flightsType = HKQuantityType(.flightsClimbed)
+            let sumQuantity = try await fetchSum(for: flightsType, from: startDate, to: endDate)
+
+            if let flights = sumQuantity?.doubleValue(for: .count()) {
+                do {
+                    try await Database.pool.write { db in
+                        var mutableItem = item.base
+                        try mutableItem.updateChanges(db) {
+                            $0.floorsAscended = Int(flights)
+                        }
                     }
+                    
+                } catch {
+                    logger.error(error, subsystem: .database)
                 }
-                
-            } catch {
-                logger.error(error, subsystem: .healthkit)
             }
+            
+        } catch {
+            logger.error(error, subsystem: .healthkit)
         }
     }
     
     private static func updateActiveEnergy(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
-        let energyType = HKQuantityType(.activeEnergyBurned)
-        let sumQuantity = await fetchSum(for: energyType, from: startDate, to: endDate)
-        
-        if let energy = sumQuantity?.doubleValue(for: .kilocalorie()) {
-            do {
-                try await Database.pool.write { db in
-                    var mutableItem = item.base
-                    try mutableItem.updateChanges(db) {
-                        $0.activeEnergyBurned = energy
+        do {
+            let energyType = HKQuantityType(.activeEnergyBurned)
+            let sumQuantity = try await fetchSum(for: energyType, from: startDate, to: endDate)
+
+            if let energy = sumQuantity?.doubleValue(for: .kilocalorie()) {
+                do {
+                    try await Database.pool.write { db in
+                        var mutableItem = item.base
+                        try mutableItem.updateChanges(db) {
+                            $0.activeEnergyBurned = energy
+                        }
                     }
+                    
+                } catch {
+                    logger.error(error, subsystem: .database)
                 }
-                
-            } catch {
-                logger.error(error, subsystem: .healthkit)
             }
+            
+        } catch {
+            logger.error(error, subsystem: .healthkit)
         }
     }
     
@@ -245,10 +230,15 @@ public enum HealthManager {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         if await UIApplication.shared.applicationState == .background { return }
 
-        let heartRateSamples = await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
-        if heartRateSamples.isEmpty { return }
+        do {
+            let heartRateSamples = try await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
+            if heartRateSamples.isEmpty { return }
 
-        await matchHeartRateToSamples(heartRateSamples: heartRateSamples, locomotionSamples: samples)
+            await matchHeartRateToSamples(heartRateSamples: heartRateSamples, locomotionSamples: samples)
+
+        } catch {
+            logger.error(error, subsystem: .healthkit)
+        }
     }
 
     private static func matchHeartRateToSamples(heartRateSamples: [HKQuantitySample], locomotionSamples: [LocomotionSample]) async {
@@ -303,7 +293,7 @@ public enum HealthManager {
             let finalUpdates = updates
             
             do {
-                try await Database.pool.write { db in
+                try await Database.pool.uncancellableWrite { db in
                     for update in finalUpdates {
                         var mutableSample = update.sample
                         try mutableSample.updateChanges(db) {
@@ -311,50 +301,37 @@ public enum HealthManager {
                         }
                     }
                 }
+                
             } catch {
-                logger.error(error, subsystem: .healthkit)
+                logger.error(error, subsystem: .database)
             }
         }
     }
 
     // MARK: - Private Fetching
 
-    private static func fetchSum(for quantityType: HKQuantityType, from startDate: Date, to endDate: Date) async -> HKQuantity? {
+    private static func fetchSum(for quantityType: HKQuantityType, from startDate: Date, to endDate: Date) async throws -> HKQuantity? {
         let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
-        
-        do {
-            let descriptor = HKStatisticsQueryDescriptor(
-                predicate: .quantitySample(type: quantityType, predicate: samplePredicate),
-                options: .cumulativeSum
-            )
-            
-            let statistics = try await descriptor.result(for: healthStore)
-            return statistics?.sumQuantity()
-            
-        } catch {
-            logger.error(error, subsystem: .healthkit)
-            return nil
-        }
+
+        let descriptor = HKStatisticsQueryDescriptor(
+            predicate: .quantitySample(type: quantityType, predicate: samplePredicate),
+            options: .cumulativeSum
+        )
+
+        return try await descriptor.result(for: healthStore)?.sumQuantity()
     }
     
-    private static func fetchHeartRateSamples(from startDate: Date, to endDate: Date) async -> [HKQuantitySample] {
+    private static func fetchHeartRateSamples(from startDate: Date, to endDate: Date) async throws -> [HKQuantitySample] {
         let heartRateType = HKQuantityType(.heartRate)
         let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
         
-        do {
-            let descriptor = HKSampleQueryDescriptor(
-                predicates: [.quantitySample(type: heartRateType, predicate: samplePredicate)],
-                sortDescriptors: [SortDescriptor(\.startDate)],
-                limit: HKObjectQueryNoLimit
-            )
-            
-            let samples = try await descriptor.result(for: healthStore)
-            return samples
-            
-        } catch {
-            logger.error(error, subsystem: .healthkit)
-            return []
-        }
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: heartRateType, predicate: samplePredicate)],
+            sortDescriptors: [SortDescriptor(\.startDate)],
+            limit: HKObjectQueryNoLimit
+        )
+
+        return try await descriptor.result(for: healthStore)
     }
 
 }
