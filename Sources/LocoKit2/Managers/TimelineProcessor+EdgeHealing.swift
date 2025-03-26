@@ -114,19 +114,15 @@ extension TimelineProcessor {
                         $0.previousItemId = nearest.id
                     }
                 }
-                logger.info("Direct edge connection from \(item.debugShortId) to previous \(nearest.debugShortId)", subsystem: .timeline)
-                return
-                
+
             } else {
                 // represent longer gaps with explicit data gap items
                 try await createDataGapItem(between: nearest, and: item)
                 logger.info("Created data gap between \(nearest.debugShortId) and \(item.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
-                return
             }
 
         } else {
             logger.info("healPreviousEdge() No possible nearest item found", subsystem: .timeline)
-            return
         }
     }
 
@@ -179,19 +175,15 @@ extension TimelineProcessor {
                         $0.nextItemId = nearest.id
                     }
                 }
-                logger.info("Direct edge connection from \(item.debugShortId) to next \(nearest.debugShortId)", subsystem: .timeline)
-                return
-                
+
             } else {
                 // represent longer gaps with explicit data gap items
                 try await createDataGapItem(between: item, and: nearest)
                 logger.info("Created data gap between \(item.debugShortId) and \(nearest.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
-                return
             }
             
         } else {
             logger.info("healNextEdge() No possible nearest item found", subsystem: .timeline)
-            return
         }
     }
 
