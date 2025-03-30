@@ -176,13 +176,29 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
         return model
     }
     
-    // MARK: - Utility Functions
-    
     @ActivityTypesActor
     public func reloadModel() throws {
         try MLModelCache.reloadModelFor(filename: filename)
     }
-    
+
+    private func markNeedsUpdate() {
+        if needsUpdate { return }
+        
+        do {
+            try Database.pool.write { db in
+                var mutableSelf = self
+                try mutableSelf.updateChanges(db) {
+                    $0.needsUpdate = true
+                }
+            }
+            
+        } catch {
+            logger.error(error, subsystem: .database)
+        }
+    }
+
+    // MARK: - Utility Functions
+
     public func contains(coordinate: CLLocationCoordinate2D) -> Bool {
         guard CLLocationCoordinate2DIsValid(coordinate) else { return false }
         guard coordinate.latitude != 0 || coordinate.longitude != 0 else { return false }
@@ -199,6 +215,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
     public func classify(_ sample: LocomotionSample) -> ClassifierResults {
         do {
             guard let model = try MLModelCache.modelFor(filename: filename) else {
+                markNeedsUpdate()
                 return ClassifierResults(resultItems: [])
             }
 
