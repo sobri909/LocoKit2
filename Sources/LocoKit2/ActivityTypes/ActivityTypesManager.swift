@@ -252,7 +252,7 @@ public enum ActivityTypesManager {
                 }
             }
 
-            logger.info("UPDATED: \(model.geoKey) (samples: \(model.totalSamples), accuracy: \(String(format: "%.2f", model.accuracyScore!)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
+            logger.info("UPDATED: \(model.geoKey) (samples: \(model.totalSamples), accuracy: \(String(format: "%.2f", model.accuracyScore ?? 0)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
 
             try model.reloadModel()
 
