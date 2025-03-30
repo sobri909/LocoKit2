@@ -296,12 +296,13 @@ public enum ImportManager {
         }
         let samplesURL = importURL.appendingPathComponent("samples")
 
-        // Get the weekly sample files in chronological order
-        let sampleFiles = try FileManager.default.contentsOfDirectory(
-            at: samplesURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )
+        // get the weekly sample files in chronological order
+        let sampleFiles = try FileManager.default
+            .contentsOfDirectory(
+                at: samplesURL,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
@@ -354,6 +355,7 @@ public enum ImportManager {
                         }
                     }
                 }
+
             } catch {
                 logger.error(error, subsystem: .database)
                 continue
