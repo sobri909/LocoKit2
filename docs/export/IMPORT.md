@@ -64,6 +64,17 @@ WHERE id = ?
 - Uses metadata timestamps to understand data window
 - Handles incremental backup directories correctly
 
+### Missing Reference Handling
+- Foreign key constraints are gracefully handled during import
+- Visits with missing Place references have their placeId set to null
+  - confirmedPlace is set to false
+  - uncertainPlace is set to true
+  - Original data is preserved where possible
+- Samples with missing TimelineItem references have their timelineItemId set to null
+  - "Orphaned" samples are preserved rather than deleted
+  - Full sample data remains available for future processing
+  - Allows potential reassignment to items during edge healing
+
 ## Implementation Notes
 
 ### Data Validation

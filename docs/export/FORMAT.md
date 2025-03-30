@@ -96,6 +96,29 @@ Designed for sharing specific date ranges. All data contained in one file.
 }
 ```
 
+## Export Policy
+
+### Completeness Philosophy
+
+The export system follows these data preservation principles:
+
+1. **All Places**: Every Place is included in exports, regardless of visitCount or usage status
+   - Ensures referential integrity for TimelineItemVisit records
+   - Preserves all place data, even for places that may be used in the future
+   - Maintains consistent place identifiers across exports
+
+2. **All TimelineItems**: Every TimelineItem is included, including those marked as deleted
+   - Preserves complete timeline history
+   - Maintains referential integrity for Samples
+   - Follows the philosophy that "samples are the purest most essential part of the database and should never be lost"
+
+3. **All Samples**: Every Sample is included, preserving the raw timeline data
+   - Captures complete movement history
+   - Enables future reprocessing or analysis
+   - Maintains the highest level of data fidelity
+
+This approach ensures that exports contain the complete dataset needed for full restoration, and that referential integrity can be maintained during import operations.
+
 ## Incremental Updates
 
 The bucketed format supports incremental updates through scheduled backup sessions. Each session:
