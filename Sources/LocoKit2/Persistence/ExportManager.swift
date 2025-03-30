@@ -96,7 +96,7 @@ public enum ExportManager {
         }
 
         // Gather stats
-        let (placeCount, itemCount, sampleCount) = try await Database.pool.read { db in
+        let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
             let places = try Place.filter(Column("visitCount") > 0).fetchCount(db)
             let items = try TimelineItemBase.filter(Column("deleted") == false).fetchCount(db)
             let samples = try LocomotionSample.fetchCount(db)
@@ -135,8 +135,8 @@ public enum ExportManager {
         }
 
         // get all places with at least one visit
-        let places = try await Database.pool.read { db in
             try Place.filter(Column("visitCount") > 0).fetchAll(db)
+        let places = try await Database.pool.uncancellableRead { db in
         }
 
         // group places by uuid prefix
@@ -171,7 +171,7 @@ public enum ExportManager {
         }
 
         // Get all timeline items with their full relationships loaded
-        let items = try await Database.pool.read { db in
+        let items = try await Database.pool.uncancellableRead { db in
             try TimelineItem
                 .itemRequest(includeSamples: false, includePlaces: false)
                 .filter(Column("deleted") == false)
@@ -213,7 +213,7 @@ public enum ExportManager {
         }
 
         // Get all samples ordered by date
-        let samples = try await Database.pool.read { db in
+        let samples = try await Database.pool.uncancellableRead { db in
             try LocomotionSample
                 .order(Column("date").asc)
                 .fetchAll(db)

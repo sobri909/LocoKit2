@@ -124,7 +124,7 @@ public enum ImportManager {
 
         print("Found place files: \(placeFiles.count)")
 
-        try await Database.pool.write { db in
+        try await Database.pool.uncancellableWrite { db in
             for fileURL in placeFiles {
                 do {
                     let fileData = try Data(contentsOf: fileURL)
@@ -182,7 +182,7 @@ public enum ImportManager {
 
                 // Process in batches of 100
                 for batch in items.chunked(into: 100) {
-                    try await Database.pool.write { db in
+                    try await Database.pool.uncancellableWrite { db in
                         for item in batch {
                             // Store edge record before nulling the relationships
                             let record = EdgeRecord(
@@ -231,7 +231,7 @@ public enum ImportManager {
 
         // Process records in batches to manage transaction size
         for batch in records.chunked(into: 100) {
-            try await Database.pool.write { db in
+            try await Database.pool.uncancellableWrite { db in
                 for record in batch {
                     try TimelineItemBase
                         .filter(Column("id") == record.itemId)
@@ -294,7 +294,7 @@ public enum ImportManager {
 
                 // Process in batches of 100
                 for batch in samples.chunked(into: 100) {
-                    try await Database.pool.write { db in
+                    try await Database.pool.uncancellableWrite { db in
                         // Get all timeline item IDs referenced in this batch
                         let itemIds = Set(batch.compactMap(\.timelineItemId))
 
