@@ -85,7 +85,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
                 if try isNolo { return false }
                 if let visit {
                     if visit.hasConfirmedPlace { return true }
-                    if let customTitle = visit.customTitle, !customTitle.isEmpty { return true }
+                    if visit.customTitle != nil { return true }
                 }
                 if dateRange.duration < TimelineItemVisit.minimumValidDuration { return false }
                 return true
@@ -117,7 +117,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
             if isVisit {
                 if let visit {
                     if visit.hasConfirmedPlace { return true }
-                    if let customTitle = visit.customTitle, !customTitle.isEmpty { return true }
+                    if visit.customTitle != nil { return true }
                 }
                 if dateRange.duration < TimelineItemVisit.minimumKeeperDuration { return false }
                 return true
@@ -156,7 +156,13 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     public var hasAssignment: Bool {
         if let visit {
-            return visit.placeId != nil
+            if visit.placeId != nil {
+                return true
+            }
+            if let customTitle = visit.customTitle, !customTitle.isEmpty {
+                return true
+            }
+            return false
         }
         if let trip {
             return trip.activityType != nil
@@ -166,7 +172,13 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     public var assignmentConfirmed: Bool {
         if let visit {
-            return visit.confirmedPlace
+            if visit.confirmedPlace {
+                return true
+            }
+            if let customTitle = visit.customTitle, !customTitle.isEmpty {
+                return true
+            }
+            return false
         }
         if let trip {
             return trip.confirmedActivityType != nil
@@ -176,6 +188,9 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     public var assignmentCertain: Bool {
         if let visit {
+            if let customTitle = visit.customTitle, !customTitle.isEmpty {
+                return true
+            }
             return !visit.uncertainPlace
         }
         if let trip {

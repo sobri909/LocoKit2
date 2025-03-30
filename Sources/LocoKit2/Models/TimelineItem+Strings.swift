@@ -35,6 +35,10 @@ extension TimelineItem {
             }
 
             // must be a visit
+            if let visit, let customTitle = visit.customTitle {
+                return customTitle
+            }
+            
             if let place {
                 return place.name
             }

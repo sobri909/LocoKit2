@@ -25,6 +25,7 @@ extension Database {
                 table.column("radiusSD", .double).notNull()
                 table.column("secondsFromGMT", .integer)
                 table.column("name", .text).notNull().indexed()
+                    .check { length($0) > 0 }
                 table.column("streetAddress", .text)
 
                 table.column("mapboxPlaceId", .text).indexed()
@@ -108,6 +109,7 @@ extension Database {
                     .check { ($0 == true && Column("confirmedPlace") == false) || ($0 == false && Column("placeId") != nil) }
 
                 table.column("customTitle", .text).indexed()
+                    .check { $0 == nil || length($0) > 0 }
                 table.column("streetAddress", .text).indexed()
             }
 

@@ -198,6 +198,11 @@ public final class MergeScores {
         guard let consumerVisit = consumer.visit, let consumeeVisit = consumee.visit else { fatalError() }
         guard let consumerRange = consumer.dateRange, let consumeeRange = consumee.dateRange else { return .impossible }
 
+        // check if either has a custom title
+        if consumerVisit.customTitle != nil || consumeeVisit.customTitle != nil {
+            return .impossible
+        }
+        
         // both have confirmed places?
         if consumerVisit.hasConfirmedPlace && consumeeVisit.hasConfirmedPlace {
 
