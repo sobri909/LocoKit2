@@ -97,7 +97,7 @@ public enum ExportManager {
 
         // Gather stats
         let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
-            let places = try Place.filter(Column("visitCount") > 0).fetchCount(db)
+            let places = try Place.fetchCount(db)
             let items = try TimelineItemBase.filter(Column("deleted") == false).fetchCount(db)
             let samples = try LocomotionSample.fetchCount(db)
             return (places, items, samples)
@@ -134,9 +134,9 @@ public enum ExportManager {
             throw PersistenceError.exportNotInitialised
         }
 
-        // get all places with at least one visit
-            try Place.filter(Column("visitCount") > 0).fetchAll(db)
+        // get all places
         let places = try await Database.pool.uncancellableRead { db in
+            try Place.fetchAll(db)
         }
 
         // group places by uuid prefix
