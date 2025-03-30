@@ -216,7 +216,7 @@ public enum ImportManager {
                             // handle Visits with missing Places
                             if var visit = item.visit {
                                 if let placeId = visit.placeId, !validPlaceIds.contains(placeId) {
-                                    logger.error("Orphaning Visit with missing Place: \(placeId)", subsystem: .database)
+                                    logger.error("Detached visit with missing place: \(placeId)", subsystem: .database)
                                     visit.placeId = nil
                                     visit.confirmedPlace = false
                                     visit.uncertainPlace = true
@@ -314,25 +314,31 @@ public enum ImportManager {
                 let samples = try JSONDecoder().decode([LocomotionSample].self, from: fileData)
                 print("Loaded \(samples.count) samples from \(fileURL.lastPathComponent)")
 
-                // Process in batches of 100
+                // process in batches of 100
                 for batch in samples.chunked(into: 100) {
                     try await Database.pool.uncancellableWrite { db in
-                        // Get all timeline item IDs referenced in this batch
+                        // get all timeline item IDs referenced in this batch
                         let itemIds = Set(batch.compactMap(\.timelineItemId))
 
-                        // Find which of those IDs actually exist in the database
+                        // find which of those IDs actually exist in the database
                         let validIds = try String.fetchSet(db, TimelineItemBase
                             .select(Column("id"))
                             .filter(itemIds.contains(Column("id"))))
 
-                        // Process each sample, orphaning those with invalid item IDs
+                        var orphanedCount = 0
+                        
                         for var sample in batch {
+                            // check and fix invalid references
                             if let itemId = sample.timelineItemId, !validIds.contains(itemId) {
-                                logger.error("Orphaning LocomotionSample due to missing parent TimelineItem: \(itemId)")
+                                orphanedCount += 1
                                 sample.timelineItemId = nil
                             }
+                            
+                            if orphanedCount > 0 && sample.id == batch.last?.id {
+                                logger.error("Orphaned \(orphanedCount) samples with missing parent items", subsystem: .database)
+                            }
 
-                            // Create RTree record if we have valid coordinates
+                            // create RTree record if we have valid coordinates
                             if let coordinate = sample.coordinate, !sample.disabled {
                                 var rtree = SampleRTree(
                                     latMin: coordinate.latitude,
