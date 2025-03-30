@@ -307,8 +307,11 @@ public enum ImportManager {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
         print("Found sample files: \(sampleFiles.count)")
+        
+        // track orphaned samples by their original parent timeline item ID
+        var orphanedSamples: [String: [LocomotionSample]] = [:]
 
-        // Process each week's file
+        // process each week's file
         for fileURL in sampleFiles {
             do {
                 let fileData = try Data(contentsOf: fileURL)
@@ -317,28 +320,32 @@ public enum ImportManager {
 
                 // process in batches of 100
                 for batch in samples.chunked(into: 100) {
-                    try await Database.pool.uncancellableWrite { db in
+                    // process batch and collect orphaned samples
+                    let batchOrphans = try await Database.pool.uncancellableWrite { db -> [String: [LocomotionSample]] in
                         // get all timeline item IDs referenced in this batch
                         let itemIds = Set(batch.compactMap(\.timelineItemId))
+                        if itemIds.isEmpty { return [:] }
 
                         // find which of those IDs actually exist in the database
                         let validIds = try String.fetchSet(db, TimelineItemBase
                             .select(Column("id"))
                             .filter(itemIds.contains(Column("id"))))
 
+                        // collect orphans within transaction scope
+                        var batchOrphans: [String: [LocomotionSample]] = [:]
                         var orphanedCount = 0
                         
                         for var sample in batch {
                             // check and fix invalid references
-                            if let itemId = sample.timelineItemId, !validIds.contains(itemId) {
-                                orphanedCount += 1
+                            if let originalItemId = sample.timelineItemId, !validIds.contains(originalItemId) {
+                                // preserve sample with its original itemId for later recreation
+                                batchOrphans[originalItemId, default: []].append(sample)
+                                
+                                // null the reference for database compliance
                                 sample.timelineItemId = nil
+                                orphanedCount += 1
                             }
                             
-                            if orphanedCount > 0 && sample.id == batch.last?.id {
-                                logger.error("Orphaned \(orphanedCount) samples with missing parent items", subsystem: .database)
-                            }
-
                             // create RTree record if we have valid coordinates
                             if let coordinate = sample.coordinate, !sample.disabled {
                                 var rtree = SampleRTree(
@@ -353,12 +360,85 @@ public enum ImportManager {
 
                             try sample.save(db)
                         }
+                        
+                        if orphanedCount > 0 {
+                            logger.error("Orphaned \(orphanedCount) samples with missing parent items", subsystem: .database)
+                        }
+                        
+                        // return the orphans so they can be merged outside the transaction
+                        return batchOrphans
+                    }
+                    
+                    // merge batch orphans into the main collection
+                    for (itemId, samples) in batchOrphans {
+                        orphanedSamples[itemId, default: []].append(contentsOf: samples)
                     }
                 }
 
             } catch {
                 logger.error(error, subsystem: .database)
                 continue
+            }
+        }
+        
+        // process orphaned samples after all imports complete
+        if !orphanedSamples.isEmpty {
+            logger.info("Found orphaned samples for \(orphanedSamples.count) missing items", subsystem: .database)
+            try await processOrphanedSamples(orphanedSamples)
+        }
+    }
+    
+    private static func processOrphanedSamples(_ orphanedSamples: [String: [LocomotionSample]]) async throws {
+        var recreatedItems = 0
+        var individualItems = 0
+        
+        // process each group of samples that belonged to the same original item
+        for (originalItemId, samples) in orphanedSamples {
+            // not enough samples to create a valid item
+            if samples.count < TimelineItemTrip.minimumValidSamples {
+                try await createIndividualItems(for: samples)
+                individualItems += samples.count
+                continue
+            }
+            
+            // analyze moving states to determine item type
+            let stationarySamples = samples.filter { $0.movingState == .stationary }
+            let stationaryRatio = Double(stationarySamples.count) / Double(samples.count)
+            
+            // high confidence for Visit (>80% stationary)
+            if stationaryRatio > 0.8 {
+                try await Database.pool.write { db in
+                    _ = try TimelineItem.createItem(from: samples, isVisit: true, db: db)
+                }
+                recreatedItems += 1
+                logger.info("Recreated Visit for lost item \(originalItemId) with \(samples.count) samples", subsystem: .database)
+                
+                // high confidence for Trip (<20% stationary)
+            } else if stationaryRatio < 0.2 {
+                try await Database.pool.write { db in
+                    _ = try TimelineItem.createItem(from: samples, isVisit: false, db: db)
+                }
+                recreatedItems += 1
+                logger.info("Recreated Trip for lost item \(originalItemId) with \(samples.count) samples", subsystem: .database)
+                
+                // mixed moving states, create individual items
+            } else {
+                try await createIndividualItems(for: samples)
+                individualItems += samples.count
+                logger.info("Created \(samples.count) individual items for lost item \(originalItemId) (mixed states)", subsystem: .database)
+            }
+        }
+        
+        logger.info("Processed orphaned samples: created \(recreatedItems) items and \(individualItems) individual samples", subsystem: .database)
+    }
+    
+    private static func createIndividualItems(for samples: [LocomotionSample]) async throws {
+        // create one item per sample based on its moving state
+        for sample in samples {
+            let isVisit = sample.movingState == .stationary
+            
+            try await Database.pool.write { db in
+                _ = try TimelineItem.createItem(from: [sample], isVisit: isVisit, db: db)
             }
         }
     }
