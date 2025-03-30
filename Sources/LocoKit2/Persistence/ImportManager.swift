@@ -183,6 +183,14 @@ public enum ImportManager {
                 // Process in batches of 100
                 for batch in items.chunked(into: 100) {
                     try await Database.pool.uncancellableWrite { db in
+                        // collect all placeIds referenced by Visits in this batch
+                        let placeIds = Set(batch.compactMap { $0.visit?.placeId }).filter { !$0.isEmpty }
+                        
+                        // check which ones exist in the database
+                        let validPlaceIds = try String.fetchSet(db, Place
+                            .select(Column("id"))
+                            .filter(placeIds.contains(Column("id"))))
+                        
                         for item in batch {
                             // Store edge record before nulling the relationships
                             let record = EdgeRecord(
@@ -204,7 +212,21 @@ public enum ImportManager {
                             mutableBase.nextItemId = nil
 
                             try mutableBase.save(db)
-                            try item.visit?.save(db)
+                            
+                            // handle Visits with missing Places
+                            if var visit = item.visit {
+                                if let placeId = visit.placeId, !validPlaceIds.contains(placeId) {
+                                    logger.error("Orphaning Visit with missing Place: \(placeId)", subsystem: .database)
+                                    visit.placeId = nil
+                                    visit.confirmedPlace = false
+                                    visit.uncertainPlace = true
+                                }
+                                try visit.save(db)
+                                
+                            } else {
+                                try item.visit?.save(db)
+                            }
+                            
                             try item.trip?.save(db)
                         }
                     }
