@@ -98,7 +98,7 @@ public enum ExportManager {
         // Gather stats
         let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
             let places = try Place.fetchCount(db)
-            let items = try TimelineItemBase.filter(Column("deleted") == false).fetchCount(db)
+            let items = try TimelineItemBase.fetchCount(db)
             let samples = try LocomotionSample.fetchCount(db)
             return (places, items, samples)
         }
@@ -174,7 +174,6 @@ public enum ExportManager {
         let items = try await Database.pool.uncancellableRead { db in
             try TimelineItem
                 .itemRequest(includeSamples: false, includePlaces: false)
-                .filter(Column("deleted") == false)
                 .order(Column("startDate").asc)  // order by date for grouping
                 .fetchAll(db)
         }
