@@ -144,6 +144,17 @@ public enum ActivityTypesManager {
             logger.error(error, subsystem: .database)
         }
     }
+    
+    public static func processModelUpdate(model: ActivityTypesModel, fileMissing: Bool = false) {
+        guard model.needsUpdate else { return }
+
+        let shouldUpdateImmediately = fileMissing || model.depth < 2 || (model.depth == 2 && model.completenessScore < 1.0)
+        
+        if shouldUpdateImmediately {
+            let geoKey = model.geoKey
+            Task { updateModel(geoKey: geoKey) }
+        }
+    }
 
     // MARK: - Model building
 

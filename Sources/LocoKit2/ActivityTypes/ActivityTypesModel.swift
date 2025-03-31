@@ -141,17 +141,9 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
 
         // try to fetch existing model
         if let model = try? Database.pool.read({ try request.fetchOne($0) }) {
-            // if model needs update, decide whether to update immediately or defer to background task
+            // check if model needs immediate update
             if model.needsUpdate {
-                let geoKey = model.geoKey
-                
-                // update incomplete D2 models immediately
-                let shouldUpdateImmediately = model.depth == 2 && model.completenessScore < 1.0
-                
-                if shouldUpdateImmediately {
-                    print("IMMEDIATE UPDATE: [\(model.geoKey)] depth: \(model.depth), completeness: \(String(format: "%.2f", model.completenessScore))")
-                    Task { ActivityTypesManager.updateModel(geoKey: geoKey) }
-                }
+                ActivityTypesManager.processModelUpdate(model: model)
             }
             return model
         }
@@ -169,9 +161,8 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
             logger.error(error, subsystem: .database)
         }
 
-        // always update new models immediately to ensure model files exist
-        let geoKey = model.geoKey
-        Task { ActivityTypesManager.updateModel(geoKey: geoKey) }
+        // process update for new model
+        ActivityTypesManager.processModelUpdate(model: model)
 
         return model
     }
@@ -181,17 +172,19 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
         try MLModelCache.reloadModelFor(filename: filename)
     }
 
-    private func markNeedsUpdate() {
+    private func markNeedsUpdate(fileMissing: Bool = false) async {
         if needsUpdate { return }
         
         do {
-            try Database.pool.write { db in
+            try await Database.pool.write { db in
                 var mutableSelf = self
                 try mutableSelf.updateChanges(db) {
                     $0.needsUpdate = true
                 }
             }
             
+            await ActivityTypesManager.processModelUpdate(model: self, fileMissing: fileMissing)
+
         } catch {
             logger.error(error, subsystem: .database)
         }
@@ -215,7 +208,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
     public func classify(_ sample: LocomotionSample) -> ClassifierResults {
         do {
             guard let model = try MLModelCache.modelFor(filename: filename) else {
-                markNeedsUpdate()
+                Task { await markNeedsUpdate(fileMissing: true) }
                 return ClassifierResults(resultItems: [])
             }
 
