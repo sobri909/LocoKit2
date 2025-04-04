@@ -33,5 +33,17 @@ extension Database {
                 table.add(column: "heartRate", .double)
             }
         }
+        
+        migrator.registerMigration("Place.countryCode") { db in
+            try? db.alter(table: "Place") { table in
+                table.add(column: "countryCode", .text).indexed()
+            }
+        }
+        
+        migrator.registerMigration("Place.locality") { db in
+            try? db.alter(table: "Place") { table in
+                table.add(column: "locality", .text).indexed()
+            }
+        }
     }
 }

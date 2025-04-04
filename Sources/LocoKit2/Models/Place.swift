@@ -27,6 +27,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public var secondsFromGMT: Int?
     public var name: String
     public var streetAddress: String?
+    public var countryCode: String?
+    public var locality: String?
     public var isStale = true
 
     public var mapboxPlaceId: String?
@@ -65,18 +67,23 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         if foursquarePlaceId != nil { sources.append(.foursquare) }
         return sources
     }
-
-    // MARK: - Timezone
+    
+    public var countryName: String? {
+        guard let countryCode else { return nil }
+        return Locale.current.localizedString(forRegionCode: countryCode)
+    }
 
     public var localTimeZone: TimeZone? {
         guard let secondsFromGMT else { return nil }
         return TimeZone(secondsFromGMT: secondsFromGMT)
     }
 
+    // MARK: - Reverse Geocode
+
     @PlacesActor
     @discardableResult
     public func updateFromReverseGeocode() async throws -> Bool {
-        if secondsFromGMT != nil && streetAddress != nil { return false }
+        if secondsFromGMT != nil && streetAddress != nil && countryCode != nil && locality != nil { return false }
 
         do {
             let placemarks = try await CLGeocoder().reverseGeocodeLocation(center.location)
@@ -103,6 +110,12 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                         }
                         if let streetAddress {
                             $0.streetAddress = streetAddress
+                        }
+                        if let isoCountryCode = placemark.isoCountryCode {
+                            $0.countryCode = isoCountryCode.lowercased()
+                        }
+                        if let city = placemark.locality {
+                            $0.locality = city
                         }
                     }
                 }
@@ -179,6 +192,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         coordinate: CLLocationCoordinate2D,
         name: String,
         streetAddress: String? = nil,
+        countryCode: String? = nil,
+        locality: String? = nil,
         secondsFromGMT: Int? = nil,
         mapboxPlaceId: String? = nil,
         mapboxCategory: String? = nil,
@@ -192,6 +207,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         self.longitude = coordinate.longitude
         self.name = name
         self.streetAddress = streetAddress
+        self.countryCode = countryCode
+        self.locality = locality
         self.secondsFromGMT = secondsFromGMT
 
         self.mapboxPlaceId = mapboxPlaceId
@@ -217,6 +234,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         case secondsFromGMT
         case name
         case streetAddress
+        case countryCode
+        case locality
         case isStale
 
         case rtreeId
@@ -246,6 +265,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         secondsFromGMT = row["secondsFromGMT"]
         name = row["name"]
         streetAddress = row["streetAddress"]
+        countryCode = row["countryCode"]
+        locality = row["locality"]
         isStale = row["isStale"]
         rtreeId = row["rtreeId"]
 
@@ -292,6 +313,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         container["secondsFromGMT"] = secondsFromGMT
         container["name"] = name
         container["streetAddress"] = streetAddress
+        container["countryCode"] = countryCode
+        container["locality"] = locality
         container["isStale"] = isStale
         container["rtreeId"] = rtreeId
 

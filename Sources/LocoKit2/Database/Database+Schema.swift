@@ -27,6 +27,8 @@ extension Database {
                 table.column("name", .text).notNull().indexed()
                     .check { length($0) > 0 }
                 table.column("streetAddress", .text)
+                table.column("countryCode", .text).indexed()
+                table.column("locality", .text).indexed()
 
                 table.column("mapboxPlaceId", .text).indexed()
                 table.column("mapboxCategory", .text)
