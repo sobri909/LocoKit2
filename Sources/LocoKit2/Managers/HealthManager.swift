@@ -41,7 +41,7 @@ public enum HealthManager {
         HKQuantityType(.heartRate)
     ]
     
-    // MARK: - Auth
+    // MARK: - Requesting Access
 
     public static func requestAuthorization() async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
@@ -53,7 +53,37 @@ public enum HealthManager {
             logger.error(error, subsystem: .healthkit)
         }
     }
+
+    // MARK: - Requested Access States
+
+    public static func haveEverRequestedHealthKitType(_ type: HKQuantityType) -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else { return false }
+        let status = healthStore.authorizationStatus(for: type)
+        return status != .notDetermined
+    }
+
+    public static func haveEverRequestedAnyHealthKitType() -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else { return false }
+        for type in healthDataTypes {
+            if healthStore.authorizationStatus(for: type) != .notDetermined {
+                return true
+            }
+        }
+        return false
+    }
     
+    public static func haveRequestedAllHealthKitTypes() -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else { return false }
+        for type in healthDataTypes {
+            if healthStore.authorizationStatus(for: type) == .notDetermined {
+                return false
+            }
+        }
+        return true
+    }
+
+    // MARK: - Read Access States
+
     public static func haveAnyReadAccess() async throws -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
 
