@@ -99,8 +99,6 @@ public final class TimelineSegment: Sendable {
 
         // load/copy samples
         for index in newItems.indices {
-            if Task.isCancelled { return }
-
             let newItem = newItems[index]
             if newItem.samplesChanged {
                 await newItems[index].fetchSamples()
@@ -120,6 +118,8 @@ public final class TimelineSegment: Sendable {
 
         self.timelineItems = newItems
 
+        if Task.isCancelled { return }
+        
         // early return if we're not supposed to modify the items at all
         guard shouldReprocessOnUpdate else { return }
         guard UIApplication.shared.applicationState == .active else { return }
@@ -133,11 +133,14 @@ public final class TimelineSegment: Sendable {
     private func classifyItems(_ items: [TimelineItem]) async {
         var mutableItems = items
         for index in mutableItems.indices {
+            if Task.isCancelled { return }
             await mutableItems[index].classifySamples()
         }
     }
 
     private func processItems(_ newItems: [TimelineItem], oldItems: [TimelineItem]) async {
+        if Task.isCancelled { return }
+        
         let currentItemId = await TimelineRecorder.currentItemId
 
         // don't reprocess if currentItem is in segment and isn't a keeper
