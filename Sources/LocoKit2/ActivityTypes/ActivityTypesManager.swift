@@ -192,11 +192,21 @@ public enum ActivityTypesManager {
                 print("UPDATING: \(model.geoKey), ADDING FAKE STATIONARY SAMPLE")
 
                 // create a fake stationary sample
+                let fakeLocation = CLLocation(
+                    coordinate: model.centerCoordinate,
+                    altitude: 0,
+                    horizontalAccuracy: 10, // valid accuracy > 0
+                    verticalAccuracy: 10,   // valid accuracy > 0
+                    course: 0,              // valid course >= 0
+                    speed: 0,               // valid speed >= 0
+                    timestamp: .now
+                )
+
                 var fakeSample = LocomotionSample(
                     date: .now,
                     movingState: .stationary,
                     recordingState: .recording,
-                    location: model.centerCoordinate.location
+                    location: fakeLocation
                 )
                 fakeSample.confirmedActivityType = .stationary
                 fakeSample.xyAcceleration = 0
