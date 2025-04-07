@@ -154,38 +154,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     
     // MARK: - RTree
 
-    public func updateRTree() async {
-        do {
-            if let rtreeId {
-                let rtree = PlaceRTree(
-                    id: rtreeId,
-                    latMin: center.latitude, latMax: center.latitude,
-                    lonMin: center.longitude, lonMax: center.longitude
-                )
-                try await Database.pool.write {
-                    try rtree.update($0)
-                }
-
-            } else {
-                try await Database.pool.write { [self] db in
-                    var rtree = PlaceRTree(
-                        latMin: center.latitude, latMax: center.latitude,
-                        lonMin: center.longitude, lonMax: center.longitude
-                    )
-                    try rtree.insert(db)
-
-                    var mutableSelf = self
-                    try mutableSelf.updateChanges(db) {
-                        $0.rtreeId = rtree.id
-                    }
-                }
-            }
-
-        } catch {
-            logger.error(error, subsystem: .database)
-        }
-    }
-
     // MARK: - Init
 
     public init(

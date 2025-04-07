@@ -84,8 +84,6 @@ extension Place {
                         $0.visitDurations = Histogram.forDurations(intervals: visitDurations)
                         $0.occupancyTimes = occupancyTimes
                     }
-                    
-                    Task { await mutableSelf.updateRTree() }
                 }
 
                 logger.info("UPDATED: \(name)", subsystem: .places)

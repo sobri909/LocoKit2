@@ -99,6 +99,7 @@ public final class Database: @unchecked Sendable {
         addLastSavedTriggers(to: &migrator)
         addEdgeTriggers(to: &migrator)
         addSampleTriggers(to: &migrator)
+        addRTreeTriggers(to: &migrator)
     }
 
     // MARK: - URLs

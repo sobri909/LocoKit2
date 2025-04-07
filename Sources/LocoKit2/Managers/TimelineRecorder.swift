@@ -289,7 +289,6 @@ public enum TimelineRecorder {
             }
             
             await processSample(sample)
-            await sample.saveRTree()
 
             // reset the fallback
             await startFallbackSampleTimer()

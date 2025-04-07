@@ -178,31 +178,6 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         }
     }
 
-    // MARK: -
-
-    internal func saveRTree() async {
-        guard let coordinate = location?.coordinate, coordinate.isUsable else { return }
-        guard rtreeId == nil else { return }
-
-        do {
-            try await Database.pool.write { [self] db in
-                var rtree = SampleRTree(
-                    latMin: coordinate.latitude, latMax: coordinate.latitude,
-                    lonMin: coordinate.longitude, lonMax: coordinate.longitude
-                )
-                try rtree.insert(db)
-
-                var mutableSelf = self
-                try mutableSelf.updateChanges(db) { sample in
-                    sample.rtreeId = rtree.id
-                }
-            }
-
-        } catch {
-            logger.error(error, subsystem: .database)
-        }
-    }
-
     // MARK: - Codable
 
     enum CodingKeys: String, CodingKey {
