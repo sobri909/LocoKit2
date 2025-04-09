@@ -246,7 +246,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
     // MARK: - Item fetching
 
     public static func fetchItem(itemId: String, includeSamples: Bool, includePlace: Bool = false) async throws -> TimelineItem? {
-        return try await Database.pool.read {
+        return try await Database.pool.uncancellableRead {
             return try itemRequest(includeSamples: includeSamples, includePlaces: includePlace)
                 .filter(Column("id") == itemId)
                 .fetchOne($0)
