@@ -47,7 +47,7 @@ extension TimelineItem {
         }
     }
 
-    public func changeActivityType(to confirmedType: ActivityType) async throws {
+    public mutating func changeActivityType(to confirmedType: ActivityType) async throws {
         guard let samples else {
             throw TimelineError.samplesNotLoaded
         }
@@ -55,8 +55,8 @@ extension TimelineItem {
         var samplesToConfirm: [LocomotionSample] = []
 
         for sample in samples {
-            // let confident stationary samples survive
-            if sample.hasUsableCoordinate, sample.activityType == .stationary {
+            // let confident stationary samples survive, when changing to a non-stationary type
+            if confirmedType != .stationary, sample.hasUsableCoordinate, sample.activityType == .stationary {
                 if let typeScore = await sample.classifierResults?[.stationary]?.score, typeScore > 0.5 {
                     continue
                 }
@@ -70,8 +70,8 @@ extension TimelineItem {
 
         if !samplesToConfirm.isEmpty {
             do {
-                let changedSamples = try await Database.pool.write { [samplesToConfirm] db in
-                    // Update the samples
+                let changedSamples = try await Database.pool.write { [samplesToConfirm, trip] db in
+                    // update the samples
                     var changed: [LocomotionSample] = []
                     for var sample in samplesToConfirm where sample.confirmedActivityType != confirmedType {
                         try sample.updateChanges(db) {
@@ -80,7 +80,7 @@ extension TimelineItem {
                         changed.append(sample)
                     }
 
-                    // Update the trip's type and uncertainty state
+                    // update the Trip's activity type and uncertainty state
                     if var mutableTrip = trip {
                         try mutableTrip.updateChanges(db) {
                             $0.confirmedActivityType = confirmedType
@@ -98,6 +98,9 @@ extension TimelineItem {
                 logger.error(error, subsystem: .database)
                 return
             }
+
+            // need to refresh samples to ensure extraction uses updated segments
+            await fetchSamples(forceFetch: true)
         }
 
         // if we're forcing it to stationary, extract all the stationary segments
