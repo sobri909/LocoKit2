@@ -17,15 +17,27 @@ extension TimelineProcessor {
     public static func extractVisit(for segment: ItemSegment, placeId: String, confirmedPlace: Bool) async throws -> TimelineItem? {
         return try await extractItem(for: segment, isVisit: true, placeId: placeId, confirmedPlace: confirmedPlace)
     }
+    
+    @discardableResult
+    public static func extractVisit(for segment: ItemSegment, customTitle: String) async throws -> TimelineItem? {
+        return try await extractItem(for: segment, isVisit: true, customTitle: customTitle)
+    }
 
     @discardableResult
-    public static func extractItem(for segment: ItemSegment, isVisit: Bool, placeId: String? = nil, confirmedPlace: Bool = true) async throws -> TimelineItem? {
-//        guard try await segment.validateIsContiguous() else {
-//            throw TimelineError.invalidSegment("Segment fails validateIsContiguous()")
-//        }
+    public static func extractItem(
+        for segment: ItemSegment,
+        isVisit: Bool,
+        placeId: String? = nil,
+        confirmedPlace: Bool = true,
+        customTitle: String? = nil
+    ) async throws -> TimelineItem? {
+        // TODO: think through a way to bring this back, but without the breakage
+        // guard try await segment.validateIsContiguous() else {
+        //     throw TimelineError.invalidSegment("Segment fails validateIsContiguous()")
+        // }
 
         // get overlapping items
-        let overlappers = try await Database.pool.read { db in
+        let overlappers = try await Database.pool.uncancellableRead { db in
             try TimelineItem
                 .itemRequest(includeSamples: true)
                 .filter(Column("deleted") == false && Column("disabled") == false)
@@ -34,7 +46,7 @@ extension TimelineProcessor {
                 .fetchAll(db)
         }
 
-        let (newItem, itemsToHeal) = try await Database.pool.write { db in
+        let (newItem, itemsToHeal) = try await Database.pool.uncancellableWrite { db in
             var prevEdgesToBreak: [TimelineItem] = []
             var nextEdgesToBreak: [TimelineItem] = []
             var itemsToDelete: [TimelineItem] = []
@@ -86,13 +98,23 @@ extension TimelineProcessor {
             var newItem = try TimelineItem.createItem(from: segment.samples, isVisit: isVisit, db: db)
             itemsToHeal.append(newItem.id)
 
-            // assign place if provided
-            if isVisit, let placeId {
-                try newItem.visit?.updateChanges(db) {
-                    $0.placeId = placeId
-                    $0.confirmedPlace = confirmedPlace
-                    if confirmedPlace {
-                        $0.setUncertainty(false)
+            // assign place or custom title if provided
+            if isVisit {
+                if let placeId {
+                    try newItem.visit?.updateChanges(db) {
+                        $0.placeId = placeId
+                        $0.confirmedPlace = confirmedPlace
+                        if confirmedPlace {
+                            $0.setUncertainty(false)
+                        }
+                    }
+                    
+                } else if let customTitle {
+                    try newItem.visit?.updateChanges(db) {
+                        $0.customTitle = customTitle
+                        $0.placeId = nil
+                        $0.confirmedPlace = false
+                        $0.setUncertainty(true)
                     }
                 }
             }
