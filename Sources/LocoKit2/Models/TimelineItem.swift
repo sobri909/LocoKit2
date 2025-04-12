@@ -423,6 +423,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         if base != other.base { return true }
         if isVisit, visit != other.visit { return true }
         if isTrip, trip != other.trip { return true }
+        if place != other.place { return true }
         return false
     }
 

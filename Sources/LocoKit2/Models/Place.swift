@@ -68,6 +68,10 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         return sources
     }
     
+    public var isPrivate: Bool {
+        return sourceDatabases.isEmpty
+    }
+    
     public var countryName: String? {
         guard let countryCode else { return nil }
         return Locale.current.localizedString(forRegionCode: countryCode)
