@@ -103,7 +103,7 @@ extension Database {
                 table.column("radiusSD", .double).notNull()
 
                 table.column("placeId", .text).indexed()
-                    .references("Place", onDelete: .setNull, deferred: true)
+                    .references("Place", onDelete: .restrict, deferred: true)
 
                 table.column("confirmedPlace", .boolean).notNull()
                     .check { $0 == false || Column("placeId") != nil }
