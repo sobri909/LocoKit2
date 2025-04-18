@@ -131,6 +131,28 @@ public enum ActivityTypesManager {
             return try String.fetchAll(db, request)
         }
     }
+    
+    public static func deleteAllModels() async throws {
+        // first clear from memory cache
+        ActivityClassifier.clearModels()
+        
+        // then remove from database
+        try await Database.pool.write { db in
+            _ = try ActivityTypesModel.deleteAll(db)
+        }
+        
+        // then delete model files
+        let manager = FileManager.default
+        if let files = try? manager.contentsOfDirectory(at: MLModelCache.modelsDir, includingPropertiesForKeys: nil) {
+            for file in files {
+                if file.lastPathComponent.hasPrefix("CD") {
+                    try? manager.removeItem(at: file)
+                }
+            }
+        }
+        
+        logger.info("Deleted all ActivityTypesModels", subsystem: .activitytypes)
+    }
 
     public static func updateModel(geoKey: String) {
         do {

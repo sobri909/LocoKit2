@@ -240,16 +240,26 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
         )
     }
     
-    private static func inferredGeoKey(depth: Int, coordinate: CLLocationCoordinate2D) -> String {
-        return String(format: "CD\(depth) %.2f,%.2f", coordinate.latitude, coordinate.longitude)
+    private static func modelCenterCoordinates(for depth: Int, coordinate: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        // get coordinate ranges for this model depth
+        let latRange = latitudeRangeFor(depth: depth, coordinate: coordinate)
+        let lonRange = longitudeRangeFor(depth: depth, coordinate: coordinate)
+        
+        // calculate the center coordinates
+        let centerLat = latRange.lowerBound + (latRange.upperBound - latRange.lowerBound) / 2
+        let centerLon = lonRange.lowerBound + (lonRange.upperBound - lonRange.lowerBound) / 2
+        
+        return CLLocationCoordinate2D(latitude: centerLat, longitude: centerLon)
     }
-
-    private static func inferredFilename(for geoKey: String, depth: Int, centerLat: Double, centerLon: Double) -> String {
-        return String(format: "CD\(depth)_%.2f_%.2f", centerLat, centerLon) + ".mlmodelc"
+    
+    private static func inferredGeoKey(depth: Int, coordinate: CLLocationCoordinate2D) -> String {
+        let center = modelCenterCoordinates(for: depth, coordinate: coordinate)
+        return String(format: "CD\(depth) %.2f,%.2f", center.latitude, center.longitude)
     }
     
     private static func inferredFilename(for geoKey: String, depth: Int, coordinate: CLLocationCoordinate2D) -> String {
-        return inferredFilename(for: geoKey, depth: depth, centerLat: coordinate.latitude, centerLon: coordinate.longitude)
+        let center = modelCenterCoordinates(for: depth, coordinate: coordinate)
+        return String(format: "CD\(depth)_%.2f_%.2f", center.latitude, center.longitude) + ".mlmodelc"
     }
     
     public static func latitudeRangeFor(depth: Int, coordinate: CLLocationCoordinate2D) -> ClosedRange<Double> {

@@ -180,5 +180,10 @@ public enum ActivityClassifier {
         }
         models = models.filter { $0.value.geoKey != geoKey }
     }
+    
+    public static func clearModels() {
+        models = [:]
+        cache.removeAllObjects()
+    }
 
 }
