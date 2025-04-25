@@ -14,33 +14,31 @@ import UIKit
 @HealthActor
 public enum HealthManager {
     
-    private static let healthStore = HKHealthStore()
+    public static let healthStore = HKHealthStore()
 
-    private static var heartRateSamplesCache: [String: (date: Date, samples: [HKQuantitySample])] = [:]
-    private static let cacheDuration: TimeInterval = .hours(1)
-    private static let maxCacheSize = 50
-    
     private static var lastHealthUpdateTimes: [String: Date] = [:]
     private static let healthUpdateThrottle: TimeInterval = .minutes(15)
     
-    private static var healthKitEnabled = false
-    
-    public static func enableHealthKit() {
-        healthKitEnabled = true
-    }
-    
-    public static func disableHealthKit() {
-        healthKitEnabled = false
-    }
-    
     nonisolated
-    public static let healthDataTypes: Set<HKQuantityType> = [
+    public static let healthDataTypes: Set<HKObjectType> = [
         HKQuantityType(.stepCount),
         HKQuantityType(.flightsClimbed),
         HKQuantityType(.activeEnergyBurned),
         HKQuantityType(.heartRate)
     ]
-    
+
+    // MARK: - Enable / Disable
+
+    public private(set) static var healthKitEnabled = false
+
+    public static func enableHealthKit() {
+        healthKitEnabled = true
+    }
+
+    public static func disableHealthKit() {
+        healthKitEnabled = false
+    }
+
     // MARK: - Requesting Access
 
     public static func requestAuthorization() async {
@@ -95,12 +93,21 @@ public enum HealthManager {
         return false
     }
     
-    public static func checkReadPermission(for type: HKQuantityType) async throws -> Bool {
+    public static func checkReadPermission(for type: HKObjectType) async throws -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
+        
+        if let quantityType = type as? HKQuantityType {
+            let descriptor = HKSourceQueryDescriptor(predicate: .quantitySample(type: quantityType, predicate: nil))
+            let sources = try await descriptor.result(for: healthStore)
+            return !sources.isEmpty
 
-        let descriptor = HKSourceQueryDescriptor(predicate: .quantitySample(type: type, predicate: nil))
-        let sources = try await descriptor.result(for: healthStore)
-        return !sources.isEmpty
+        } else if let categoryType = type as? HKCategoryType {
+            let descriptor = HKSourceQueryDescriptor(predicate: .categorySample(type: categoryType, predicate: nil))
+            let sources = try await descriptor.result(for: healthStore)
+            return !sources.isEmpty
+        }
+        
+        return false
     }
 
     // MARK: - Updating TimelineItem Properties
@@ -348,6 +355,17 @@ public enum HealthManager {
                 logger.error(error, subsystem: .database)
             }
         }
+    }
+
+    // MARK: - Public Fetching
+
+    public static func heartRateSamples(for item: TimelineItem) async throws -> [HKQuantitySample] {
+        guard healthKitEnabled else { return [] }
+        guard let dateRange = item.dateRange else { return [] }
+        guard HKHealthStore.isHealthDataAvailable() else { return [] }
+        if await UIApplication.shared.applicationState == .background { return [] }
+
+        return try await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
     }
 
     // MARK: - Private Fetching
