@@ -34,7 +34,7 @@ extension TimelineItem {
         } else if activityType == .airplane {
             (maxInterval, epsilon) = (15.0, 100.0) // airplane
         } else {
-            (maxInterval, epsilon) = (6.0, 7.0) // default case (vehicles)
+            (maxInterval, epsilon) = (6.0, 6.0) // default case (vehicles)
         }
 
         let sortedSamples = samples.sorted { $0.date < $1.date }
