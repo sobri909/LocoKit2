@@ -39,9 +39,15 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     private let lock = OSAllocatedUnfairLock()
 
     nonisolated(unsafe)
-    public var enabled = true
+    public var enabled = true {
+        didSet {
+            if enabled && !oldValue {
+                processPendingChanges()
+            }
+        }
+    }
 
-    // MARK: -
+    // MARK: - Observable Sream
 
     public func changesStream() -> AsyncStream<DateInterval> {
         AsyncStream { continuation in
@@ -57,14 +63,17 @@ public final class TimelineObserver: TransactionObserver, Sendable {
         }
     }
 
-    private func notifyChange(_ dateRange: DateInterval) {
-        let continuations = lock.withLock { self.continuations }
-        for continuation in continuations.values {
-            continuation.yield(dateRange)
+    // MARK: - Change Processing
+
+    private func processPendingChanges() {
+        let rowIds = lock.withLock { changedRowIds }
+        if !rowIds.isEmpty {
+            lock.withLock { changedRowIds.removeAll() }
+            Task { await process(rowIds: rowIds) }
         }
     }
 
-    private func processChangedRows(_ rowIds: [String: Set<Int64>]) async {
+    private func process(rowIds: [String: Set<Int64>]) async {
         let baseRowIds = rowIds["TimelineItemBase", default: []].map(String.init).joined(separator: ",")
         let visitRowIds = rowIds["TimelineItemVisit", default: []].map(String.init).joined(separator: ",")
         let tripRowIds = rowIds["TimelineItemTrip", default: []].map(String.init).joined(separator: ",")
@@ -97,10 +106,16 @@ public final class TimelineObserver: TransactionObserver, Sendable {
         }
     }
 
+    private func notifyChange(_ dateRange: DateInterval) {
+        let continuations = lock.withLock { self.continuations }
+        for continuation in continuations.values {
+            continuation.yield(dateRange)
+        }
+    }
+
     // MARK: - TransactionObserver
 
     public func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool {
-        guard enabled else { return false }
         return observedTables.contains(eventKind.tableName)
     }
 
@@ -111,11 +126,8 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     }
 
     public func databaseDidCommit(_ db: GRDB.Database) {
-        let rowIds = lock.withLock { changedRowIds }
-        if !rowIds.isEmpty {
-            lock.withLock { changedRowIds.removeAll() }
-            Task { await processChangedRows(rowIds) }
-        }
+        guard enabled else { return }
+        processPendingChanges()
     }
 
     public func databaseDidRollback(_ db: GRDB.Database) {
