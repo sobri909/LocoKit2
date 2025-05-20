@@ -131,15 +131,7 @@ public enum ImportManager {
                     let places = try JSONDecoder().decode([Place].self, from: fileData)
                     print("Loaded \(places.count) places from \(fileURL.lastPathComponent)")
 
-                    for var place in places {
-                        var rtree = PlaceRTree(
-                            latMin: place.latitude,
-                            latMax: place.latitude,
-                            lonMin: place.longitude,
-                            lonMax: place.longitude
-                        )
-                        try rtree.save(db)
-                        place.rtreeId = rtree.id
+                    for place in places {
                         try place.save(db)
                     }
                 } catch {
@@ -344,18 +336,6 @@ public enum ImportManager {
                                 // null the reference for database compliance
                                 sample.timelineItemId = nil
                                 orphanedCount += 1
-                            }
-                            
-                            // create RTree record if we have valid coordinates
-                            if let coordinate = sample.coordinate, !sample.disabled {
-                                var rtree = SampleRTree(
-                                    latMin: coordinate.latitude,
-                                    latMax: coordinate.latitude,
-                                    lonMin: coordinate.longitude,
-                                    lonMax: coordinate.longitude
-                                )
-                                try rtree.save(db)
-                                sample.rtreeId = rtree.id
                             }
 
                             try sample.save(db)
