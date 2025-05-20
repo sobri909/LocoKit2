@@ -8,7 +8,7 @@
 import Foundation
 import GRDB
 
-@PersistenceActor
+@ImportExportActor
 public enum ExportManager {
     public static let schemaVersion = "2.0.0"
 

@@ -8,7 +8,7 @@
 import Foundation
 import GRDB
 
-@PersistenceActor
+@ImportExportActor
 public enum ImportManager {
 
     private(set) static var importInProgress = false
