@@ -156,8 +156,6 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         }
     }
     
-    // MARK: - RTree
-
     // MARK: - Init
 
     public init(
