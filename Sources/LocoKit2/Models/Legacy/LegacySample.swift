@@ -9,7 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct LegacySample: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
+public struct LegacySample: FetchableRecord, TableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
     
     public static var databaseTableName: String { return "LocomotionSample" }
 
@@ -21,7 +21,12 @@ public struct LegacySample: FetchableRecord, PersistableRecord, Identifiable, Co
     public let movingState: String
     public let recordingState: String
     public var deleted = false
-
+    public var disabled = false
+    
+    // activity classification
+    public var classifiedType: String?
+    public var confirmedType: String?
+    
     // foreign key
     public var timelineItemId: String?
 
@@ -86,7 +91,11 @@ public struct LegacySample: FetchableRecord, PersistableRecord, Identifiable, Co
         container["movingState"] = movingState
         container["recordingState"] = recordingState
         container["deleted"] = deleted
+        container["disabled"] = disabled
         container["lastSaved"] = Date()
+        
+        container["classifiedType"] = classifiedType
+        container["confirmedType"] = confirmedType
 
         container["timelineItemId"] = timelineItemId
 
