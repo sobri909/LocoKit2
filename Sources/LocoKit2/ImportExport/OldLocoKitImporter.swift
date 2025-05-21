@@ -226,47 +226,82 @@ public enum OldLocoKitImporter {
         logger.info("Starting Samples import", subsystem: .database)
         progress = 0
         
-        guard Database.legacyPool != nil else {
+        guard let legacyPool = Database.legacyPool else {
             throw ImportError.missingLocoKitDatabase
         }
         
-        // First, get a count of samples to import for progress tracking
-        let sampleCount = try await Database.legacyPool!.read { db in
+        // Track orphaned samples by their original parent timeline item ID
+        var orphanedSamples: [String: [LocomotionSample]] = [:]
+        
+        // Check if table exists and get sample count
+        let (minRowId, maxRowId, totalCount) = try await legacyPool.read { db in
             // Check if the LocomotionSample table exists
             let tableExists = try db.tableExists("LocomotionSample")
             guard tableExists else {
                 throw ImportError.invalidDatabaseSchema
             }
             
-            // Count non-deleted samples
-            return try Int.fetchOne(db, 
-                sql: "SELECT COUNT(*) FROM LocomotionSample WHERE deleted = 0"
+            // Get min/max rowids and count for non-deleted samples
+            let minRowId = try Int.fetchOne(db, 
+                LegacySample
+                    .select(min(Column("rowid")))
+                    .filter(Column("deleted") == false)
             ) ?? 0
+            
+            let maxRowId = try Int.fetchOne(db, 
+                LegacySample
+                    .select(max(Column("rowid")))
+                    .filter(Column("deleted") == false)
+            ) ?? 0
+            
+            let count = try LegacySample
+                .filter(Column("deleted") == false)
+                .fetchCount(db)
+            
+            return (minRowId, maxRowId, count)
         }
         
-        logger.info("Found \(sampleCount) samples to import from LocoKit database", subsystem: .database)
+        logger.info("Found \(totalCount) non-deleted samples (rowid range: \(minRowId)-\(maxRowId))", subsystem: .database)
         
-        // Define batch size for processing
         let batchSize = 1000
+        var currentRowId = minRowId
+        var processedCount = 0
         
-        // Track orphaned samples by their original parent timeline item ID
-        var orphanedSamples: [String: [LocomotionSample]] = [:]
+        // Process in rowid-range batches
+        while currentRowId <= maxRowId {
+            let batchEndRowId = min(currentRowId + batchSize - 1, maxRowId)
+            
+            // Only read a chunk of samples in each iteration
+            let batch = try await legacyPool.read { [currentRowId, batchEndRowId] db in
+                try LegacySample
+                    .filter(Column("deleted") == false)
+                    .filter(Column("rowid") >= currentRowId && Column("rowid") <= batchEndRowId)
+                    .order(Column("rowid"))
+                    .fetchAll(db)
+            }
+            
+            if !batch.isEmpty {
+                try await processLegacySampleBatch(batch, orphanedSamples: &orphanedSamples)
+                processedCount += batch.count
+                
+                logger.info("Processed batch \(currentRowId)-\(batchEndRowId) with \(batch.count) samples", subsystem: .database)
+            }
+            
+            // Update progress based on rowid position
+            progress = Double(currentRowId - minRowId) / Double(maxRowId - minRowId)
+            
+            // Move to next batch
+            currentRowId = batchEndRowId + 1
+        }
         
-        // Process in cursor-based batches
-        try await processSamplesInBatches(
-            batchSize: batchSize,
-            sampleCount: sampleCount,
-            orphanedSamples: &orphanedSamples
-        )
-        
-        // Process orphaned samples after all imports complete
+        // Process orphaned samples
         if !orphanedSamples.isEmpty {
             logger.info("Processing \(orphanedSamples.count) sets of orphaned samples", subsystem: .database)
             try await processOrphanedSamples(orphanedSamples)
         }
         
         progress = 1.0
-        logger.info("Samples import completed", subsystem: .database)
+        logger.info("Samples import completed: processed \(processedCount) samples", subsystem: .database)
     }
     
     private static func processOrphanedSamples(_ orphanedSamples: [String: [LocomotionSample]]) async throws {
@@ -329,123 +364,61 @@ public enum OldLocoKitImporter {
     
     // MARK: - Sample Processing Helpers
     
-    // Helper method for processing samples in batches with cursor-based iteration
-    private static func processSamplesInBatches(
-        batchSize: Int,
-        sampleCount: Int,
-        orphanedSamples: inout [String: [LocomotionSample]]
-    ) async throws {
-        var processed = 0
-        var allBatches: [[LegacySample]] = []
-        
-        // First, read all the samples in batches (synchronous operation)
-        guard let legacyPool = Database.legacyPool else {
-            throw ImportError.missingLocoKitDatabase
-        }
-        
-        try await legacyPool.read { db in
-            // Create a request for non-deleted samples with incremental primary key ordering
-            let request = LegacySample
-                .filter(sql: "deleted = 0")
-                .order(Column("rowid"))
-            
-            // Use a cursor to stream results without loading all into memory
-            let cursor = try request.fetchCursor(db)
-            
-            // Read in batches
-            var currentBatch: [LegacySample] = []
-            currentBatch.reserveCapacity(batchSize)
-            
-            // Process the cursor
-            while let sample = try cursor.next() {
-                currentBatch.append(sample)
-                
-                // When batch is full, save it
-                if currentBatch.count >= batchSize {
-                    allBatches.append(currentBatch)
-                    currentBatch = []
-                    currentBatch.reserveCapacity(batchSize)
-                }
-            }
-            
-            // Add any remaining samples in the last batch
-            if !currentBatch.isEmpty {
-                allBatches.append(currentBatch)
-            }
-        }
-        
-        // Now process all batches (async operation)
-        for (batchIndex, batch) in allBatches.enumerated() {
-            try await processSampleBatch(
-                batch,
-                batchCount: batchIndex + 1,
-                orphanedSamples: &orphanedSamples
-            )
-            
-            // Update progress
-            processed += batch.count
-            progress = Double(processed) / Double(sampleCount)
-            
-            logger.info("Processed batch \(batchIndex + 1)/\(allBatches.count) with \(batch.count) samples", subsystem: .database)
-        }
-    }
-    
     // Process a batch of legacy samples
-    private static func processSampleBatch(
-        _ batch: [LegacySample],
-        batchCount: Int,
-        orphanedSamples: inout [String: [LocomotionSample]]
-    ) async throws {
-        logger.info("Processing sample batch #\(batchCount) with \(batch.count) samples", subsystem: .database)
+    private static func processLegacySampleBatch(_ batch: [LegacySample], orphanedSamples: inout [String: [LocomotionSample]]) async throws {
+        // Skip empty batches
+        if batch.isEmpty { return }
         
         // Get all timeline item IDs referenced in this batch
         let itemIds = Set(batch.compactMap(\.timelineItemId))
-        if itemIds.isEmpty { return }
-        
-        // Query the database for valid timeline item IDs
-        let validIds = try await Database.pool.read { db in
-            try String.fetchSet(db, TimelineItemBase
-                .select(Column("id"))
-                .filter(itemIds.contains(Column("id"))))
+        if itemIds.isEmpty {
+            logger.info("Skipping batch with no timeline item references", subsystem: .database)
+            return
         }
         
-        try await Database.pool.write { db in
-            // Track orphaned samples by original timeline item ID
-            var batchOrphans: [String: [LocomotionSample]] = [:]
-            var orphanedCount = 0
+        // Query for valid timeline item IDs using the query interface
+        let validIds = try await Database.pool.read { db in
+            try TimelineItemBase
+                .select(Column("id"))
+                .filter(itemIds.contains(Column("id")))
+                .asRequest(of: String.self)
+                .fetchSet(db)
+        }
+        
+        // Process the batch and collect orphans
+        let (batchOrphans, orphanCount) = try await Database.pool.write { db in
+            var localOrphans: [String: [LocomotionSample]] = [:]
+            var localOrphanCount = 0
             
             for legacySample in batch {
                 // Skip disabled samples
                 guard !legacySample.disabled else { continue }
                 
-                // Create new sample from legacy data
+                // Create new LocomotionSample from legacy data
                 var sample = LocomotionSample(from: legacySample)
                 
-                // Check for invalid references to missing TimelineItems
+                // Check for references to missing TimelineItems
                 if let originalItemId = sample.timelineItemId, !validIds.contains(originalItemId) {
-                    batchOrphans[originalItemId, default: []].append(sample)
+                    localOrphans[originalItemId, default: []].append(sample)
                     sample.timelineItemId = nil
-                    orphanedCount += 1
+                    localOrphanCount += 1
                 }
                 
-                // Save the sample (RTree will be created automatically via trigger)
-                try sample.save(db)
+                // Insert the new sample (instead of save) as this is a new record
+                try sample.insert(db)
             }
             
-            if orphanedCount > 0 {
-                logger.info("Found \(orphanedCount) orphaned samples with missing parent items", subsystem: .database)
-            }
-            
-            // Return the batch orphans to be added to the main collection
-            await updateOrphanedSamples(batchOrphans, in: &orphanedSamples)
+            return (localOrphans, localOrphanCount)
         }
-    }
-    
-    // Helper to update orphanedSamples in a way that avoids the concurrency issue
-    @ImportExportActor
-    private static func updateOrphanedSamples(_ batchOrphans: [String: [LocomotionSample]], in orphanedSamples: inout [String: [LocomotionSample]]) {
-        for (itemId, samples) in batchOrphans {
-            orphanedSamples[itemId, default: []].append(contentsOf: samples)
+        
+        if orphanCount > 0 {
+            logger.info("Found \(orphanCount) orphaned samples in current batch", subsystem: .database)
+        }
+        
+        if !batchOrphans.isEmpty {
+            for (itemId, samples) in batchOrphans {
+                orphanedSamples[itemId, default: []].append(contentsOf: samples)
+            }
         }
     }
     
