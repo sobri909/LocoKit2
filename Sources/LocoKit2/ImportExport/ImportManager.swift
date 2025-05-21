@@ -41,8 +41,10 @@ public enum ImportManager {
         do {
             try await validateImportDirectory()
             try await importPlaces()
-            try await importTimelineItems()
-            try await restoreEdgeRelationships()
+            
+            let edgeManager = EdgeRecordManager()
+            try await importTimelineItems(edgeManager: edgeManager)
+            try await restoreEdgeRelationships(using: edgeManager)
             try await importSamples()
             
             // Clear import state
@@ -144,12 +146,11 @@ public enum ImportManager {
 
     // MARK: - Items
 
-    private static func importTimelineItems() async throws {
+    private static func importTimelineItems(edgeManager: EdgeRecordManager) async throws {
         guard let importURL else {
             throw ImportExportError.importNotInitialised
         }
         let itemsURL = importURL.appendingPathComponent("items")
-        let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
 
         // Get the monthly item files in chronological order
         let itemFiles = try FileManager.default.contentsOfDirectory(
@@ -161,9 +162,6 @@ public enum ImportManager {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
         print("Found item files: \(itemFiles.count)")
-
-        // Remove any existing edge records file
-        try? FileManager.default.removeItem(at: edgesURL)
 
         // Process monthly files
         for fileURL in itemFiles {
@@ -185,18 +183,14 @@ public enum ImportManager {
                         
                         for item in batch {
                             // Store edge record before nulling the relationships
-                            let record = EdgeRecord(
+                            let record = EdgeRecordManager.EdgeRecord(
                                 itemId: item.id,
                                 previousId: item.base.previousItemId,
                                 nextId: item.base.nextItemId
                             )
 
-                            do {
-                                let data = try JSONEncoder().encode(record)
-                                try data.appendLine(to: edgesURL)
-                            } catch {
-                                logger.error("Failed to save edge record: \(error)", subsystem: .database)
-                            }
+                            // Save edge record using EdgeRecordManager
+                            try edgeManager.saveRecord(record)
 
                             // Clear edges for initial import
                             var mutableBase = item.base
@@ -228,56 +222,23 @@ public enum ImportManager {
                 continue // Log and continue on file errors
             }
         }
+        
+        // Now restore edge relationships using the EdgeRecordManager
+        try await restoreEdgeRelationships(using: edgeManager)
     }
 
-    private static func restoreEdgeRelationships() async throws {
-        guard let importURL else {
-            throw PersistenceError.importNotInitialised
+    private static func restoreEdgeRelationships(using edgeManager: EdgeRecordManager) async throws {
+        print("Restoring edge relationships")
+        
+        // Use the EdgeRecordManager to restore relationships with progress tracking
+        try await edgeManager.restoreEdgeRelationships { progressPercentage in
+            // Could handle progress updates here if needed
         }
-
-        let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
-        guard FileManager.default.fileExists(atPath: edgesURL.path) else {
-            throw PersistenceError.missingEdgeRecords
-        }
-
-        let records = try await loadEdgeRecords(from: edgesURL)
-        print("Loaded \(records.count) edge records")
-
-        // Process records in batches to manage transaction size
-        for batch in records.chunked(into: 100) {
-            try await Database.pool.uncancellableWrite { db in
-                for record in batch {
-                    try TimelineItemBase
-                        .filter(Column("id") == record.itemId)
-                        .updateAll(db, [
-                            Column("previousItemId").set(to: record.previousId),
-                            Column("nextItemId").set(to: record.nextId)
-                        ])
-                }
-            }
-        }
-
+        
         print("Edge restoration complete")
-
-        // Clean up edge records file
-        try? FileManager.default.removeItem(at: edgesURL)
-    }
-
-    private static func loadEdgeRecords(from url: URL) async throws -> [EdgeRecord] {
-        var records: [EdgeRecord] = []
         
-        // Read JSONL file line by line to avoid loading entire file into memory
-        let fileHandle = try FileHandle(forReadingFrom: url)
-        defer { try? fileHandle.close() }
-        
-        while let line = try fileHandle.readLine() {
-            if let data = line.data(using: .utf8),
-               let record = try? JSONDecoder().decode(EdgeRecord.self, from: data) {
-                records.append(record)
-            }
-        }
-        
-        return records
+        // Clean up temporary files
+        edgeManager.cleanup()
     }
 
     // MARK: - Samples
@@ -449,9 +410,3 @@ public enum ImportManager {
 }
 
 // MARK: -
-
-private struct EdgeRecord: Codable {
-    let itemId: String
-    let previousId: String?
-    let nextId: String?
-}
