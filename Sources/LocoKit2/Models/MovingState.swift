@@ -16,6 +16,15 @@ public enum MovingState: Int, Codable, Sendable {
     public var stringValue: String {
         String(describing: self)
     }
+    
+    public init?(stringValue: String) {
+        switch stringValue {
+        case "uncertain": self.init(rawValue: -1)
+        case "stationary": self.init(rawValue: 0)
+        case "moving": self.init(rawValue: 1)
+        default: return nil
+        }
+    }
 }
 
 public struct MovingStateDetails: Sendable {
