@@ -196,27 +196,6 @@ public final class LocomotionManager: @unchecked Sendable {
         return sample
     }
 
-    public func createALegacySample() async -> LegacySample {
-        let location = await kalmanFilter.currentEstimatedLocation()
-        let movingState = await stationaryDetector.currentState()
-        let stepHz = stepsSampler.currentStepHz()
-
-        var sample = LegacySample(
-            date: location.timestamp,
-            movingState: movingState.movingState,
-            recordingState: await recordingState,
-            location: location
-        )
-        sample.stepHz = stepHz
-
-        if let wiggles = accelerometerSampler.currentAccelerationData() {
-            sample.xyAcceleration = wiggles.xyMean + (wiggles.xySD * 3)
-            sample.zAcceleration = wiggles.zMean + (wiggles.zSD * 3)
-        }
-
-        return sample
-    }
-
     public func sleepDetectorState() async ->  SleepDetectorState? {
         return await sleepModeDetector.state
     }

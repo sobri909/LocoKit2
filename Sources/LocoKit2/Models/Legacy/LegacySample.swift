@@ -9,8 +9,7 @@ import Foundation
 import CoreLocation
 import GRDB
 
-public struct LegacySample: FetchableRecord, TableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
-    
+public struct LegacySample: FetchableRecord, TableRecord, Identifiable, Codable, Hashable, Sendable {
     public static var databaseTableName: String { return "LocomotionSample" }
 
     public var id: String { sampleId }
@@ -59,57 +58,4 @@ public struct LegacySample: FetchableRecord, TableRecord, PersistableRecord, Ide
             timestamp: date
         )
     }
-
-    // MARK: -
-
-    public init(
-        date: Date, secondsFromGMT: Int = TimeZone.current.secondsFromGMT(),
-        movingState: MovingState, recordingState: RecordingState,
-        location: CLLocation? = nil
-    ) {
-        self.date = date
-        self.secondsFromGMT = secondsFromGMT
-        self.movingState = movingState.stringValue
-        self.recordingState = recordingState.stringValue
-
-        self.latitude = location?.coordinate.latitude
-        self.longitude = location?.coordinate.longitude
-        self.altitude = location?.altitude
-        self.horizontalAccuracy = location?.horizontalAccuracy
-        self.verticalAccuracy = location?.verticalAccuracy
-        self.speed = location?.speed
-        self.course = location?.course
-    }
-
-    // MARK: - PersistableRecord
-
-    public func encode(to container: inout PersistenceContainer) {
-        container["sampleId"] = sampleId
-        container["date"] = date
-        container["secondsFromGMT"] = secondsFromGMT
-        container["source"] = source
-        container["movingState"] = movingState
-        container["recordingState"] = recordingState
-        container["deleted"] = deleted
-        container["disabled"] = disabled
-        container["lastSaved"] = Date()
-        
-        container["classifiedType"] = classifiedType
-        container["confirmedType"] = confirmedType
-
-        container["timelineItemId"] = timelineItemId
-
-        container["latitude"] = latitude
-        container["longitude"] = longitude
-        container["altitude"] = altitude
-        container["horizontalAccuracy"] = horizontalAccuracy
-        container["verticalAccuracy"] = verticalAccuracy
-        container["speed"] = speed
-        container["course"] = course
-
-        container["stepHz"] = stepHz
-        container["xyAcceleration"] = xyAcceleration
-        container["zAcceleration"] = zAcceleration
-    }
-
 }
