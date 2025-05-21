@@ -42,7 +42,7 @@ public enum ExportManager {
 
     public static func startExport() async throws {
         guard !exportInProgress else {
-            throw PersistenceError.exportInProgress
+            throw ImportExportError.exportInProgress
         }
 
         exportInProgress = true
@@ -55,7 +55,7 @@ public enum ExportManager {
         // Get iCloud container root
         guard let iCloudRoot = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
             cleanupFailedExport()
-            throw PersistenceError.iCloudNotAvailable
+            throw ImportExportError.iCloudNotAvailable
         }
 
         do {
@@ -92,7 +92,7 @@ public enum ExportManager {
 
     private static func writeInitialMetadata() async throws {
         guard let metadataURL else {
-            throw PersistenceError.exportNotInitialised
+            throw ImportExportError.exportNotInitialised
         }
 
         // Gather stats
@@ -131,7 +131,7 @@ public enum ExportManager {
 
     private static func exportPlaces() async throws {
         guard let placesURL else {
-            throw PersistenceError.exportNotInitialised
+            throw ImportExportError.exportNotInitialised
         }
 
         // get all places
@@ -167,7 +167,7 @@ public enum ExportManager {
 
     private static func exportItems() async throws {
         guard let itemsURL else {
-            throw PersistenceError.exportNotInitialised
+            throw ImportExportError.exportNotInitialised
         }
 
         // Get all timeline items with their full relationships loaded
@@ -208,7 +208,7 @@ public enum ExportManager {
 
     private static func exportSamples() async throws {
         guard let samplesURL else {
-            throw PersistenceError.exportNotInitialised
+            throw ImportExportError.exportNotInitialised
         }
 
         // Get all samples ordered by date
@@ -252,7 +252,7 @@ public enum ExportManager {
 
     private static func finaliseMetadata(placesCompleted: Bool = false, itemsCompleted: Bool = false, samplesCompleted: Bool = false) throws {
         guard let metadataURL else {
-            throw PersistenceError.exportNotInitialised
+            throw ImportExportError.exportNotInitialised
         }
 
         let decoder = JSONDecoder()
@@ -295,7 +295,7 @@ public enum ExportManager {
 
 // MARK: -
 
-enum PersistenceError: Error {
+enum ImportExportError: Error {
     // Export errors
     case exportInProgress
     case exportNotInitialised

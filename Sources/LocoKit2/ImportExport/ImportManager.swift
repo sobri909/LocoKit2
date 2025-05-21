@@ -19,7 +19,7 @@ public enum ImportManager {
     
     public static func startImport(withBookmark bookmark: Data) async throws {
         guard !importInProgress else {
-            throw PersistenceError.importInProgress
+            throw ImportExportError.importInProgress
         }
         
         importInProgress = true
@@ -28,12 +28,12 @@ public enum ImportManager {
         var isStale = false
         guard let url = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &isStale) else {
             cleanupFailedImport()
-            throw PersistenceError.invalidBookmark
+            throw ImportExportError.invalidBookmark
         }
         
         guard url.startAccessingSecurityScopedResource() else {
             cleanupFailedImport()
-            throw PersistenceError.securityScopeAccessDenied
+            throw ImportExportError.securityScopeAccessDenied
         }
         
         importURL = url
@@ -56,7 +56,7 @@ public enum ImportManager {
     
     private static func validateImportDirectory() async throws {
         guard let importURL else {
-            throw PersistenceError.importNotInitialised
+            throw ImportExportError.importNotInitialised
         }
 
         // Try coordinated read of metadata first
@@ -67,17 +67,17 @@ public enum ImportManager {
         // Now check directory structure
         let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
         guard FileManager.default.fileExists(atPath: placesURL.path) else {
-            throw PersistenceError.missingPlacesDirectory
+            throw ImportExportError.missingPlacesDirectory
         }
 
         let itemsURL = importURL.appendingPathComponent("items", isDirectory: true)
         guard FileManager.default.fileExists(atPath: itemsURL.path) else {
-            throw PersistenceError.missingItemsDirectory
+            throw ImportExportError.missingItemsDirectory
         }
 
         let samplesURL = importURL.appendingPathComponent("samples", isDirectory: true)
         guard FileManager.default.fileExists(atPath: samplesURL.path) else {
-            throw PersistenceError.missingSamplesDirectory
+            throw ImportExportError.missingSamplesDirectory
         }
     }
 
@@ -97,11 +97,11 @@ public enum ImportManager {
 
         if let coordError {
             print("Coordination error: \(coordError)")
-            throw PersistenceError.missingMetadata
+            throw ImportExportError.missingMetadata
         }
 
         guard let metadata else {
-            throw PersistenceError.missingMetadata
+            throw ImportExportError.missingMetadata
         }
 
         return metadata
@@ -111,7 +111,7 @@ public enum ImportManager {
 
     private static func importPlaces() async throws {
         guard let importURL else {
-            throw PersistenceError.importNotInitialised
+            throw ImportExportError.importNotInitialised
         }
         let placesURL = importURL.appendingPathComponent("places")
 
@@ -146,7 +146,7 @@ public enum ImportManager {
 
     private static func importTimelineItems() async throws {
         guard let importURL else {
-            throw PersistenceError.importNotInitialised
+            throw ImportExportError.importNotInitialised
         }
         let itemsURL = importURL.appendingPathComponent("items")
         let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
@@ -284,7 +284,7 @@ public enum ImportManager {
 
     private static func importSamples() async throws {
         guard let importURL else {
-            throw PersistenceError.importNotInitialised
+            throw ImportExportError.importNotInitialised
         }
         let samplesURL = importURL.appendingPathComponent("samples")
 
