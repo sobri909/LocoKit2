@@ -11,8 +11,6 @@ import GRDB
 @TimelineActor
 public enum TimelineRecorder {
 
-    public static var legacyDbMode = false
-
     public static func startup() {
         Database.pool.add(transactionObserver: TimelineObserver.highlander)
     }
@@ -77,28 +75,6 @@ public enum TimelineRecorder {
         }
     }
 
-    // MARK: -
-
-    public static private(set) var currentLegacyItemId: String? {
-        didSet {
-            Task { await loco.appGroup?.save() }
-        }
-    }
-
-    public static func currentLegacyItem() -> LegacyItem? {
-        guard let currentLegacyItemId else { return nil }
-        return try? Database.legacyPool?.read { try LegacyItem.fetchOne($0, id: currentLegacyItemId) }
-    }
-
-    public static private(set) var latestLegacySampleId: String?
-
-    public static var latestLegacySample: LegacySample? {
-        guard let latestLegacySampleId else { return nil }
-        return try? Database.pool.read {
-            try LegacySample.fetchOne($0, id: latestLegacySampleId)
-        }
-    }
-
     // MARK: - Private
 
     private static let loco = LocomotionManager.highlander
@@ -115,11 +91,7 @@ public enum TimelineRecorder {
 
         Task {
             for await _ in loco.locationUpdates() {
-                if legacyDbMode {
-                    await recordLegacySample()
-                } else {
-                    await recordSample()
-                }
+                await recordSample()
             }
         }
 
@@ -131,23 +103,8 @@ public enum TimelineRecorder {
     }
 
     public static func updateCurrentItemId() {
-        if legacyDbMode {
-            updateCurrentLegacyItemId()
-            return
-        }
-
         currentItemId = try? Database.pool.read {
             try TimelineItemBase
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .order(Column("endDate").desc)
-                .selectPrimaryKey()
-                .fetchOne($0)
-        }
-    }
-
-    private static func updateCurrentLegacyItemId() {
-        currentLegacyItemId = try? Database.legacyPool?.read {
-            try LegacyItem
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .order(Column("endDate").desc)
                 .selectPrimaryKey()
@@ -394,88 +351,6 @@ public enum TimelineRecorder {
     private static func stopFallbackSampleTimer() {
         fallbackSampleTimer?.invalidate()
         fallbackSampleTimer = nil
-    }
-
-    // MARK: - Legacy db recording
-
-    private static func recordLegacySample() async {
-        guard await isRecording else { return }
-
-        // minimum 1 second between samples plz
-        if let lastRecordSampleCall, lastRecordSampleCall.age < 1 { return }
-        lastRecordSampleCall = .now
-
-        var sample = await loco.createALegacySample()
-
-        do {
-            let sampleCopy = sample
-            try await Database.legacyPool?.write {
-                try sampleCopy.save($0)
-            }
-
-            await processLegacySample(&sample)
-
-        } catch {
-            logger.error(error, subsystem: .database)
-        }
-
-        latestLegacySampleId = sample.id
-    }
-
-    private static func processLegacySample(_ sample: inout LegacySample) async {
-
-        /** first timeline item **/
-        guard let workingItem = currentLegacyItem() else {
-            let newItem = await createLegacyTimelineItem(from: &sample)
-            currentLegacyItemId = newItem.id
-            return
-        }
-
-        let previouslyMoving = !workingItem.isVisit
-        let currentlyMoving = sample.movingState != "stationary"
-
-        /** stationary -> moving || moving -> stationary **/
-        if currentlyMoving != previouslyMoving {
-            let newItem = await createLegacyTimelineItem(from: &sample, previousItemId: workingItem.id)
-            currentLegacyItemId = newItem.id
-            return
-        }
-
-        /** stationary -> stationary || moving -> moving **/
-        sample.timelineItemId = workingItem.id
-
-        do {
-            let sampleCopy = sample
-            try await Database.legacyPool?.write {
-                try sampleCopy.save($0)
-            }
-        } catch {
-            logger.error(error, subsystem: .database)
-        }
-    }
-
-    private static func createLegacyTimelineItem(from sample: inout LegacySample, previousItemId: String? = nil) async -> LegacyItem {
-        var newItem = LegacyItem(from: sample)
-
-        // assign the sample
-        sample.timelineItemId = newItem.id
-
-        // keep the list linked
-        newItem.previousItemId = previousItemId
-
-        do {
-            let itemCopy = newItem
-            let sampleCopy = sample
-            try await Database.legacyPool?.write {
-                try itemCopy.save($0)
-                try sampleCopy.save($0)
-            }
-
-        } catch {
-            logger.error(error, subsystem: .database)
-        }
-
-        return newItem
     }
 
 }
