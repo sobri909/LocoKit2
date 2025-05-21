@@ -117,7 +117,7 @@ public final class AppGroup: @unchecked Sendable {
             return await AppState(
                 appName: thisApp,
                 recordingStateString: loco.recordingState.stringValue,
-                currentItemId: TimelineRecorder.legacyDbMode ? TimelineRecorder.currentLegacyItemId : TimelineRecorder.currentItemId
+                currentItemId: TimelineRecorder.currentItemId
             )
         }
     }
