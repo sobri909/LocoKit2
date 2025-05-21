@@ -98,10 +98,12 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     // MARK: - Init
 
     public init(
+        id: String = UUID().uuidString,
         date: Date, secondsFromGMT: Int = TimeZone.current.secondsFromGMT(),
         movingState: MovingState, recordingState: RecordingState,
         location: CLLocation? = nil
     ) {
+        self.id = id
         self.date = date
         self.secondsFromGMT = secondsFromGMT
         self.movingState = movingState
