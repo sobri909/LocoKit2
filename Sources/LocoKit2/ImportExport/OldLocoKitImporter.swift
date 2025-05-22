@@ -25,7 +25,7 @@ public enum OldLocoKitImporter {
     
     public static func startImport() async throws {
         guard !importInProgress else {
-            throw ImportError.importAlreadyInProgress
+            throw ImportExportError.importAlreadyInProgress
         }
         
         importInProgress = true
@@ -76,17 +76,17 @@ public enum OldLocoKitImporter {
     private static func connectToDatabases() throws {
         // Check for legacy LocoKit database
         guard Database.legacyPool != nil else {
-            throw ImportError.missingLocoKitDatabase
+            throw ImportExportError.missingLocoKitDatabase
         }
         
         // Connect to ArcApp database
         guard let appGroupDir = Database.highlander.appGroupDbDir else {
-            throw ImportError.databaseConnectionFailed
+            throw ImportExportError.databaseConnectionFailed
         }
         
         let arcAppUrl = appGroupDir.appendingPathComponent("ArcApp.sqlite")
         guard FileManager.default.fileExists(atPath: arcAppUrl.path) else {
-            throw ImportError.missingArcAppDatabase
+            throw ImportExportError.missingArcAppDatabase
         }
         
         // Configure read-only connection to ArcApp database
@@ -101,7 +101,7 @@ public enum OldLocoKitImporter {
         progress = 0
         
         guard let arcAppDatabase else {
-            throw ImportError.missingArcAppDatabase
+            throw ImportExportError.missingArcAppDatabase
         }
         
         // Read places from ArcApp.sqlite
@@ -109,7 +109,7 @@ public enum OldLocoKitImporter {
             // Check if the Place table exists
             let tableExists = try db.tableExists("Place")
             guard tableExists else {
-                throw ImportError.invalidDatabaseSchema
+                throw ImportExportError.invalidDatabaseSchema
             }
             
             // Query all places that aren't deleted
@@ -149,7 +149,7 @@ public enum OldLocoKitImporter {
         progress = 0
         
         guard let legacyPool = Database.legacyPool else {
-            throw ImportError.missingLocoKitDatabase
+            throw ImportExportError.missingLocoKitDatabase
         }
         
         // Set up edge relationship manager
@@ -160,7 +160,7 @@ public enum OldLocoKitImporter {
             // Check if the TimelineItem table exists
             let tableExists = try db.tableExists("TimelineItem")
             guard tableExists else {
-                throw ImportError.invalidDatabaseSchema
+                throw ImportExportError.invalidDatabaseSchema
             }
             
             // Fetch only non-deleted items
@@ -227,7 +227,7 @@ public enum OldLocoKitImporter {
         progress = 0
         
         guard let legacyPool = Database.legacyPool else {
-            throw ImportError.missingLocoKitDatabase
+            throw ImportExportError.missingLocoKitDatabase
         }
         
         // Track orphaned samples by their original parent timeline item ID
@@ -238,7 +238,7 @@ public enum OldLocoKitImporter {
             // Check if the LocomotionSample table exists
             let tableExists = try db.tableExists("LocomotionSample")
             guard tableExists else {
-                throw ImportError.invalidDatabaseSchema
+                throw ImportExportError.invalidDatabaseSchema
             }
             
             // Get min/max rowids and count for non-deleted samples
@@ -469,20 +469,6 @@ public enum OldLocoKitImporter {
             case .validatingData: return "Validating imported data"
             }
         }
-    }
-    
-    public enum ImportError: Error {
-        case importAlreadyInProgress
-        case databaseConnectionFailed
-        case missingLocoKitDatabase
-        case missingArcAppDatabase
-        case invalidDatabaseSchema
-        case importCancelled
-        case placeImportFailed
-        case timelineItemImportFailed
-        case sampleImportFailed
-        case noteImportFailed
-        case validationFailed
     }
     
 }

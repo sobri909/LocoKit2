@@ -293,26 +293,3 @@ public enum ExportManager {
     }
 }
 
-// MARK: -
-
-enum ImportExportError: Error {
-    // Export errors
-    case exportInProgress
-    case exportNotInitialised
-    
-    // Import errors
-    case importInProgress
-    case importNotInitialised
-    case missingMetadata
-    case missingPlacesDirectory
-    case missingItemsDirectory
-    case missingSamplesDirectory
-    case invalidBookmark
-    case securityScopeAccessDenied
-    
-    // iCloud errors
-    case iCloudNotAvailable
-    
-    // Edge restoration errors
-    case missingEdgeRecords
-}
