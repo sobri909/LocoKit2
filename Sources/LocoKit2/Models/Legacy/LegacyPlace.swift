@@ -20,7 +20,6 @@ public struct LegacyPlace: FetchableRecord, TableRecord, Codable, Hashable, Send
     public var radiusSD: CLLocationDistance
     public var streetAddress: String?
     public var secondsFromGMT: Int?
-    public var deleted: Bool = false
     
     // External place IDs
     public var mapboxPlaceId: String?
