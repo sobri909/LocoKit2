@@ -16,6 +16,7 @@ public final class AppGroup: @unchecked Sendable {
 
     public let thisApp: AppName
     public let suiteName: String
+    public let localDatabaseOnly: Bool
 
     public private(set) var apps: [AppName: AppState] = [:]
     public private(set) var applicationState: UIApplication.State = .background
@@ -32,11 +33,12 @@ public final class AppGroup: @unchecked Sendable {
 
     // MARK: - Public methods
 
-    public init(appName: AppName, suiteName: String, readOnly: Bool = false) {
+    public init(appName: AppName, suiteName: String, localDatabaseOnly: Bool = false, noIPC: Bool = false) {
         self.thisApp = appName
         self.suiteName = suiteName
+        self.localDatabaseOnly = localDatabaseOnly
 
-        if readOnly { load(); return }
+        if noIPC { load(); return }
 
         Task { await save() }
 
@@ -55,6 +57,9 @@ public final class AppGroup: @unchecked Sendable {
     }
 
     public var shouldBeTheRecorder: Bool {
+        // if using local database only, always be the recorder
+        if localDatabaseOnly { return true }
+        
         // should always be current recorder in foreground
         if applicationState == .active { return true }
 
@@ -101,6 +106,9 @@ public final class AppGroup: @unchecked Sendable {
     }
 
     public func save() async {
+        // don't save state if using local database only
+        guard !localDatabaseOnly else { return }
+        
         let fileManager = FileManager.default
         guard let containerURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: suiteName) else {
             return

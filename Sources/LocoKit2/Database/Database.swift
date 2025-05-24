@@ -21,7 +21,12 @@ public final class Database: @unchecked Sendable {
     public static var legacyPool: DatabasePool? { return highlander.legacyPool }
 
     public private(set) lazy var pool: DatabasePool = {
-        let dbUrl = appGroupDbUrl ?? appContainerDbUrl
+        let dbUrl: URL
+        if let appGroup, appGroup.localDatabaseOnly {
+            dbUrl = appContainerDbUrl
+        } else {
+            dbUrl = appGroupDbUrl ?? appContainerDbUrl
+        }
         return try! DatabasePool(path: dbUrl.path, configuration: config)
     }()
 
