@@ -60,7 +60,7 @@ extension Database {
             
             // MARK: - LocomotionSample RTree Triggers
 
-            /** maintain SampleRTree for spatial queries on location samples */
+            /** maintain SampleRTree for spatial queries on LocomotionSamples */
             
             try db.execute(sql: """
                 CREATE TRIGGER LocomotionSample_AFTER_INSERT_coordinates
