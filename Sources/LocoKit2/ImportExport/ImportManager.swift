@@ -44,7 +44,6 @@ public enum ImportManager {
             
             let edgeManager = EdgeRecordManager()
             try await importTimelineItems(edgeManager: edgeManager)
-            try await restoreEdgeRelationships(using: edgeManager)
             try await importSamples()
             
             // Clear import state
