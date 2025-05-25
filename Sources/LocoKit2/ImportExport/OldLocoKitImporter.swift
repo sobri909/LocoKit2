@@ -464,7 +464,7 @@ public enum OldLocoKitImporter {
             case .connecting: return "Connecting to databases"
             case .importingPlaces: return "Importing places"
             case .importingTimelineItems: return "Importing timeline items"
-            case .importingSamples: return "Importing location samples"
+            case .importingSamples: return "Importing locomotion samples"
             case .importingNotes: return "Importing notes"
             case .validatingData: return "Validating imported data"
             }
