@@ -42,37 +42,34 @@ extension TimelineItem {
         self.base = mutableBase
         
         if legacyItem.isVisit {
-            // Create visit specific data with empty samples array
-            guard let visit = TimelineItemVisit(itemId: legacyItem.itemId, samples: []) else {
-                throw TimelineError.invalidItem("Could not create visit component")
-            }
-            
-            // Set visit properties if available
-            var mutableVisit = visit
+            // Create visit with placeholder coordinates - will be updated when samples are imported
+            var visit = TimelineItemVisit(
+                itemId: legacyItem.itemId,
+                latitude: 0,  // null island placeholder
+                longitude: 0,  // null island placeholder
+                radiusMean: 50,  // reasonable default radius
+                radiusSD: 10  // reasonable default SD
+            )
             
             if let placeId = legacyItem.placeId {
-                mutableVisit.placeId = placeId
-                mutableVisit.confirmedPlace = legacyItem.manualPlace ?? false
+                visit.placeId = placeId
+                visit.confirmedPlace = legacyItem.manualPlace ?? false
+                // set uncertainty based on whether place is confirmed
+                visit.setUncertainty(!visit.confirmedPlace)
+            } else {
+                // no placeId means it must be uncertain
+                visit.setUncertainty(true)
             }
             
             if let streetAddress = legacyItem.streetAddress {
-                mutableVisit.streetAddress = streetAddress
+                visit.streetAddress = streetAddress
             }
             
             if let customTitle = legacyItem.customTitle {
-                mutableVisit.customTitle = customTitle
+                visit.customTitle = customTitle
             }
             
-            // Set default coordinates for the visit
-            // For now, just use (0,0) as a placeholder - real coordinates will come from samples
-            mutableVisit.latitude = 0
-            mutableVisit.longitude = 0
-            
-            // Default radius values - will be updated from samples later
-            mutableVisit.radiusMean = 30
-            mutableVisit.radiusSD = 10
-            
-            self.visit = mutableVisit
+            self.visit = visit
             
         } else {
             // Create trip specific data with empty samples array
@@ -88,7 +85,15 @@ extension TimelineItem {
                 
                 if let manualActivityType = legacyItem.manualActivityType, manualActivityType {
                     trip.confirmedActivityType = ActivityType(stringValue: activityType)
+                    // if we have a confirmed type, we can't be uncertain
+                    trip.uncertainActivityType = false
+                } else {
+                    // unconfirmed activity type - could be uncertain
+                    trip.uncertainActivityType = true
                 }
+            } else {
+                // no activity type at all - must be uncertain
+                trip.uncertainActivityType = true
             }
             
             self.trip = trip

@@ -66,11 +66,33 @@ struct EdgeRecordManager {
         for (batchIndex, batch) in batches.enumerated() {
             try await Database.pool.write { db in
                 for record in batch {
+                    // check if the referenced items exist before setting edges
+                    var validPreviousId = record.previousId
+                    var validNextId = record.nextId
+                    
+                    if let previousId = record.previousId {
+                        let previousExists = try TimelineItemBase
+                            .filter(Column("id") == previousId)
+                            .fetchCount(db) > 0
+                        if !previousExists {
+                            validPreviousId = nil
+                        }
+                    }
+                    
+                    if let nextId = record.nextId {
+                        let nextExists = try TimelineItemBase
+                            .filter(Column("id") == nextId)
+                            .fetchCount(db) > 0
+                        if !nextExists {
+                            validNextId = nil
+                        }
+                    }
+                    
                     try TimelineItemBase
                         .filter(Column("id") == record.itemId)
                         .updateAll(db, [
-                            Column("previousItemId").set(to: record.previousId),
-                            Column("nextItemId").set(to: record.nextId)
+                            Column("previousItemId").set(to: validPreviousId),
+                            Column("nextItemId").set(to: validNextId)
                         ])
                 }
             }

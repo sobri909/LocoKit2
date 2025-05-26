@@ -13,17 +13,18 @@ public enum OldLocoKitImporter {
     
     // MARK: - Import state
     
-    private(set) static var importInProgress = false
-    private(set) static var currentPhase: ImportPhase?
-    private(set) static var progress: Double = 0
-    
+    public private(set) static var importInProgress = false
+    public private(set) static var currentPhase: ImportPhase?
+    public private(set) static var progress: Double = 0
+
     // MARK: - Database connections
     
     private static var arcAppDatabase: DatabasePool?
+    private static var importDateRange: DateInterval?
     
     // MARK: - Public interface
     
-    public static func startImport() async throws {
+    public static func startImport(dateRange: DateInterval? = nil) async throws {
         guard !importInProgress else {
             throw ImportExportError.importAlreadyInProgress
         }
@@ -31,8 +32,16 @@ public enum OldLocoKitImporter {
         importInProgress = true
         currentPhase = .connecting
         progress = 0
+        importDateRange = dateRange
         
         do {
+            // Log import details
+            if let dateRange = importDateRange {
+                logger.info("Starting import with date range: \(dateRange.start) to \(dateRange.end)", subsystem: .database)
+            } else {
+                logger.info("Starting import with no date restrictions", subsystem: .database)
+            }
+            
             // Connect to databases
             try connectToDatabases()
             
@@ -42,11 +51,11 @@ public enum OldLocoKitImporter {
             
             // Import Timeline Items (from LocoKit.sqlite)
             currentPhase = .importingTimelineItems
-            try await importTimelineItems()
+            let importedItemIds = try await importTimelineItems()
             
             // Import Samples (from LocoKit.sqlite)
             currentPhase = .importingSamples
-            try await importSamples()
+            try await importSamples(importedItemIds: importedItemIds)
             
             // Import Notes (from ArcApp.sqlite)
             currentPhase = .importingNotes
@@ -112,8 +121,8 @@ public enum OldLocoKitImporter {
                 throw ImportExportError.invalidDatabaseSchema
             }
             
-            // Query all places that aren't deleted
-            return try LegacyPlace.filter(sql: "deleted = 0").fetchAll(db)
+            // Query all places
+            return try LegacyPlace.fetchAll(db)
         }
         
         logger.info("Read \(legacyPlaces.count) places from ArcApp database", subsystem: .database)
@@ -129,7 +138,7 @@ public enum OldLocoKitImporter {
                     let place = Place(from: legacyPlace)
                     
                     // Save the place (RTree will be created automatically via trigger)
-                    try place.save(db)
+                    try place.insert(db, onConflict: .ignore)
                 }
             }
             
@@ -137,14 +146,17 @@ public enum OldLocoKitImporter {
             let completedPercentage = Double(batchIndex + 1) / Double(batches.count)
             progress = completedPercentage
             
-            logger.info("Imported places batch \(batchIndex + 1)/\(batches.count)", subsystem: .database)
+            // Progress logging for debugging
+            if batchIndex % 10 == 0 || batchIndex == batches.count - 1 {
+                print("Imported places batch \(batchIndex + 1)/\(batches.count)")
+            }
         }
         
         progress = 1.0
         logger.info("Places import completed", subsystem: .database)
     }
     
-    private static func importTimelineItems() async throws {
+    private static func importTimelineItems() async throws -> Set<String> {
         logger.info("Starting Timeline Items import", subsystem: .database)
         progress = 0
         
@@ -155,19 +167,31 @@ public enum OldLocoKitImporter {
         // Set up edge relationship manager
         let edgeManager = EdgeRecordManager()
         
+        // Track imported item IDs for samples phase
+        var importedItemIds = Set<String>()
+        
         // Read timeline items from LocoKit.sqlite
-        let legacyItems = try await legacyPool.read { db in
+        let legacyItems = try await legacyPool.read { [importDateRange] db in
             // Check if the TimelineItem table exists
             let tableExists = try db.tableExists("TimelineItem")
             guard tableExists else {
                 throw ImportExportError.invalidDatabaseSchema
             }
             
-            // Fetch only non-deleted items
-            return try LegacyItem.filter(sql: "deleted = 0").fetchAll(db)
+            // Build query with date filtering if needed
+            var query = LegacyItem.filter(Column("deleted") == false)
+            
+            if let dateRange = importDateRange {
+                query = query.filter(Column("startDate") >= dateRange.start && Column("startDate") < dateRange.end)
+            }
+            
+            return try query.fetchAll(db)
         }
         
         logger.info("Read \(legacyItems.count) timeline items from LocoKit database", subsystem: .database)
+        
+        // Collect all item IDs that we'll be importing
+        importedItemIds = Set(legacyItems.map { $0.itemId })
         
         // Import items in batches
         let batchSize = 200 // Smaller than places since items are more complex
@@ -193,11 +217,29 @@ public enum OldLocoKitImporter {
                     var base = item.base
                     base.previousItemId = nil
                     base.nextItemId = nil
-                    try base.save(db)
+                    try base.insert(db, onConflict: .ignore)
+                    
                     
                     // Save visit or trip component
-                    try item.visit?.save(db)
-                    try item.trip?.save(db)
+                    if let visit = item.visit {
+                        // check if placeId exists before saving
+                        if let placeId = visit.placeId {
+                            let placeExists = try Place.filter(Column("id") == placeId).fetchCount(db) > 0
+                            if !placeExists {
+                                logger.warning("Visit \(visit.itemId) references non-existent place: \(placeId)")
+                                // clear the invalid placeId
+                                var mutableVisit = visit
+                                mutableVisit.placeId = nil
+                                mutableVisit.setUncertainty(true)
+                                try mutableVisit.insert(db, onConflict: .ignore)
+                            } else {
+                                try visit.insert(db, onConflict: .ignore)
+                            }
+                        } else {
+                            try visit.insert(db, onConflict: .ignore)
+                        }
+                    }
+                    try item.trip?.insert(db, onConflict: .ignore)
                 }
             }
             
@@ -205,7 +247,10 @@ public enum OldLocoKitImporter {
             let completedPercentage = Double(batchIndex + 1) / Double(batches.count)
             progress = completedPercentage / 2 // First half of the process
             
-            logger.info("Imported timeline items batch \(batchIndex + 1)/\(batches.count)", subsystem: .database)
+            // Progress logging for debugging
+            if batchIndex % 20 == 0 || batchIndex == batches.count - 1 {
+                print("Imported timeline items batch \(batchIndex + 1)/\(batches.count)")
+            }
         }
         
         // Restore edge relationships
@@ -220,9 +265,11 @@ public enum OldLocoKitImporter {
         
         progress = 1.0
         logger.info("Timeline Items import completed", subsystem: .database)
+        
+        return importedItemIds
     }
     
-    private static func importSamples() async throws {
+    private static func importSamples(importedItemIds: Set<String>) async throws {
         logger.info("Starting Samples import", subsystem: .database)
         progress = 0
         
@@ -232,31 +279,33 @@ public enum OldLocoKitImporter {
         
         // Track orphaned samples by their original parent timeline item ID
         var orphanedSamples: [String: [LocomotionSample]] = [:]
+        let simulationMode = false // Real import mode!
         
         // Check if table exists and get sample count
-        let (minRowId, maxRowId, totalCount) = try await legacyPool.read { db in
+        let (minRowId, maxRowId, totalCount) = try await legacyPool.read { [importDateRange] db in
             // Check if the LocomotionSample table exists
             let tableExists = try db.tableExists("LocomotionSample")
             guard tableExists else {
                 throw ImportExportError.invalidDatabaseSchema
             }
             
-            // Get min/max rowids and count for non-deleted samples
+            // Build base query with date filtering if needed
+            var baseQuery = LegacySample.filter(Column("deleted") == false)
+            
+            if let dateRange = importDateRange {
+                baseQuery = baseQuery.filter(Column("date") >= dateRange.start && Column("date") < dateRange.end)
+            }
+            
+            // Get min/max rowids and count for filtered samples
             let minRowId = try Int.fetchOne(db, 
-                LegacySample
-                    .select(min(Column("rowid")))
-                    .filter(Column("deleted") == false)
+                baseQuery.select(min(Column("rowid")))
             ) ?? 0
             
             let maxRowId = try Int.fetchOne(db, 
-                LegacySample
-                    .select(max(Column("rowid")))
-                    .filter(Column("deleted") == false)
+                baseQuery.select(max(Column("rowid")))
             ) ?? 0
             
-            let count = try LegacySample
-                .filter(Column("deleted") == false)
-                .fetchCount(db)
+            let count = try baseQuery.fetchCount(db)
             
             return (minRowId, maxRowId, count)
         }
@@ -272,19 +321,31 @@ public enum OldLocoKitImporter {
             let batchEndRowId = min(currentRowId + batchSize - 1, maxRowId)
             
             // Only read a chunk of samples in each iteration
-            let batch = try await legacyPool.read { [currentRowId, batchEndRowId] db in
-                try LegacySample
+            let batch = try await legacyPool.read { [currentRowId, batchEndRowId, importDateRange] db in
+                var query = LegacySample
                     .filter(Column("deleted") == false)
                     .filter(Column("rowid") >= currentRowId && Column("rowid") <= batchEndRowId)
-                    .order(Column("rowid"))
-                    .fetchAll(db)
+                
+                if let dateRange = importDateRange {
+                    query = query.filter(Column("date") >= dateRange.start && Column("date") < dateRange.end)
+                }
+                
+                return try query.order(Column("rowid")).fetchAll(db)
             }
             
             if !batch.isEmpty {
-                try await processLegacySampleBatch(batch, orphanedSamples: &orphanedSamples)
-                processedCount += batch.count
+                if simulationMode {
+                    // Just count samples in simulation mode
+                    processedCount += batch.count
+                } else {
+                    try await processLegacySampleBatch(batch, importedItemIds: importedItemIds, orphanedSamples: &orphanedSamples)
+                    processedCount += batch.count
+                }
                 
-                logger.info("Processed batch \(currentRowId)-\(batchEndRowId) with \(batch.count) samples", subsystem: .database)
+                // Progress logging every 100 batches (100k samples)
+                if (currentRowId / batchSize) % 100 == 0 {
+                    print("Processed \(processedCount) samples...")
+                }
             }
             
             // Update progress based on rowid position
@@ -296,8 +357,21 @@ public enum OldLocoKitImporter {
         
         // Process orphaned samples
         if !orphanedSamples.isEmpty {
-            logger.info("Processing \(orphanedSamples.count) sets of orphaned samples", subsystem: .database)
-            try await processOrphanedSamples(orphanedSamples)
+            let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
+            logger.info("Found \(orphanedSamples.count) orphaned timeline items with \(totalOrphans) total orphaned samples", subsystem: .database)
+            
+            // Log some details about the orphans
+            print("Orphaned samples summary:")
+            print("- Total orphaned items: \(orphanedSamples.count)")
+            print("- Total orphaned samples: \(totalOrphans)")
+            let sampleCounts = orphanedSamples.mapValues { $0.count }.sorted { $0.value > $1.value }
+            print("- Top 10 items by sample count:")
+            for (itemId, count) in sampleCounts.prefix(10) {
+                print("  - Item \(itemId): \(count) samples")
+            }
+            
+            // TODO: Enable orphan processing once main import is stable
+            // try await processOrphanedSamples(orphanedSamples)
         }
         
         progress = 1.0
@@ -323,19 +397,23 @@ public enum OldLocoKitImporter {
             
             // High confidence for Visit (>80% stationary)
             if stationaryRatio > 0.8 {
+                /*
                 try await Database.pool.write { db in
                     // Create a visit using the proper method (also handles sample references)
                     let _ = try TimelineItem.createItem(from: samples, isVisit: true, db: db)
                 }
+                */
                 recreatedItems += 1
                 logger.info("Recreated Visit for lost item \(originalItemId) with \(samples.count) samples", subsystem: .database)
                 
             // High confidence for Trip (<20% stationary)
             } else if stationaryRatio < 0.2 {
+                /*
                 try await Database.pool.write { db in
                     // Create a trip using the proper method (also handles sample references)
                     let _ = try TimelineItem.createItem(from: samples, isVisit: false, db: db)
                 }
+                */
                 recreatedItems += 1
                 logger.info("Recreated Trip for lost item \(originalItemId) with \(samples.count) samples", subsystem: .database)
                 
@@ -352,20 +430,20 @@ public enum OldLocoKitImporter {
     
     private static func createIndividualItems(for samples: [LocomotionSample]) async throws {
         // Create one item per sample based on its moving state
-        for sample in samples {
-            let isVisit = sample.movingState == .stationary
-            
+        for _ in samples {
+            /*
             try await Database.pool.write { db in
                 // Create a new item using the proper method (also handles sample references)
                 let _ = try TimelineItem.createItem(from: [sample], isVisit: isVisit, db: db)
             }
+             */
         }
     }
     
     // MARK: - Sample Processing Helpers
     
     // Process a batch of legacy samples
-    private static func processLegacySampleBatch(_ batch: [LegacySample], orphanedSamples: inout [String: [LocomotionSample]]) async throws {
+    private static func processLegacySampleBatch(_ batch: [LegacySample], importedItemIds: Set<String>, orphanedSamples: inout [String: [LocomotionSample]]) async throws {
         // Skip empty batches
         if batch.isEmpty { return }
         
@@ -376,32 +454,23 @@ public enum OldLocoKitImporter {
             return
         }
         
-        // Query for valid timeline item IDs using the query interface
-        let validIds = try await Database.pool.read { db in
-            try TimelineItemBase
-                .select(Column("id"))
-                .filter(itemIds.contains(Column("id")))
-                .asRequest(of: String.self)
-                .fetchSet(db)
-        }
-        
         // Process the batch and collect orphans
         let (batchOrphans, orphanCount) = try await Database.pool.write { db in
             var localOrphans: [String: [LocomotionSample]] = [:]
             var localOrphanCount = 0
             
             for legacySample in batch {
-                // Skip disabled samples
-                guard !legacySample.disabled else { continue }
-                
                 // Create new LocomotionSample from legacy data
                 var sample = LocomotionSample(from: legacySample)
                 
                 // Check for references to missing TimelineItems
-                if let originalItemId = sample.timelineItemId, !validIds.contains(originalItemId) {
-                    localOrphans[originalItemId, default: []].append(sample)
+                if let originalItemId = sample.timelineItemId, !importedItemIds.contains(originalItemId) {
+                    // Only treat as orphan if not disabled
+                    if !legacySample.disabled {
+                        localOrphans[originalItemId, default: []].append(sample)
+                        localOrphanCount += 1
+                    }
                     sample.timelineItemId = nil
-                    localOrphanCount += 1
                 }
                 
                 // Insert the new sample (instead of save) as this is a new record
@@ -411,8 +480,9 @@ public enum OldLocoKitImporter {
             return (localOrphans, localOrphanCount)
         }
         
+        // Log orphans if found (won't happen in simulation mode)
         if orphanCount > 0 {
-            logger.info("Found \(orphanCount) orphaned samples in current batch", subsystem: .database)
+            print("Found \(orphanCount) orphaned samples")
         }
         
         if !batchOrphans.isEmpty {
@@ -447,11 +517,12 @@ public enum OldLocoKitImporter {
         importInProgress = false
         currentPhase = nil
         progress = 0
+        importDateRange = nil
     }
 
     // MARK: - Supporting types
 
-    public enum ImportPhase {
+    public enum ImportPhase: Sendable {
         case connecting
         case importingPlaces
         case importingTimelineItems
@@ -459,7 +530,7 @@ public enum OldLocoKitImporter {
         case importingNotes
         case validatingData
         
-        var description: String {
+        public var description: String {
             switch self {
             case .connecting: return "Connecting to databases"
             case .importingPlaces: return "Importing places"

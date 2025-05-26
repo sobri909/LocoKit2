@@ -60,6 +60,21 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         self.radiusMean = radius.mean
         self.radiusSD = radius.sd
     }
+    
+    // direct initialiser for imports and other special cases
+    public init(
+        itemId: String,
+        latitude: CLLocationDegrees,
+        longitude: CLLocationDegrees,
+        radiusMean: CLLocationDistance,
+        radiusSD: CLLocationDistance
+    ) {
+        self.itemId = itemId
+        self.latitude = latitude
+        self.longitude = longitude
+        self.radiusMean = radiusMean
+        self.radiusSD = radiusSD
+    }
 
     // MARK: - Comparisons etc
 
