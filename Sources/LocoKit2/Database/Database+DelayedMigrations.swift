@@ -45,5 +45,19 @@ extension Database {
                 table.add(column: "locality", .text).indexed()
             }
         }
+        
+        migrator.registerMigration("source_indexes") { db in
+            try? db.create(
+                index: "TimelineItemBase_on_source",
+                on: "TimelineItemBase",
+                columns: ["source"]
+            )
+            
+            try? db.create(
+                index: "LocomotionSample_on_source",
+                on: "LocomotionSample",
+                columns: ["source"]
+            )
+        }
     }
 }

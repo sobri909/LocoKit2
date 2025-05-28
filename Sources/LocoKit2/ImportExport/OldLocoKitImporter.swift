@@ -279,7 +279,6 @@ public enum OldLocoKitImporter {
         
         // Track orphaned samples by their original parent timeline item ID
         var orphanedSamples: [String: [LocomotionSample]] = [:]
-        let simulationMode = false // Real import mode!
         
         // Check if table exists and get sample count
         let (minRowId, maxRowId, totalCount) = try await legacyPool.read { [importDateRange] db in
@@ -334,13 +333,8 @@ public enum OldLocoKitImporter {
             }
             
             if !batch.isEmpty {
-                if simulationMode {
-                    // Just count samples in simulation mode
-                    processedCount += batch.count
-                } else {
-                    try await processLegacySampleBatch(batch, importedItemIds: importedItemIds, orphanedSamples: &orphanedSamples)
-                    processedCount += batch.count
-                }
+                try await processLegacySampleBatch(batch, importedItemIds: importedItemIds, orphanedSamples: &orphanedSamples)
+                processedCount += batch.count
                 
                 // Progress logging every 100 batches (100k samples)
                 if (currentRowId / batchSize) % 100 == 0 {

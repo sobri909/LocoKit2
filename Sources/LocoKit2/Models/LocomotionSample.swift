@@ -16,7 +16,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     public var date: Date
     public var secondsFromGMT: Int
-    public var source: String = "LocoKit"
+    public var source: String = "LocoKit2"
     public var sourceVersion: String = LocomotionManager.locoKitVersion
     public let movingState: MovingState
     public let recordingState: RecordingState

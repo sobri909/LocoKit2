@@ -63,7 +63,7 @@ extension Database {
                 table.column("isVisit", .boolean).notNull()
                 table.column("startDate", .datetime).indexed()
                 table.column("endDate", .datetime).indexed()
-                table.column("source", .text).notNull()
+                table.column("source", .text).notNull().indexed()
                 table.column("sourceVersion", .text).notNull()
                 table.column("disabled", .boolean).notNull()
                 table.column("deleted", .boolean).notNull()
@@ -142,7 +142,7 @@ extension Database {
                 table.column("rtreeId", .integer)
 
                 table.column("date", .datetime).notNull().indexed()
-                table.column("source", .text).notNull()
+                table.column("source", .text).notNull().indexed()
                 table.column("sourceVersion", .text).notNull()
                 table.column("secondsFromGMT", .integer).notNull()
                 table.column("movingState", .integer).notNull()

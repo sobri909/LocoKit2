@@ -16,7 +16,7 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
     public let isVisit: Bool
     public let startDate: Date?
     public let endDate: Date?
-    public var source: String = "LocoKit"
+    public var source: String = "LocoKit2"
     public var sourceVersion: String = LocomotionManager.locoKitVersion
     public var disabled = false
     public var deleted = false
