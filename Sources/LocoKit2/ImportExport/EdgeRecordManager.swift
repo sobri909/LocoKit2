@@ -72,7 +72,7 @@ struct EdgeRecordManager {
                     
                     if let previousId = record.previousId {
                         let previousExists = try TimelineItemBase
-                            .filter(Column("id") == previousId)
+                            .filter(Column("id") == previousId && Column("deleted") == false)
                             .fetchCount(db) > 0
                         if !previousExists {
                             validPreviousId = nil
@@ -81,7 +81,7 @@ struct EdgeRecordManager {
                     
                     if let nextId = record.nextId {
                         let nextExists = try TimelineItemBase
-                            .filter(Column("id") == nextId)
+                            .filter(Column("id") == nextId && Column("deleted") == false)
                             .fetchCount(db) > 0
                         if !nextExists {
                             validNextId = nil
