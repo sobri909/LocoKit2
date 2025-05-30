@@ -161,8 +161,8 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
             logger.error(error, subsystem: .database)
         }
 
-        // process update for new model
-        ActivityTypesManager.processModelUpdate(model: model)
+        // process update for new model (which by definition has no file yet)
+        ActivityTypesManager.processModelUpdate(model: model, fileMissing: true)
 
         return model
     }
