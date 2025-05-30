@@ -285,17 +285,19 @@ public enum ActivityTypesManager {
             _ = try manager.replaceItemAt(MLModelCache.getModelURLFor(filename: model.filename), withItemAt: compiledModelFile)
 
             // update metadata
+            let accuracy = 1.0 - classifier.validationMetrics.classificationError
             try? Database.pool.write { db in
                 var mutableModel = model
                 try mutableModel.updateChanges(db) {
                     $0.totalSamples = samplesCount
-                    $0.accuracyScore = (1.0 - classifier.validationMetrics.classificationError)
+                    $0.accuracyScore = accuracy
                     $0.lastUpdated = .now
                     $0.needsUpdate = false
                 }
             }
 
-            logger.info("UPDATED: \(model.geoKey) (samples: \(model.totalSamples), accuracy: \(String(format: "%.2f", model.accuracyScore ?? 0)), completeness: \(String(format: "%.2f", model.completenessScore)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
+            let completeness = min(1.0, Double(samplesCount) / Double(ActivityTypesModel.modelMinTrainingSamples[model.depth]!))
+            logger.info("UPDATED: \(model.geoKey) (samples: \(samplesCount), accuracy: \(String(format: "%.2f", accuracy)), completeness: \(String(format: "%.2f", completeness)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
 
             try model.reloadModel()
 
@@ -361,7 +363,6 @@ public enum ActivityTypesManager {
 
         // write the samples to file
         for sample in samples {
-            guard sample.source == "LocoKit" else { continue }
             guard let confirmedActivityType = sample.confirmedActivityType else { continue }
             guard let location = sample.location, location.hasUsableCoordinate else { continue }
             guard location.speed >= 0, location.course >= 0 else { continue }
