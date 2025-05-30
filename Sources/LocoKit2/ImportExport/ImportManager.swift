@@ -22,6 +22,7 @@ public enum ImportManager {
             throw ImportExportError.importInProgress
         }
         
+        let startTime = Date()
         importInProgress = true
         bookmarkData = bookmark
         
@@ -40,11 +41,21 @@ public enum ImportManager {
         
         do {
             try await validateImportDirectory()
-            try await importPlaces()
+            let placesCount = try await importPlaces()
             
             let edgeManager = EdgeRecordManager()
-            try await importTimelineItems(edgeManager: edgeManager)
-            try await importSamples()
+            let itemsCount = try await importTimelineItems(edgeManager: edgeManager)
+            let (samplesCount, orphansProcessed) = try await importSamples()
+            
+            // Log import summary
+            let duration = Date().timeIntervalSince(startTime)
+            let durationString = String(format: "%.1f", duration)
+            var summary = "ImportManager completed successfully in \(durationString)s: "
+            summary += "\(placesCount) places, \(itemsCount) items, \(samplesCount) samples"
+            if orphansProcessed > 0 {
+                summary += " (processed \(orphansProcessed) orphaned samples)"
+            }
+            logger.info(summary, subsystem: .database)
             
             // Clear import state
             cleanupSuccessfulImport()
@@ -63,7 +74,7 @@ public enum ImportManager {
         // Try coordinated read of metadata first
         let metadataURL = importURL.appendingPathComponent("metadata.json")
         let metadata = try await readImportMetadata(from: metadataURL)
-        print("Import metadata loaded: \(metadata)")
+        logger.info("ImportManager: Import metadata loaded - schema: \(metadata.schemaVersion), mode: \(metadata.exportMode.rawValue)", subsystem: .database)
 
         // Now check directory structure
         let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
@@ -92,12 +103,14 @@ public enum ImportManager {
                 let data = try Data(contentsOf: url)
                 metadata = try JSONDecoder().decode(ExportMetadata.self, from: data)
             } catch {
-                print("Failed to read metadata: \(error)")
+                logger.error("Failed to read metadata", subsystem: .database)
+                logger.error(error, subsystem: .database)
             }
         }
 
         if let coordError {
-            print("Coordination error: \(coordError)")
+            logger.error("File coordination failed", subsystem: .database)
+            logger.error(coordError, subsystem: .database)
             throw ImportExportError.missingMetadata
         }
 
@@ -110,7 +123,7 @@ public enum ImportManager {
 
     // MARK: - Places
 
-    private static func importPlaces() async throws {
+    private static func importPlaces() async throws -> Int {
         guard let importURL else {
             throw ImportExportError.importNotInitialised
         }
@@ -123,29 +136,35 @@ public enum ImportManager {
             options: [.skipsHiddenFiles]
         ).filter { $0.pathExtension == "json" }
 
-        print("Found place files: \(placeFiles.count)")
+        logger.info("ImportManager: Starting places import (\(placeFiles.count) files)", subsystem: .database)
 
-        try await Database.pool.uncancellableWrite { db in
-            for fileURL in placeFiles {
-                do {
-                    let fileData = try Data(contentsOf: fileURL)
-                    let places = try JSONDecoder().decode([Place].self, from: fileData)
-                    print("Loaded \(places.count) places from \(fileURL.lastPathComponent)")
-
+        var totalPlaces = 0
+        
+        for fileURL in placeFiles {
+            do {
+                let fileData = try Data(contentsOf: fileURL)
+                let places = try JSONDecoder().decode([Place].self, from: fileData)
+                print("Loaded \(places.count) places from \(fileURL.lastPathComponent)")
+                
+                try await Database.pool.uncancellableWrite { db in
                     for place in places {
                         try place.save(db)
                     }
-                } catch {
-                    logger.error(error, subsystem: .database)
-                    continue
                 }
+                totalPlaces += places.count
+            } catch {
+                logger.error(error, subsystem: .database)
+                continue
             }
         }
+        
+        logger.info("ImportManager: Places import complete (\(totalPlaces) places)", subsystem: .database)
+        return totalPlaces
     }
 
     // MARK: - Items
 
-    private static func importTimelineItems(edgeManager: EdgeRecordManager) async throws {
+    private static func importTimelineItems(edgeManager: EdgeRecordManager) async throws -> Int {
         guard let importURL else {
             throw ImportExportError.importNotInitialised
         }
@@ -160,14 +179,16 @@ public enum ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        print("Found item files: \(itemFiles.count)")
+        logger.info("ImportManager: Starting timeline items import (\(itemFiles.count) files)", subsystem: .database)
 
+        var totalItems = 0
         // Process monthly files
         for fileURL in itemFiles {
             do {
                 let fileData = try Data(contentsOf: fileURL)
                 let items = try JSONDecoder().decode([TimelineItem].self, from: fileData)
                 print("Loaded \(items.count) items from \(fileURL.lastPathComponent)")
+                totalItems += items.count
 
                 // Process in batches of 100
                 for batch in items.chunked(into: 100) {
@@ -224,17 +245,20 @@ public enum ImportManager {
         
         // Now restore edge relationships using the EdgeRecordManager
         try await restoreEdgeRelationships(using: edgeManager)
+        
+        logger.info("ImportManager: Timeline items import complete (\(totalItems) items)", subsystem: .database)
+        return totalItems
     }
 
     private static func restoreEdgeRelationships(using edgeManager: EdgeRecordManager) async throws {
-        print("Restoring edge relationships")
+        logger.info("ImportManager: Restoring edge relationships", subsystem: .database)
         
         // Use the EdgeRecordManager to restore relationships with progress tracking
         try await edgeManager.restoreEdgeRelationships { progressPercentage in
             // Could handle progress updates here if needed
         }
         
-        print("Edge restoration complete")
+        logger.info("ImportManager: Edge restoration complete", subsystem: .database)
         
         // Clean up temporary files
         edgeManager.cleanup()
@@ -242,7 +266,7 @@ public enum ImportManager {
 
     // MARK: - Samples
 
-    private static func importSamples() async throws {
+    private static func importSamples() async throws -> (samples: Int, orphansProcessed: Int) {
         guard let importURL else {
             throw ImportExportError.importNotInitialised
         }
@@ -258,8 +282,9 @@ public enum ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        print("Found sample files: \(sampleFiles.count)")
+        logger.info("ImportManager: Starting samples import (\(sampleFiles.count) files)", subsystem: .database)
         
+        var totalSamples = 0
         // track orphaned samples by their original parent timeline item ID
         var orphanedSamples: [String: [LocomotionSample]] = [:]
 
@@ -269,6 +294,7 @@ public enum ImportManager {
                 let fileData = try Data(contentsOf: fileURL)
                 let samples = try JSONDecoder().decode([LocomotionSample].self, from: fileData)
                 print("Loaded \(samples.count) samples from \(fileURL.lastPathComponent)")
+                totalSamples += samples.count
 
                 // process in batches of 100
                 for batch in samples.chunked(into: 100) {
@@ -322,65 +348,17 @@ public enum ImportManager {
         }
         
         // process orphaned samples after all imports complete
+        var totalOrphansProcessed = 0
         if !orphanedSamples.isEmpty {
-            logger.info("Found orphaned samples for \(orphanedSamples.count) missing items", subsystem: .database)
-            try await processOrphanedSamples(orphanedSamples)
-        }
-    }
-    
-    private static func processOrphanedSamples(_ orphanedSamples: [String: [LocomotionSample]]) async throws {
-        var recreatedItems = 0
-        var individualItems = 0
-        
-        // process each group of samples that belonged to the same original item
-        for (originalItemId, samples) in orphanedSamples {
-            // not enough samples to create a valid item
-            if samples.count < TimelineItemTrip.minimumValidSamples {
-                try await createIndividualItems(for: samples)
-                individualItems += samples.count
-                continue
-            }
-            
-            // analyze moving states to determine item type
-            let stationarySamples = samples.filter { $0.movingState == .stationary }
-            let stationaryRatio = Double(stationarySamples.count) / Double(samples.count)
-            
-            // high confidence for Visit (>80% stationary)
-            if stationaryRatio > 0.8 {
-                try await Database.pool.write { db in
-                    _ = try TimelineItem.createItem(from: samples, isVisit: true, db: db)
-                }
-                recreatedItems += 1
-                logger.info("Recreated Visit for lost item \(originalItemId) with \(samples.count) samples", subsystem: .database)
-                
-                // high confidence for Trip (<20% stationary)
-            } else if stationaryRatio < 0.2 {
-                try await Database.pool.write { db in
-                    _ = try TimelineItem.createItem(from: samples, isVisit: false, db: db)
-                }
-                recreatedItems += 1
-                logger.info("Recreated Trip for lost item \(originalItemId) with \(samples.count) samples", subsystem: .database)
-                
-                // mixed moving states, create individual items
-            } else {
-                try await createIndividualItems(for: samples)
-                individualItems += samples.count
-                logger.info("Created \(samples.count) individual items for lost item \(originalItemId) (mixed states)", subsystem: .database)
-            }
+            let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
+            logger.info("ImportManager found orphaned samples for \(orphanedSamples.count) missing items (\(totalOrphans) samples total)", subsystem: .database)
+            let (recreated, individual) = try await OrphanedSampleProcessor.processOrphanedSamples(orphanedSamples)
+            logger.info("ImportManager orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .database)
+            totalOrphansProcessed = totalOrphans
         }
         
-        logger.info("Processed orphaned samples: created \(recreatedItems) items and \(individualItems) individual samples", subsystem: .database)
-    }
-    
-    private static func createIndividualItems(for samples: [LocomotionSample]) async throws {
-        // create one item per sample based on its moving state
-        for sample in samples {
-            let isVisit = sample.movingState == .stationary
-            
-            try await Database.pool.write { db in
-                _ = try TimelineItem.createItem(from: [sample], isVisit: isVisit, db: db)
-            }
-        }
+        logger.info("ImportManager: Samples import complete (\(totalSamples) samples)", subsystem: .database)
+        return (totalSamples, totalOrphansProcessed)
     }
     
     // MARK: - Cleanup

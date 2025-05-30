@@ -58,7 +58,7 @@ struct EdgeRecordManager {
             }
         }
         
-        logger.info("Loaded \(records.count) edge records", subsystem: .database)
+        print("Loaded \(records.count) edge records")
         
         // Process records in batches
         let batches = records.chunked(into: batchSize)
@@ -103,7 +103,7 @@ struct EdgeRecordManager {
                 progressHandler(completedPercentage)
             }
             
-            logger.info("Restored edge relationships batch \(batchIndex + 1)/\(batches.count)", subsystem: .database)
+            print("Restored edge relationships batch \(batchIndex + 1)/\(batches.count)")
         }
     }
     
