@@ -19,6 +19,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     public var id: String = UUID().uuidString
     public var lastSaved: Date = .now
+    public var source: String = "LocoKit2"
 
     public var latitude: CLLocationDegrees
     public var longitude: CLLocationDegrees
@@ -197,6 +198,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     enum CodingKeys: String, CodingKey {
         case id
         case lastSaved
+        case source
         case latitude
         case longitude
         case radiusMean
@@ -222,12 +224,55 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         case visitDays
     }
 
+    // MARK: - Custom Decoder
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // core fields
+        id = try container.decode(String.self, forKey: .id)
+        lastSaved = try container.decode(Date.self, forKey: .lastSaved)
+        // graceful handling for missing source field (backwards compatibility)
+        source = try container.decodeIfPresent(String.self, forKey: .source) ?? "LocoKit2"
+        latitude = try container.decode(CLLocationDegrees.self, forKey: .latitude)
+        longitude = try container.decode(CLLocationDegrees.self, forKey: .longitude)
+        radiusMean = try container.decode(CLLocationDistance.self, forKey: .radiusMean)
+        radiusSD = try container.decode(CLLocationDistance.self, forKey: .radiusSD)
+        secondsFromGMT = try container.decodeIfPresent(Int.self, forKey: .secondsFromGMT)
+        name = try container.decode(String.self, forKey: .name)
+        streetAddress = try container.decodeIfPresent(String.self, forKey: .streetAddress)
+        countryCode = try container.decodeIfPresent(String.self, forKey: .countryCode)
+        locality = try container.decodeIfPresent(String.self, forKey: .locality)
+        isStale = try container.decode(Bool.self, forKey: .isStale)
+        rtreeId = try container.decodeIfPresent(Int64.self, forKey: .rtreeId)
+        
+        // external place ids
+        mapboxPlaceId = try container.decodeIfPresent(String.self, forKey: .mapboxPlaceId)
+        mapboxCategory = try container.decodeIfPresent(String.self, forKey: .mapboxCategory)
+        mapboxMakiIcon = try container.decodeIfPresent(String.self, forKey: .mapboxMakiIcon)
+        googlePlaceId = try container.decodeIfPresent(String.self, forKey: .googlePlaceId)
+        googlePrimaryType = try container.decodeIfPresent(String.self, forKey: .googlePrimaryType)
+        foursquarePlaceId = try container.decodeIfPresent(String.self, forKey: .foursquarePlaceId)
+        foursquareCategoryId = try container.decodeIfPresent(Int.self, forKey: .foursquareCategoryId)
+        
+        // stats
+        visitCount = try container.decodeIfPresent(Int.self, forKey: .visitCount) ?? 0
+        visitDays = try container.decodeIfPresent(Int.self, forKey: .visitDays) ?? 0
+        
+        // histograms default to nil (not included in JSON export/import)
+        arrivalTimes = nil
+        leavingTimes = nil
+        visitDurations = nil
+        occupancyTimes = nil
+    }
+
     // MARK: - FetchableRecord
 
     public init(row: Row) throws {
         // core fields
         id = row["id"]
         lastSaved = row["lastSaved"]
+        source = row["source"]
         latitude = row["latitude"]
         longitude = row["longitude"]
         radiusMean = row["radiusMean"]
@@ -275,6 +320,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         // core fields
         container["id"] = id
         container["lastSaved"] = lastSaved
+        container["source"] = source
 
         container["latitude"] = latitude
         container["longitude"] = longitude

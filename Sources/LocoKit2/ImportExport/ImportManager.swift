@@ -55,7 +55,7 @@ public enum ImportManager {
             if orphansProcessed > 0 {
                 summary += " (processed \(orphansProcessed) orphaned samples)"
             }
-            logger.info(summary, subsystem: .database)
+            logger.info(summary, subsystem: .importing)
             
             // Clear import state
             cleanupSuccessfulImport()
@@ -74,7 +74,7 @@ public enum ImportManager {
         // Try coordinated read of metadata first
         let metadataURL = importURL.appendingPathComponent("metadata.json")
         let metadata = try await readImportMetadata(from: metadataURL)
-        logger.info("ImportManager: Import metadata loaded - schema: \(metadata.schemaVersion), mode: \(metadata.exportMode.rawValue)", subsystem: .database)
+        logger.info("ImportManager: Import metadata loaded - schema: \(metadata.schemaVersion), mode: \(metadata.exportMode.rawValue)", subsystem: .importing)
 
         // Now check directory structure
         let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
@@ -103,14 +103,14 @@ public enum ImportManager {
                 let data = try Data(contentsOf: url)
                 metadata = try JSONDecoder().decode(ExportMetadata.self, from: data)
             } catch {
-                logger.error("Failed to read metadata", subsystem: .database)
-                logger.error(error, subsystem: .database)
+                logger.error("Failed to read metadata", subsystem: .importing)
+                logger.error(error, subsystem: .importing)
             }
         }
 
         if let coordError {
-            logger.error("File coordination failed", subsystem: .database)
-            logger.error(coordError, subsystem: .database)
+            logger.error("File coordination failed", subsystem: .importing)
+            logger.error(coordError, subsystem: .importing)
             throw ImportExportError.missingMetadata
         }
 
@@ -136,7 +136,7 @@ public enum ImportManager {
             options: [.skipsHiddenFiles]
         ).filter { $0.pathExtension == "json" }
 
-        logger.info("ImportManager: Starting places import (\(placeFiles.count) files)", subsystem: .database)
+        logger.info("ImportManager: Starting places import (\(placeFiles.count) files)", subsystem: .importing)
 
         var totalPlaces = 0
         
@@ -153,12 +153,12 @@ public enum ImportManager {
                 }
                 totalPlaces += places.count
             } catch {
-                logger.error(error, subsystem: .database)
+                logger.error(error, subsystem: .importing)
                 continue
             }
         }
         
-        logger.info("ImportManager: Places import complete (\(totalPlaces) places)", subsystem: .database)
+        logger.info("ImportManager: Places import complete (\(totalPlaces) places)", subsystem: .importing)
         return totalPlaces
     }
 
@@ -179,7 +179,7 @@ public enum ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        logger.info("ImportManager: Starting timeline items import (\(itemFiles.count) files)", subsystem: .database)
+        logger.info("ImportManager: Starting timeline items import (\(itemFiles.count) files)", subsystem: .importing)
 
         var totalItems = 0
         // Process monthly files
@@ -246,19 +246,19 @@ public enum ImportManager {
         // Now restore edge relationships using the EdgeRecordManager
         try await restoreEdgeRelationships(using: edgeManager)
         
-        logger.info("ImportManager: Timeline items import complete (\(totalItems) items)", subsystem: .database)
+        logger.info("ImportManager: Timeline items import complete (\(totalItems) items)", subsystem: .importing)
         return totalItems
     }
 
     private static func restoreEdgeRelationships(using edgeManager: EdgeRecordManager) async throws {
-        logger.info("ImportManager: Restoring edge relationships", subsystem: .database)
+        logger.info("ImportManager: Restoring edge relationships", subsystem: .importing)
         
         // Use the EdgeRecordManager to restore relationships with progress tracking
         try await edgeManager.restoreEdgeRelationships { progressPercentage in
             // Could handle progress updates here if needed
         }
         
-        logger.info("ImportManager: Edge restoration complete", subsystem: .database)
+        logger.info("ImportManager: Edge restoration complete", subsystem: .importing)
         
         // Clean up temporary files
         edgeManager.cleanup()
@@ -282,7 +282,7 @@ public enum ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
-        logger.info("ImportManager: Starting samples import (\(sampleFiles.count) files)", subsystem: .database)
+        logger.info("ImportManager: Starting samples import (\(sampleFiles.count) files)", subsystem: .importing)
         
         var totalSamples = 0
         // track orphaned samples by their original parent timeline item ID
@@ -328,7 +328,7 @@ public enum ImportManager {
                         }
                         
                         if orphanedCount > 0 {
-                            logger.error("Orphaned \(orphanedCount) samples with missing parent items", subsystem: .database)
+                            logger.error("Orphaned \(orphanedCount) samples with missing parent items", subsystem: .importing)
                         }
                         
                         // return the orphans so they can be merged outside the transaction
@@ -342,7 +342,7 @@ public enum ImportManager {
                 }
 
             } catch {
-                logger.error(error, subsystem: .database)
+                logger.error(error, subsystem: .importing)
                 continue
             }
         }
@@ -351,13 +351,13 @@ public enum ImportManager {
         var totalOrphansProcessed = 0
         if !orphanedSamples.isEmpty {
             let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
-            logger.info("ImportManager found orphaned samples for \(orphanedSamples.count) missing items (\(totalOrphans) samples total)", subsystem: .database)
+            logger.info("ImportManager found orphaned samples for \(orphanedSamples.count) missing items (\(totalOrphans) samples total)", subsystem: .importing)
             let (recreated, individual) = try await OrphanedSampleProcessor.processOrphanedSamples(orphanedSamples)
-            logger.info("ImportManager orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .database)
+            logger.info("ImportManager orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .importing)
             totalOrphansProcessed = totalOrphans
         }
         
-        logger.info("ImportManager: Samples import complete (\(totalSamples) samples)", subsystem: .database)
+        logger.info("ImportManager: Samples import complete (\(totalSamples) samples)", subsystem: .importing)
         return (totalSamples, totalOrphansProcessed)
     }
     

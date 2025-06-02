@@ -44,9 +44,9 @@ public enum OldLocoKitImporter {
         do {
             // Log import details
             if let dateRange = importDateRange {
-                logger.info("Starting import with date range: \(dateRange.start) to \(dateRange.end)", subsystem: .database)
+                logger.info("Starting import with date range: \(dateRange.start) to \(dateRange.end)", subsystem: .importing)
             } else {
-                logger.info("Starting import with no date restrictions", subsystem: .database)
+                logger.info("Starting import with no date restrictions", subsystem: .importing)
             }
             
             // Connect to databases
@@ -67,14 +67,6 @@ public enum OldLocoKitImporter {
             samplesCount = samples
             orphansProcessed = orphans
             
-            // Import Notes (from ArcApp.sqlite)
-            currentPhase = .importingNotes
-            try await importNotes()
-            
-            // Validate imported data
-            currentPhase = .validatingData
-            try await validateImportedData()
-            
             // Log summary
             let duration = Date().timeIntervalSince(startTime)
             let durationString = String(format: "%.1f", duration / 60.0) // minutes
@@ -83,12 +75,12 @@ public enum OldLocoKitImporter {
             if orphansProcessed > 0 {
                 summary += " (processed \(orphansProcessed) orphaned samples)"
             }
-            logger.info(summary, subsystem: .database)
+            logger.info(summary, subsystem: .importing)
             
             cleanupAndReset()
             
         } catch {
-            logger.error("Database import failed: \(error)", subsystem: .database)
+            logger.error("Database import failed: \(error)", subsystem: .importing)
             cleanupAndReset()
             throw error
         }
@@ -125,7 +117,7 @@ public enum OldLocoKitImporter {
     }
     
     private static func importPlaces() async throws -> Int {
-        logger.info("Starting Places import", subsystem: .database)
+        logger.info("Starting Places import", subsystem: .importing)
         progress = 0
         
         guard let arcAppDatabase else {
@@ -172,12 +164,12 @@ public enum OldLocoKitImporter {
         }
         
         progress = 1.0
-        logger.info("Places import completed", subsystem: .database)
+        logger.info("Places import completed", subsystem: .importing)
         return legacyPlaces.count
     }
     
     private static func importTimelineItems() async throws -> (count: Int, itemIds: Set<String>) {
-        logger.info("Starting Timeline Items import", subsystem: .database)
+        logger.info("Starting Timeline Items import", subsystem: .importing)
         progress = 0
         
         guard let legacyPool = Database.legacyPool else {
@@ -286,13 +278,13 @@ public enum OldLocoKitImporter {
         edgeManager.cleanup()
         
         progress = 1.0
-        logger.info("Timeline Items import completed", subsystem: .database)
+        logger.info("Timeline Items import completed", subsystem: .importing)
         
         return (totalCount, importedItemIds)
     }
     
     private static func importSamples(importedItemIds: Set<String>) async throws -> (samples: Int, orphansProcessed: Int) {
-        logger.info("Starting Samples import", subsystem: .database)
+        logger.info("Starting Samples import", subsystem: .importing)
         progress = 0
         
         guard let legacyPool = Database.legacyPool else {
@@ -375,7 +367,7 @@ public enum OldLocoKitImporter {
         var orphansProcessed = 0
         if !orphanedSamples.isEmpty {
             let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
-            logger.info("Found \(orphanedSamples.count) orphaned timeline items with \(totalOrphans) total orphaned samples", subsystem: .database)
+            logger.info("Found \(orphanedSamples.count) orphaned timeline items with \(totalOrphans) total orphaned samples", subsystem: .importing)
             
             // Log some details about the orphans
             print("OldLocoKitImporter orphan summary:")
@@ -389,12 +381,12 @@ public enum OldLocoKitImporter {
             
             // Process orphaned samples after main import
             let (recreated, individual) = try await OrphanedSampleProcessor.processOrphanedSamples(orphanedSamples)
-            logger.info("OldLocoKitImporter orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .database)
+            logger.info("OldLocoKitImporter orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .importing)
             orphansProcessed = totalOrphans
         }
         
         progress = 1.0
-        logger.info("Samples import completed: processed \(processedCount) samples", subsystem: .database)
+        logger.info("Samples import completed: processed \(processedCount) samples", subsystem: .importing)
         
         return (processedCount, orphansProcessed)
     }
@@ -451,25 +443,6 @@ public enum OldLocoKitImporter {
         }
     }
     
-    private static func importNotes() async throws {
-        logger.info("Starting Notes import", subsystem: .database)
-        progress = 0
-        
-        // Implementation will be added in subsequent steps
-        
-        progress = 1.0
-        logger.info("Notes import completed", subsystem: .database)
-    }
-    
-    private static func validateImportedData() async throws {
-        logger.info("Starting data validation", subsystem: .database)
-        progress = 0
-        
-        // Implementation will be added in subsequent steps
-        
-        progress = 1.0
-        logger.info("Data validation completed", subsystem: .database)
-    }
     
     private static func cleanupAndReset() {
         arcAppDatabase = nil
@@ -486,8 +459,6 @@ public enum OldLocoKitImporter {
         case importingPlaces
         case importingTimelineItems
         case importingSamples
-        case importingNotes
-        case validatingData
         
         public var description: String {
             switch self {
@@ -495,8 +466,6 @@ public enum OldLocoKitImporter {
             case .importingPlaces: return "Importing places"
             case .importingTimelineItems: return "Importing timeline items"
             case .importingSamples: return "Importing locomotion samples"
-            case .importingNotes: return "Importing notes"
-            case .validatingData: return "Validating imported data"
             }
         }
     }
