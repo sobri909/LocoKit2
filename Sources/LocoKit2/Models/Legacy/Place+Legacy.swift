@@ -27,5 +27,6 @@ extension Place {
         self.id = legacyPlace.placeId
         self.radiusMean = legacyPlace.radiusMean
         self.radiusSD = legacyPlace.radiusSD
+        self.source = "LocoKit"
     }
 }

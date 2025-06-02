@@ -113,7 +113,7 @@ public final class Database: @unchecked Sendable {
         return try! FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     }()
 
-    var appGroupDbDir: URL? {
+    public var appGroupDbDir: URL? {
         guard let suiteName = appGroup?.suiteName else { return nil }
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: suiteName)
     }

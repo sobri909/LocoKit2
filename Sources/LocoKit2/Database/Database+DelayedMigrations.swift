@@ -59,5 +59,11 @@ extension Database {
                 columns: ["source"]
             )
         }
+        
+        migrator.registerMigration("Place.source") { db in
+            try? db.alter(table: "Place") { table in
+                table.add(column: "source", .text).notNull().defaults(to: "LocoKit2").indexed()
+            }
+        }
     }
 }

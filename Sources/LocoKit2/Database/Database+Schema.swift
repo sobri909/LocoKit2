@@ -16,6 +16,7 @@ extension Database {
             try db.create(table: "Place") { table in
                 table.primaryKey("id", .text)
                 table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                table.column("source", .text).notNull().indexed()
 
                 table.column("rtreeId", .integer).indexed()
                 table.column("isStale", .boolean).notNull()
