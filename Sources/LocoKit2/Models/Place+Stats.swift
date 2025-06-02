@@ -69,7 +69,7 @@ extension Place {
                 let visitEnds = statsVisits.compactMap { $0.dateRange?.end }
                 let visitDurations = statsVisits.compactMap { $0.dateRange?.duration }
 
-                try await Database.pool.write { [self, occupancyTimes] db in
+                try await Database.pool.uncancellableWrite { [self, occupancyTimes] db in
                     var mutableSelf = self
                     try mutableSelf.updateChanges(db) {
                         $0.visitCount = visits.count
