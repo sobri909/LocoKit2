@@ -26,7 +26,7 @@ extension Place {
             }
 
             if visits.isEmpty {
-                try await Database.pool.write { [self] db in
+                try await Database.pool.uncancellableWrite { [self] db in
                     var mutableSelf = self
                     try mutableSelf.updateChanges(db) {
                         $0.visitCount = 0
@@ -88,6 +88,9 @@ extension Place {
 
                 logger.info("UPDATED: \(name)", subsystem: .places)
             }
+            
+        } catch is CancellationError {
+            // CancellationError is fine here; can ignore
 
         } catch {
             logger.error(error, subsystem: .database)
