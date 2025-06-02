@@ -86,11 +86,6 @@ public enum OldLocoKitImporter {
         }
     }
     
-    public static func cancelImport() {
-        guard importInProgress else { return }
-        cleanupAndReset()
-    }
-    
     // MARK: - Private helpers
     
     private static func connectToDatabases() throws {
@@ -115,6 +110,8 @@ public enum OldLocoKitImporter {
         
         arcAppDatabase = try DatabasePool(path: arcAppUrl.path, configuration: config)
     }
+    
+    // MARK: - Places Importing
     
     private static func importPlaces() async throws -> Int {
         logger.info("Starting Places import", subsystem: .importing)
@@ -167,6 +164,8 @@ public enum OldLocoKitImporter {
         logger.info("Places import completed", subsystem: .importing)
         return legacyPlaces.count
     }
+    
+    // MARK: - Timeline Items Importing
     
     private static func importTimelineItems() async throws -> (count: Int, itemIds: Set<String>) {
         logger.info("Starting Timeline Items import", subsystem: .importing)
@@ -283,6 +282,8 @@ public enum OldLocoKitImporter {
         return (totalCount, importedItemIds)
     }
     
+    // MARK: - Sample Importing
+    
     private static func importSamples(importedItemIds: Set<String>) async throws -> (samples: Int, orphansProcessed: Int) {
         logger.info("Starting Samples import", subsystem: .importing)
         progress = 0
@@ -394,7 +395,11 @@ public enum OldLocoKitImporter {
     // MARK: - Sample Processing Helpers
     
     // Process a batch of legacy samples
-    private static func processLegacySampleBatch(_ batch: [LegacySample], importedItemIds: Set<String>, orphanedSamples: inout [String: [LocomotionSample]]) async throws {
+    private static func processLegacySampleBatch(
+        _ batch: [LegacySample],
+        importedItemIds: Set<String>,
+        orphanedSamples: inout [String: [LocomotionSample]]
+    ) async throws {
         // Skip empty batches
         if batch.isEmpty { return }
         
@@ -424,8 +429,8 @@ public enum OldLocoKitImporter {
                     sample.timelineItemId = nil
                 }
                 
-                // Insert the new sample (instead of save) as this is a new record
-                try sample.insert(db)
+                // Insert the new sample with conflict handling for race conditions
+                try sample.insert(db, onConflict: .ignore)
             }
             
             return (localOrphans, localOrphanCount)
@@ -442,8 +447,7 @@ public enum OldLocoKitImporter {
             }
         }
     }
-    
-    
+
     private static func cleanupAndReset() {
         arcAppDatabase = nil
         importInProgress = false
