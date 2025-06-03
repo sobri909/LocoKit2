@@ -42,6 +42,11 @@ public enum TimelineProcessor {
             while true {
                 try await sanitiseEdges(for: list)
 
+                // heal broken edges for items in the list
+                for itemId in await list.itemIds {
+                    try await healEdges(itemId: itemId)
+                }
+
                 let merges = try await collectPotentialMerges(for: list)
                     .sorted { $0.score.rawValue > $1.score.rawValue }
 

@@ -23,6 +23,22 @@ extension TimelineProcessor {
             return
         }
 
+        // detect and soft delete zombie items (empty with no edges)
+        if (item.samples?.isEmpty ?? true) && item.base.previousItemId == nil && item.base.nextItemId == nil {
+            // make sure it's not the current recording item
+            if item.id != TimelineRecorder.currentItemId {
+                logger.info("Soft deleting zombie item: \(item.debugShortId) (no samples, no edges)", subsystem: .timeline)
+                
+                try await Database.pool.write { db in
+                    var mutableItem = item
+                    try mutableItem.base.updateChanges(db) {
+                        $0.deleted = true
+                    }
+                }
+                return
+            }
+        }
+
         guard let dateRange = item.dateRange else {
             return
         }
