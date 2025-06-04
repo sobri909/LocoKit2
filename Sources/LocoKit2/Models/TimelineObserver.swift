@@ -78,15 +78,27 @@ public final class TimelineObserver: TransactionObserver, Sendable {
         let visitRowIds = rowIds["TimelineItemVisit", default: []].map(String.init).joined(separator: ",")
         let tripRowIds = rowIds["TimelineItemTrip", default: []].map(String.init).joined(separator: ",")
 
+        // use UNION to force efficient ROWID lookups instead of full table scans
         let query = """
-                SELECT base.startDate, base.endDate
-                FROM TimelineItemBase AS base
-                LEFT JOIN TimelineItemVisit AS visit ON base.id = visit.itemId
-                LEFT JOIN TimelineItemTrip AS trip ON base.id = trip.itemId
-                WHERE
-                    base.ROWID IN (\(baseRowIds))
-                    OR visit.ROWID IN (\(visitRowIds))
-                    OR trip.ROWID IN (\(tripRowIds))
+                SELECT DISTINCT startDate, endDate FROM (
+                    SELECT startDate, endDate 
+                    FROM TimelineItemBase 
+                    WHERE ROWID IN (\(baseRowIds.isEmpty ? "NULL" : baseRowIds))
+                    
+                    UNION ALL
+                    
+                    SELECT base.startDate, base.endDate 
+                    FROM TimelineItemBase base
+                    INNER JOIN TimelineItemVisit visit ON base.id = visit.itemId
+                    WHERE visit.ROWID IN (\(visitRowIds.isEmpty ? "NULL" : visitRowIds))
+                    
+                    UNION ALL
+                    
+                    SELECT base.startDate, base.endDate 
+                    FROM TimelineItemBase base
+                    INNER JOIN TimelineItemTrip trip ON base.id = trip.itemId
+                    WHERE trip.ROWID IN (\(tripRowIds.isEmpty ? "NULL" : tripRowIds))
+                )
             """
         do {
             let dateRanges = try Database.pool

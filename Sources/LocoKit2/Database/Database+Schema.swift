@@ -92,6 +92,12 @@ extension Database {
                 on: "TimelineItemBase",
                 columns: ["deleted", "startDate"]
             )
+            
+            try db.create(
+                index: "TimelineItemBase_on_deleted_disabled_endDate",
+                on: "TimelineItemBase",
+                columns: ["deleted", "disabled", "endDate"]
+            )
 
             try db.create(table: "TimelineItemVisit") { table in
                 table.primaryKey("itemId", .text)

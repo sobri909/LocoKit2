@@ -65,5 +65,13 @@ extension Database {
                 table.add(column: "source", .text).notNull().defaults(to: "LocoKit2").indexed()
             }
         }
+        
+        migrator.registerMigration("TimelineItemBase_currentItem_index") { db in
+            try? db.create(
+                index: "TimelineItemBase_on_deleted_disabled_endDate",
+                on: "TimelineItemBase",
+                columns: ["deleted", "disabled", "endDate"]
+            )
+        }
     }
 }

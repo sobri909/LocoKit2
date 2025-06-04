@@ -144,6 +144,9 @@ extension Logging.Logger {
     @inlinable
     public func error(_ error: Error, subsystem: DebugLogger.Subsystem, source: @autoclosure () -> String? = nil,
                       file: String = #file, function: String = #function, line: UInt = #line) {
+        if subsystem == .database, (error is CancellationError) {
+            print("hmm")
+        }
         self.error("[\(subsystem.rawValue.uppercased())] \(error)", source: source(), file: file, function: function, line: line)
     }
 }
