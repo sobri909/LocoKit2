@@ -1,5 +1,5 @@
 //
-//  TasksManager.swift
+//  BackgroundTasksManager.swift
 //  LocoKit2
 //
 //  Created on 2025-02-25.
@@ -10,13 +10,13 @@ import Foundation
 import GRDB
 
 @MainActor
-public enum TasksManager {
+public enum BackgroundTasksManager {
 
-    static var taskDefinitions: [String: TaskDefinition] = [:]
+    static var taskDefinitions: [String: BackgroundTaskDefinition] = [:]
 
     // MARK: - Task Management
     
-    public static func add(task: TaskDefinition) {
+    public static func add(task: BackgroundTaskDefinition) {
         taskDefinitions[task.identifier] = task
         registerTask(identifier: task.identifier)
         updateTaskStateFor(identifier: task.identifier, to: .registered)

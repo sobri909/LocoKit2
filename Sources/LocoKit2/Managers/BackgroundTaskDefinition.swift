@@ -1,5 +1,5 @@
 //
-//  TaskDefinition.swift
+//  BackgroundTaskDefinition.swift
 //  LocoKit2
 //
 //  Created by Matt Greenfield on 25/02/2025.
@@ -8,7 +8,7 @@
 import Foundation
 import BackgroundTasks
 
-public struct TaskDefinition: Sendable {
+public struct BackgroundTaskDefinition: Sendable {
     public typealias WorkHandler = @Sendable () async throws -> Void
     
     public init(

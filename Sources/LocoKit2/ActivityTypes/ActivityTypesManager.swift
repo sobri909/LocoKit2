@@ -62,7 +62,7 @@ public enum ActivityTypesManager {
 
     @MainActor
     public static func registerModelUpdatesTask() {
-        let taskDefinition = TaskDefinition(
+        let taskDefinition = BackgroundTaskDefinition(
             identifier: taskIdentifier,
             minimumDelay: .hours(1),
             requiresNetwork: false,
@@ -70,7 +70,7 @@ public enum ActivityTypesManager {
             workHandler: processModelsForBackground
         )
         
-        TasksManager.add(task: taskDefinition)
+        BackgroundTasksManager.add(task: taskDefinition)
     }
     
     private static func processModelsForBackground() async throws {
