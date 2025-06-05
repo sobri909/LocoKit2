@@ -11,6 +11,9 @@ import Foundation
 extension TimelineProcessor {
 
     public static func safeDelete(_ deadman: TimelineItem) async {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "safeDelete()", objectKey: deadman.id)
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         if TimelineProcessor.debugLogging {
             print("TimelineProcessor.safeDelete()")
         }

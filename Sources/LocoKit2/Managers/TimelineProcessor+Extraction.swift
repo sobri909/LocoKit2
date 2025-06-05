@@ -31,6 +31,9 @@ extension TimelineProcessor {
         confirmedPlace: Bool = true,
         customTitle: String? = nil
     ) async throws -> TimelineItem? {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "extractItem(\(isVisit ? "visit" : "trip"))", objectKey: segment.id)
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         // TODO: think through a way to bring this back, but without the breakage
         // guard try await segment.validateIsContiguous() else {
         //     throw TimelineError.invalidSegment("Segment fails validateIsContiguous()")

@@ -83,7 +83,7 @@ public enum ActivityTypesManager {
             // no more models to update? we're done
             guard let model else { return }
             
-            updateModel(geoKey: model.geoKey)
+            await updateModel(geoKey: model.geoKey)
         }
     }
     
@@ -154,14 +154,18 @@ public enum ActivityTypesManager {
         logger.info("Deleted all ActivityTypesModels", subsystem: .activitytypes)
     }
 
-    public static func updateModel(geoKey: String) {
+    public static func updateModel(geoKey: String) async {
         do {
-            let model = try Database.pool.read {
+            let model = try await Database.pool.read {
                 try ActivityTypesModel.fetchOne($0, key: geoKey)
             }
             if let model {
+                let handle = await OperationRegistry.startOperation(.activityTypes, operation: "updateModel(CD\(model.depth))", objectKey: model.geoKey)
+                defer { Task { await OperationRegistry.endOperation(handle) } }
+                
                 update(model: model)
             }
+            
         } catch {
             logger.error(error, subsystem: .database)
         }
@@ -174,7 +178,7 @@ public enum ActivityTypesManager {
         
         if shouldUpdateImmediately {
             let geoKey = model.geoKey
-            Task { updateModel(geoKey: geoKey) }
+            Task { await updateModel(geoKey: geoKey) }
         }
     }
 

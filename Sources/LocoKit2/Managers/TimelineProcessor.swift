@@ -17,6 +17,9 @@ public enum TimelineProcessor {
     private static let maxProcessingListSize = 21
 
     public static func processFrom(itemId: String) async {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "processFrom(itemId:)", objectKey: itemId)
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         do {
             if let list = try await processingList(fromItemId: itemId) {
                 await process(list)
@@ -27,11 +30,17 @@ public enum TimelineProcessor {
     }
 
     public static func process(_ items: [TimelineItem]) async {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "process([TimelineItem]) [\(items.count)]")
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         let list = await TimelineLinkedList(fromItems: items)
         await process(list)
     }
 
     public static func process(itemIds: [String]) async {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "process(itemIds:) [\(itemIds.count)]")
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         let list = await TimelineLinkedList(fromItemIds: itemIds)
         await process(list)
     }
