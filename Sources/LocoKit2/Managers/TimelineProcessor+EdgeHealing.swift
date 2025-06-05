@@ -50,7 +50,6 @@ extension TimelineProcessor {
                 .filter(Column("startDate") <= dateRange.start)
                 .filter(Column("endDate") >= dateRange.end)
                 .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("source") == item.source)  // only merge same sources
                 .filter(Column("id") != item.id)
                 .fetchOne(db)
         }
@@ -94,7 +93,6 @@ extension TimelineProcessor {
             try TimelineItem.itemRequest(includeSamples: false)
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .filter(Column("id") != item.id)
-                .filter(Column("source") == item.source)  // only connect same sources
                 .filter(Column("endDate") >= dateRange.start - searchWindow)
                 .filter(Column("endDate") <= dateRange.start + searchWindow)
                 .annotated(with: SQL(sql: "ABS(strftime('%s', endDate) - strftime('%s', ?))",
@@ -155,7 +153,6 @@ extension TimelineProcessor {
             try TimelineItem.itemRequest(includeSamples: false)
                 .filter(Column("deleted") == false && Column("disabled") == false)
                 .filter(Column("id") != item.id)
-                .filter(Column("source") == item.source)  // only connect same sources
                 .filter(Column("startDate") >= dateRange.end - searchWindow)
                 .filter(Column("startDate") <= dateRange.end + searchWindow)
                 .annotated(with: SQL(sql: "ABS(strftime('%s', startDate) - strftime('%s', ?))",
