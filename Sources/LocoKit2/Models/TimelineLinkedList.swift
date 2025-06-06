@@ -114,7 +114,9 @@ public final class TimelineLinkedList: AsyncSequence {
                     .filter(Column("id") == itemId)
                     .fetchOne($0)
             }
-            .start(in: Database.pool) { error in
+            .removeDuplicates()
+            .shared(in: Database.pool)
+            .start { error in
                 logger.error(error, subsystem: .database)
 
             } onChange: { [weak self] item in
