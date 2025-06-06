@@ -21,7 +21,7 @@ import GRDB
 public final class TimelineSegment: Sendable {
 
     public let dateRange: DateInterval
-    public let shouldReprocessOnUpdate: Bool
+    public var shouldReprocessOnUpdate: Bool
 
     public private(set) var timelineItems: [TimelineItem] = []
 
@@ -70,6 +70,9 @@ public final class TimelineSegment: Sendable {
     }
 
     private func fetchItems() async {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.fetchItems", objectKey: dateRange.description)
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         do {
             let items = try await Database.pool.read { [dateRange] in
                 return try TimelineItem
@@ -94,6 +97,9 @@ public final class TimelineSegment: Sendable {
     private var lastCurrentItemId: String?
 
     private func update(from updatedItems: [TimelineItem]) async {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.update", objectKey: dateRange.description)
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         let oldItems = timelineItems
         var newItems = updatedItems
 
@@ -131,6 +137,9 @@ public final class TimelineSegment: Sendable {
     }
 
     private func classifyItems(_ items: [TimelineItem]) async {
+        let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.classifyItems", objectKey: "\(items.count) items")
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         var mutableItems = items
         for index in mutableItems.indices {
             if Task.isCancelled { return }
