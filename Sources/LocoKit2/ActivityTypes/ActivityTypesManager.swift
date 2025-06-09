@@ -178,7 +178,7 @@ public enum ActivityTypesManager {
         
         if shouldUpdateImmediately {
             let geoKey = model.geoKey
-            Task { await updateModel(geoKey: geoKey) }
+            Task(priority: .background) { await updateModel(geoKey: geoKey) }
         }
     }
 
@@ -260,8 +260,6 @@ public enum ActivityTypesManager {
                 return
             }
 
-            print("UPDATING: \(model.geoKey), FINISHED WRITING CSV FILE")
-
             guard let csvFile else {
                 logger.error("Missing CSV file for model build", subsystem: .activitytypes)
                 return
@@ -315,33 +313,44 @@ public enum ActivityTypesManager {
 
     private static func fetchTrainingSamples(for model: ActivityTypesModel) throws -> [LocomotionSample] {
         return try Database.pool.read { db in
-            var query = LocomotionSample
-                .filter(sql: """
-                    confirmedActivityType IS NOT NULL
-                    AND likely(xyAcceleration IS NOT NULL)
-                    AND likely(zAcceleration IS NOT NULL)
-                    AND likely(stepHz IS NOT NULL)
-                    """)
-
             if model.depth != 0 {
-                query = query
-                    .joining(required: LocomotionSample.rtree.aliased(TableAlias(name: "r")))
-                    .filter(
-                        sql: """
-                            r.latMin >= :latMin AND r.latMax <= :latMax AND 
-                            r.lonMin >= :lonMin AND r.lonMax <= :lonMax
-                            """,
-                        arguments: [
-                            "latMin": model.latitudeRange.lowerBound, "latMax": model.latitudeRange.upperBound,
-                            "lonMin": model.longitudeRange.lowerBound, "lonMax": model.longitudeRange.upperBound
-                        ]
+                // Use spatial query with rtree subquery and forced index usage
+                // This ensures the rtreeId index is used instead of the date index
+                let sql = """
+                    SELECT s.* FROM LocomotionSample s INDEXED BY LocomotionSample_on_rtreeId
+                    WHERE s.rtreeId IN (
+                        SELECT rowid FROM SampleRTree 
+                        WHERE latMin >= ? AND latMax <= ? 
+                        AND lonMin >= ? AND lonMax <= ?
                     )
-            }
+                    AND s.confirmedActivityType IS NOT NULL
+                    AND likely(s.xyAcceleration IS NOT NULL)
+                    AND likely(s.zAcceleration IS NOT NULL)
+                    AND likely(s.stepHz IS NOT NULL)
+                    ORDER BY s.date DESC
+                    LIMIT ?
+                    """
+                
+                return try LocomotionSample.fetchAll(db, sql: sql, arguments: [
+                    model.latitudeRange.lowerBound, model.latitudeRange.upperBound,
+                    model.longitudeRange.lowerBound, model.longitudeRange.upperBound,
+                    ActivityTypesModel.modelMaxTrainingSamples[model.depth]!
+                ])
 
-            return try query
-                .order(Column("date").desc)
-                .limit(ActivityTypesModel.modelMaxTrainingSamples[model.depth]!)
-                .fetchAll(db)
+            } else {
+                // For depth 0 (global), use the original approach
+                let query = LocomotionSample
+                    .filter(sql: """
+                        confirmedActivityType IS NOT NULL
+                        AND likely(xyAcceleration IS NOT NULL)
+                        AND likely(zAcceleration IS NOT NULL)
+                        AND likely(stepHz IS NOT NULL)
+                        """)
+                    .order(Column("date").desc)
+                    .limit(ActivityTypesModel.modelMaxTrainingSamples[model.depth]!)
+                
+                return try query.fetchAll(db)
+            }
         }
     }
 
@@ -362,8 +371,6 @@ public enum ActivityTypesManager {
 
         var samplesAdded = 0
         var includedTypes: Set<ActivityType> = []
-
-        print("exportCSV() CONSIDERING SAMPLES: \(samples.count)")
 
         // write the samples to file
         for sample in samples {
@@ -389,8 +396,6 @@ public enum ActivityTypesManager {
             try line.appendLineTo(csvFile)
             samplesAdded += 1
         }
-
-        print("exportCSV() WROTE SAMPLES: \(samplesAdded)")
 
         return (csvFile, samplesAdded, includedTypes)
     }

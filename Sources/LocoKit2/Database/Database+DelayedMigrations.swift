@@ -73,5 +73,13 @@ extension Database {
                 columns: ["deleted", "disabled", "endDate"]
             )
         }
+        
+        migrator.registerMigration("LocomotionSample_rtreeId_index") { db in
+            try? db.create(
+                index: "LocomotionSample_on_rtreeId",
+                on: "LocomotionSample",
+                columns: ["rtreeId"]
+            )
+        }
     }
 }

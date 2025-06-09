@@ -141,12 +141,7 @@ extension Database {
             try db.create(table: "LocomotionSample") { table in
                 table.primaryKey("id", .text)
                 table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
-
-                // NOTE: indexing this column in old LocoKit made the query planner do dumb things
-                // make sure there's a composite index that includes it instead
-                // and make sure rtreeId IS NOT the first column in the composite index
-                // otherwise again the query planner did dumb things
-                table.column("rtreeId", .integer)
+                table.column("rtreeId", .integer).indexed()
 
                 table.column("date", .datetime).notNull().indexed()
                 table.column("source", .text).notNull().indexed()
