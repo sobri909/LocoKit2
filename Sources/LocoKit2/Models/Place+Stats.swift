@@ -22,6 +22,7 @@ extension Place {
                     .itemRequest(includeSamples: true, includePlaces: true)
                     .filter(sql: "visit.placeId = ?", arguments: [id])
                     .filter(Column("deleted") == false)
+                    .filter(Column("disabled") == false)
                     .fetchAll(db)
             }
 
@@ -54,40 +55,49 @@ extension Place {
 
             let occupancyTimes = buildOccupancyTimes(from: confirmedVisits, in: calendar)
 
-            // Only update if we have valid data to update with
-            if let center = samples.weightedCenter() {
-                let radius = samples.radius(from: center.location)
+            // use all visits for counts, samples, and arrival times
+            let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
 
+            // filter out currentItem for leaving times and durations
+            let statsVisits = confirmedVisits.filter { $0.id != currentItemId }
+            let visitEnds = statsVisits.compactMap { $0.dateRange?.end }
+            let visitDurations = statsVisits.compactMap { $0.dateRange?.duration }
+
+            // calculate location data if we have valid samples
+            let center = samples.weightedCenter()
+            let locationData: (latitude: Double, longitude: Double, radiusMean: Double, radiusSD: Double)?
+            
+            if let center {
+                let radius = samples.radius(from: center.location)
                 let boundedMean = radius.mean.clamped(min: Place.minimumPlaceRadius, max: Place.maximumPlaceRadius)
                 let boundedSD = radius.sd.clamped(min: 0, max: Place.maximumPlaceRadius)
+                locationData = (center.latitude, center.longitude, boundedMean, boundedSD)
+            } else {
+                locationData = nil
+            }
 
-                // use all visits for counts, samples, and arrival times
-                let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
-
-                // filter out currentItem for leaving times and durations
-                let statsVisits = confirmedVisits.filter { $0.id != currentItemId }
-                let visitEnds = statsVisits.compactMap { $0.dateRange?.end }
-                let visitDurations = statsVisits.compactMap { $0.dateRange?.duration }
-
-                try await Database.pool.uncancellableWrite { [self, occupancyTimes] db in
-                    var mutableSelf = self
-                    try mutableSelf.updateChanges(db) {
-                        $0.visitCount = visits.count
-                        $0.visitDays = uniqueDays.count
-                        $0.latitude = center.latitude
-                        $0.longitude = center.longitude
-                        $0.radiusMean = boundedMean
-                        $0.radiusSD = boundedSD
-                        $0.isStale = false
-                        $0.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
-                        $0.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
-                        $0.visitDurations = Histogram.forDurations(intervals: visitDurations)
-                        $0.occupancyTimes = occupancyTimes
+            try await Database.pool.uncancellableWrite { [self, occupancyTimes, locationData] db in
+                var mutableSelf = self
+                try mutableSelf.updateChanges(db) {
+                    $0.visitCount = visits.count
+                    $0.visitDays = uniqueDays.count
+                    $0.isStale = false
+                    $0.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
+                    $0.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)
+                    $0.visitDurations = Histogram.forDurations(intervals: visitDurations)
+                    $0.occupancyTimes = occupancyTimes
+                    
+                    // only update location data if we have it
+                    if let locationData {
+                        $0.latitude = locationData.latitude
+                        $0.longitude = locationData.longitude
+                        $0.radiusMean = locationData.radiusMean
+                        $0.radiusSD = locationData.radiusSD
                     }
                 }
-
-                logger.info("UPDATED: \(name)", subsystem: .places)
             }
+
+            logger.info("UPDATED: \(name)\(locationData == nil ? " (no valid samples)" : "")", subsystem: .places)
             
         } catch is CancellationError {
             // CancellationError is fine here; can ignore
