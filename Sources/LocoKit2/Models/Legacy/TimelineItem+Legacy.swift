@@ -34,8 +34,10 @@ extension TimelineItem {
         }
         
         // Import step count data (could be from pedometer or HealthKit)
-        if let stepCount = legacyItem.hkStepCount {
-            mutableBase.stepCount = Int(stepCount)
+        if let stepCount = legacyItem.hkStepCount, stepCount.isFinite {
+            // Clamp to reasonable range for step counts
+            let clampedValue = max(0, min(stepCount, 1_000_000)) // 1M steps max seems reasonable
+            mutableBase.stepCount = Int(clampedValue)
         }
         
         // Initialize with proper properties
@@ -61,13 +63,8 @@ extension TimelineItem {
                 visit.setUncertainty(true)
             }
             
-            if let streetAddress = legacyItem.streetAddress {
-                visit.streetAddress = streetAddress
-            }
-            
-            if let customTitle = legacyItem.customTitle {
-                visit.customTitle = customTitle
-            }
+            visit.streetAddress = legacyItem.streetAddress
+            visit.customTitle = legacyItem.customTitle
             
             self.visit = visit
             
