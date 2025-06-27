@@ -88,6 +88,14 @@ struct EdgeRecordManager {
                         }
                     }
                     
+                    // Prevent circular references
+                    if let prev = validPreviousId, let next = validNextId, prev == next {
+                        logger.info("Preventing circular edge reference during restore: itemId=\(record.itemId)", subsystem: .importing)
+                        // Can't trust either edge - nil them both
+                        validPreviousId = nil
+                        validNextId = nil
+                    }
+                    
                     try TimelineItemBase
                         .filter(Column("id") == record.itemId)
                         .updateAll(db, [

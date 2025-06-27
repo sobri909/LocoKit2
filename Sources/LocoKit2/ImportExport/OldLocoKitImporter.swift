@@ -214,24 +214,32 @@ public enum OldLocoKitImporter {
             try await Database.pool.write { db in
                 for legacyItem in batch {
                     // Store edge relationships for later restoration
+                    var previousId = legacyItem.previousItemId
+                    var nextId = legacyItem.nextItemId
+                    
+                    // Sanitise circular edge references
+                    if let prev = previousId, let next = nextId, prev == next {
+                        logger.info("Item \(legacyItem.itemId) has circular edge reference: previousItemId == nextItemId", subsystem: .importing)
+                        // Can't trust either edge - nil them both
+                        previousId = nil
+                        nextId = nil
+                    }
+                    
                     let record = EdgeRecordManager.EdgeRecord(
                         itemId: legacyItem.itemId,
-                        previousId: legacyItem.previousItemId,
-                        nextId: legacyItem.nextItemId
+                        previousId: previousId,
+                        nextId: nextId
                     )
-                    
-                    // Save edge record
                     try edgeManager.saveRecord(record)
                     
+                    // Create sanitised legacy item without edges for the init
+                    var sanitisedLegacyItem = legacyItem
+                    sanitisedLegacyItem.previousItemId = nil
+                    sanitisedLegacyItem.nextItemId = nil
+                    
                     // Create and save TimelineItem from legacy item
-                    let item = try TimelineItem(from: legacyItem)
-                    
-                    // Clear edge relationships for initial import (will restore later)
-                    var base = item.base
-                    base.previousItemId = nil
-                    base.nextItemId = nil
-                    try base.insert(db, onConflict: .ignore)
-                    
+                    let item = try TimelineItem(from: sanitisedLegacyItem)
+                    try item.base.insert(db, onConflict: .ignore)
                     
                     // Save visit or trip component
                     if let visit = item.visit {
