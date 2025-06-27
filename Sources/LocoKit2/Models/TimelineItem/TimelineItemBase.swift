@@ -41,7 +41,6 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
 
     public var previousItemId: String? {
         didSet {
-            // TODO: move this to SQL constraints
             if previousItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
@@ -50,7 +49,6 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
 
     public var nextItemId: String? {
         didSet {
-            // TODO: move this to SQL constraints
             if nextItemId != nil, previousItemId == nextItemId {
                 fatalError("Can't set previousItem and nextItem to the same item")
             }
