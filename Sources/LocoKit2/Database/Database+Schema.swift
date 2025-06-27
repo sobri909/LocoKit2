@@ -73,10 +73,12 @@ extension Database {
                 table.column("previousItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
                     .check { $0 != Column("id") }
+                    .check { $0 == nil || $0 != Column("nextItemId") }
 
                 table.column("nextItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
                     .check { $0 != Column("id") }
+                    .check { $0 == nil || $0 != Column("previousItemId") }
 
                 table.column("stepCount", .integer)
                 table.column("floorsAscended", .integer)
