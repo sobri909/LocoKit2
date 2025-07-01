@@ -44,8 +44,8 @@ public enum ImportManager {
             let placesCount = try await importPlaces()
             
             let edgeManager = EdgeRecordManager()
-            let itemsCount = try await importTimelineItems(edgeManager: edgeManager)
-            let (samplesCount, orphansProcessed) = try await importSamples()
+            let (itemsCount, timelineItemIds) = try await importTimelineItems(edgeManager: edgeManager)
+            let (samplesCount, orphansProcessed) = try await importSamples(timelineItemIds: timelineItemIds)
             
             // Log import summary
             let duration = Date().timeIntervalSince(startTime)
@@ -148,7 +148,7 @@ public enum ImportManager {
                 
                 try await Database.pool.uncancellableWrite { db in
                     for place in places {
-                        try place.save(db)
+                        try place.insert(db, onConflict: .ignore)
                     }
                 }
                 totalPlaces += places.count
@@ -164,7 +164,7 @@ public enum ImportManager {
 
     // MARK: - Items
 
-    private static func importTimelineItems(edgeManager: EdgeRecordManager) async throws -> Int {
+    private static func importTimelineItems(edgeManager: EdgeRecordManager) async throws -> (count: Int, itemIds: Set<String>) {
         guard let importURL else {
             throw ImportExportError.importNotInitialised
         }
@@ -182,6 +182,8 @@ public enum ImportManager {
         logger.info("ImportManager: Starting timeline items import (\(itemFiles.count) files)", subsystem: .importing)
 
         var totalItems = 0
+        var allTimelineItemIds = Set<String>()
+        
         // Process monthly files
         for fileURL in itemFiles {
             do {
@@ -190,8 +192,11 @@ public enum ImportManager {
                 print("Loaded \(items.count) items from \(fileURL.lastPathComponent)")
                 totalItems += items.count
 
-                // Process in batches of 100
-                for batch in items.chunked(into: 100) {
+                // Collect all timeline item IDs for later reference validation
+                allTimelineItemIds.formUnion(items.map { $0.id })
+                
+                // Process in batches of 500 (matching OldLocoKitImporter)
+                for batch in items.chunked(into: 500) {
                     try await Database.pool.uncancellableWrite { db in
                         // collect all placeIds referenced by Visits in this batch
                         let placeIds = Set(batch.compactMap { $0.visit?.placeId }).filter { !$0.isEmpty }
@@ -217,7 +222,7 @@ public enum ImportManager {
                             mutableBase.previousItemId = nil
                             mutableBase.nextItemId = nil
 
-                            try mutableBase.save(db)
+                            try mutableBase.insert(db, onConflict: .ignore)
                             
                             // handle Visits with missing Places
                             if var visit = item.visit {
@@ -227,13 +232,15 @@ public enum ImportManager {
                                     visit.confirmedPlace = false
                                     visit.uncertainPlace = true
                                 }
-                                try visit.save(db)
+                                try visit.insert(db, onConflict: .ignore)
                                 
-                            } else {
-                                try item.visit?.save(db)
+                            } else if let visit = item.visit {
+                                try visit.insert(db, onConflict: .ignore)
                             }
                             
-                            try item.trip?.save(db)
+                            if let trip = item.trip {
+                                try trip.insert(db, onConflict: .ignore)
+                            }
                         }
                     }
                 }
@@ -247,7 +254,7 @@ public enum ImportManager {
         try await restoreEdgeRelationships(using: edgeManager)
         
         logger.info("ImportManager: Timeline items import complete (\(totalItems) items)", subsystem: .importing)
-        return totalItems
+        return (totalItems, allTimelineItemIds)
     }
 
     private static func restoreEdgeRelationships(using edgeManager: EdgeRecordManager) async throws {
@@ -266,7 +273,7 @@ public enum ImportManager {
 
     // MARK: - Samples
 
-    private static func importSamples() async throws -> (samples: Int, orphansProcessed: Int) {
+    private static func importSamples(timelineItemIds: Set<String>) async throws -> (samples: Int, orphansProcessed: Int) {
         guard let importURL else {
             throw ImportExportError.importNotInitialised
         }
@@ -285,6 +292,7 @@ public enum ImportManager {
         logger.info("ImportManager: Starting samples import (\(sampleFiles.count) files)", subsystem: .importing)
         
         var totalSamples = 0
+        var processedFiles = 0
         // track orphaned samples by their original parent timeline item ID
         var orphanedSamples: [String: [LocomotionSample]] = [:]
 
@@ -296,26 +304,17 @@ public enum ImportManager {
                 print("Loaded \(samples.count) samples from \(fileURL.lastPathComponent)")
                 totalSamples += samples.count
 
-                // process in batches of 100
-                for batch in samples.chunked(into: 100) {
+                // process in batches of 1000 (matching OldLocoKitImporter)
+                for batch in samples.chunked(into: 1000) {
                     // process batch and collect orphaned samples
-                    let batchOrphans = try await Database.pool.uncancellableWrite { db -> [String: [LocomotionSample]] in
-                        // get all timeline item IDs referenced in this batch
-                        let itemIds = Set(batch.compactMap(\.timelineItemId))
-                        if itemIds.isEmpty { return [:] }
-
-                        // find which of those IDs actually exist in the database
-                        let validIds = try String.fetchSet(db, TimelineItemBase
-                            .select(Column("id"))
-                            .filter(itemIds.contains(Column("id"))))
-
+                    let batchOrphans = try await Database.pool.uncancellableWrite { [timelineItemIds] db -> [String: [LocomotionSample]] in
                         // collect orphans within transaction scope
                         var batchOrphans: [String: [LocomotionSample]] = [:]
                         var orphanedCount = 0
                         
                         for var sample in batch {
-                            // check and fix invalid references
-                            if let originalItemId = sample.timelineItemId, !validIds.contains(originalItemId) {
+                            // check and fix invalid references using pre-collected IDs
+                            if let originalItemId = sample.timelineItemId, !timelineItemIds.contains(originalItemId) {
                                 // preserve sample with its original itemId for later recreation
                                 batchOrphans[originalItemId, default: []].append(sample)
                                 
@@ -324,7 +323,7 @@ public enum ImportManager {
                                 orphanedCount += 1
                             }
 
-                            try sample.save(db)
+                            try sample.insert(db, onConflict: .ignore)
                         }
                         
                         if orphanedCount > 0 {
@@ -339,6 +338,12 @@ public enum ImportManager {
                     for (itemId, samples) in batchOrphans {
                         orphanedSamples[itemId, default: []].append(contentsOf: samples)
                     }
+                }
+                
+                processedFiles += 1
+                // Log progress every 50 files
+                if processedFiles % 50 == 0 {
+                    logger.info("ImportManager: Samples import progress - processed \(processedFiles)/\(sampleFiles.count) files, \(totalSamples) samples", subsystem: .importing)
                 }
 
             } catch {

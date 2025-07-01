@@ -45,7 +45,10 @@ public enum ExportManager {
             throw ImportExportError.exportInProgress
         }
 
+        let startTime = Date()
         exportInProgress = true
+        
+        logger.info("ExportManager: Starting JSON export", subsystem: .exporting)
 
         // create root export dir with timestamp
         let formatter = DateFormatter()
@@ -82,7 +85,23 @@ public enum ExportManager {
 
             // start with places export
             try await exportPlaces()
+            
+            // Export completed successfully
+            let duration = Date().timeIntervalSince(startTime)
+            let durationString = String(format: "%.1f", duration)
+            let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
+                let places = try Place.fetchCount(db)
+                let items = try TimelineItemBase
+                    .filter(Column("startDate") != nil)
+                    .fetchCount(db)
+                let samples = try LocomotionSample.fetchCount(db)
+                return (places, items, samples)
+            }
+            logger.info("ExportManager completed successfully in \(durationString)s: \(placeCount) places, \(itemCount) items, \(sampleCount) samples", subsystem: .exporting)
+            
         } catch {
+            logger.error("Export failed: \(error.localizedDescription)", subsystem: .exporting)
+            logger.error(error, subsystem: .exporting)
             cleanupFailedExport()
             throw error
         }
@@ -98,7 +117,9 @@ public enum ExportManager {
         // Gather stats
         let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
             let places = try Place.fetchCount(db)
-            let items = try TimelineItemBase.fetchCount(db)
+            let items = try TimelineItemBase
+                .filter(Column("startDate") != nil)
+                .fetchCount(db)
             let samples = try LocomotionSample.fetchCount(db)
             return (places, items, samples)
         }
@@ -133,6 +154,8 @@ public enum ExportManager {
         guard let placesURL else {
             throw ImportExportError.exportNotInitialised
         }
+        
+        logger.info("ExportManager: Starting places export", subsystem: .exporting)
 
         // get all places
         let places = try await Database.pool.uncancellableRead { db in
@@ -154,7 +177,10 @@ public enum ExportManager {
             let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
             let data = try encoder.encode(places)
             try data.write(to: bucketURL)
+            print("Exported \(places.count) places to \(prefix).json")
         }
+        
+        logger.info("ExportManager: Places export completed (\(places.count) places in \(bucketedPlaces.count) buckets)", subsystem: .exporting)
 
         // Mark places as completed
         try finaliseMetadata(placesCompleted: true)
@@ -169,6 +195,8 @@ public enum ExportManager {
         guard let itemsURL else {
             throw ImportExportError.exportNotInitialised
         }
+        
+        logger.info("ExportManager: Starting timeline items export", subsystem: .exporting)
 
         // Get all timeline items with their full relationships loaded
         let items = try await Database.pool.uncancellableRead { db in
@@ -197,7 +225,10 @@ public enum ExportManager {
             let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
             let data = try encoder.encode(items)
             try data.write(to: monthURL)
+            print("Exported \(items.count) items to \(monthKey).json")
         }
+        
+        logger.info("ExportManager: Timeline items export completed (\(items.count) items in \(monthlyItems.count) months)", subsystem: .exporting)
 
         // Mark items as completed
         try finaliseMetadata(placesCompleted: true, itemsCompleted: true)
@@ -206,39 +237,87 @@ public enum ExportManager {
         try await exportSamples()
     }
 
+    // MARK: - Samples
+    
     private static func exportSamples() async throws {
         guard let samplesURL else {
             throw ImportExportError.exportNotInitialised
         }
+        
+        logger.info("ExportManager: Starting samples export", subsystem: .exporting)
 
-        // Get all samples ordered by date
-        let samples = try await Database.pool.uncancellableRead { db in
-            try LocomotionSample
-                .order(Column("date").asc)
-                .fetchAll(db)
+        // First get the date range of samples to export
+        let (minDate, maxDate, totalCount) = try await Database.pool.uncancellableRead { db in
+            let min = try Date.fetchOne(db, LocomotionSample.select(min(Column("date"))))
+            let max = try Date.fetchOne(db, LocomotionSample.select(max(Column("date"))))
+            let count = try LocomotionSample.fetchCount(db)
+            return (min, max, count)
         }
+        
+        guard let minDate, let maxDate else {
+            logger.info("ExportManager: No samples to export", subsystem: .exporting)
+            // Update metadata with success (but no samples)
+            try finaliseMetadata(placesCompleted: true, itemsCompleted: true, samplesCompleted: true)
+            exportInProgress = false
+            return
+        }
+        
+        logger.info("ExportManager: Found \(totalCount) samples from \(minDate) to \(maxDate)", subsystem: .exporting)
 
-        // Group samples by week using UTC calendar
-        var weekSamples: [String: [LocomotionSample]] = [:]
+        // Set up UTC calendar for consistent week calculations
         var calendar = Calendar.current
         calendar.timeZone = TimeZone(identifier: "UTC")!
-
-        for sample in samples {
-            let weekOfYear = calendar.component(.weekOfYear, from: sample.date)
-            let year = calendar.component(.year, from: sample.date)
-            let weekId = String(format: "%4d-W%02d", year, weekOfYear)  // YYYY-Www format
-            weekSamples[weekId, default: []].append(sample)
-        }
-
-        // Export each week's samples to its own file
+        calendar.firstWeekday = 2  // Monday = 2
+        
+        // Process samples week by week to avoid memory pressure
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
-
-        for (weekId, samples) in weekSamples {
-            let weekURL = samplesURL.appendingPathComponent("\(weekId).json")
-            let data = try encoder.encode(samples)
-            try data.write(to: weekURL)
+        
+        var totalExported = 0
+        var weekCount = 0
+        
+        // Start from the beginning of the week containing minDate
+        var currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: minDate)!.start
+        
+        while currentWeekStart <= maxDate {
+            // Calculate week end
+            let weekEnd = calendar.date(byAdding: .weekOfYear, value: 1, to: currentWeekStart)!
+            
+            // Query only this week's samples
+            let weekSamples = try await Database.pool.uncancellableRead { [currentWeekStart, weekEnd] db in
+                try LocomotionSample
+                    .filter(Column("date") >= currentWeekStart && Column("date") < weekEnd)
+                    .order(Column("date").asc)
+                    .fetchAll(db)
+            }
+            
+            if !weekSamples.isEmpty {
+                // Generate week ID in YYYY-Www format
+                let weekOfYear = calendar.component(.weekOfYear, from: currentWeekStart)
+                let year = calendar.component(.year, from: currentWeekStart)
+                let weekId = String(format: "%4d-W%02d", year, weekOfYear)
+                
+                // Write this week's samples
+                let weekURL = samplesURL.appendingPathComponent("\(weekId).json")
+                let data = try encoder.encode(weekSamples)
+                try data.write(to: weekURL)
+                
+                totalExported += weekSamples.count
+                weekCount += 1
+                
+                print("Exported \(weekSamples.count) samples to \(weekId).json")
+                
+                // Log progress every 10 weeks
+                if weekCount % 10 == 0 {
+                    logger.info("ExportManager: Samples export progress - \(totalExported)/\(totalCount) samples in \(weekCount) weeks", subsystem: .exporting)
+                }
+            }
+            
+            // Move to next week
+            currentWeekStart = weekEnd
         }
+        
+        logger.info("ExportManager: Samples export completed (\(totalExported) samples in \(weekCount) weeks)", subsystem: .exporting)
 
         // Update metadata with success
         try finaliseMetadata(placesCompleted: true, itemsCompleted: true, samplesCompleted: true)

@@ -55,6 +55,12 @@ Core approach with clean separation and efficient organization:
        monthlyItems[monthKey, default: []].append(item)
    }
    ```
+   
+   **Note on Soft-Deleted Items (2025-07-01):**
+   - Items without startDate are excluded from export
+   - This primarily affects soft-deleted items (nil dates after sample removal)
+   - Export counts only include items with valid startDate
+   - This is pragmatic: deleted items have no samples or purpose in restore
 
 3. Week-Based Samples:
    ```swift
