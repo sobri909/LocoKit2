@@ -35,24 +35,36 @@ internal final class Merge: Hashable, Sendable {
     }
 
     private static func isValid(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> Bool {
+        // check 1: basic state validity
         if keeper.deleted || deadman.deleted || betweener?.deleted == true { return false }
         if keeper.disabled || deadman.disabled || betweener?.disabled == true { return false }
 
-        // reject circular references
-        if keeper.base.nextItemId == keeper.base.previousItemId { return false }
-        if deadman.base.nextItemId == deadman.base.previousItemId { return false }
-        if let betweener, betweener.base.nextItemId == betweener.base.previousItemId { return false }
-
+        // check 2: items are in a valid merge pattern and result won't be circular
         if let betweener {
             // keeper -> betweener -> deadman
-            if keeper.base.nextItemId == betweener.id, betweener.base.nextItemId == deadman.id { return true }
+            if keeper.base.nextItemId == betweener.id, betweener.base.nextItemId == deadman.id {
+                // keeper will inherit deadman's nextItemId
+                return deadman.base.nextItemId != keeper.id
+            }
+
             // deadman -> betweener -> keeper
-            if deadman.base.nextItemId == betweener.id, betweener.base.nextItemId == keeper.id { return true }
+            if deadman.base.nextItemId == betweener.id, betweener.base.nextItemId == keeper.id {
+                // keeper will inherit deadman's previousItemId
+                return deadman.base.previousItemId != keeper.id
+            }
+
         } else {
             // keeper -> deadman
-            if keeper.base.nextItemId == deadman.id { return true }
+            if keeper.base.nextItemId == deadman.id {
+                // keeper will inherit deadman's nextItemId
+                return deadman.base.nextItemId != keeper.id
+            }
+            
             // deadman -> keeper
-            if deadman.base.nextItemId == keeper.id { return true }
+            if deadman.base.nextItemId == keeper.id {
+                // keeper will inherit deadman's previousItemId
+                return deadman.base.previousItemId != keeper.id
+            }
         }
 
         return false
