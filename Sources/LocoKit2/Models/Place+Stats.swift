@@ -19,7 +19,7 @@ extension Place {
 
             let visits = try await Database.pool.read { [id] db in
                 try TimelineItem
-                    .itemRequest(includeSamples: true, includePlaces: true)
+                    .itemRequest(includeSamples: false, includePlaces: true)
                     .filter(sql: "visit.placeId = ?", arguments: [id])
                     .filter(Column("deleted") == false)
                     .filter(Column("disabled") == false)
@@ -51,7 +51,24 @@ extension Place {
             })
 
             let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
-            let samples = confirmedVisits.flatMap { $0.samples ?? [] }
+            
+            // load samples only for confirmed visits to reduce memory usage
+            let samples: [LocomotionSample]
+            if !confirmedVisits.isEmpty {
+                let confirmedVisitIds = confirmedVisits.map { $0.id }
+                let maxSamplesToLoad = 50_000
+                
+                samples = try await Database.pool.read { db in
+                    try LocomotionSample
+                        .filter(confirmedVisitIds.contains(Column("timelineItemId")))
+                        .filter(Column("disabled") == false)
+                        .order(Column("date").desc)
+                        .limit(maxSamplesToLoad)
+                        .fetchAll(db)
+                }
+            } else {
+                samples = []
+            }
 
             let occupancyTimes = buildOccupancyTimes(from: confirmedVisits, in: calendar)
 

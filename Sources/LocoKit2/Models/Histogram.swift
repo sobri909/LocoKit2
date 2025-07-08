@@ -151,7 +151,10 @@ public struct Histogram: Hashable, Sendable, Codable {
         let q3Index = (sorted.count * 3) / 4
         let iqr = sorted[q3Index] - sorted[q1Index]
 
-        return 2.0 * iqr * pow(Double(values.count), -1.0/3.0)
+        let width = 2.0 * iqr * pow(Double(values.count), -1.0/3.0)
+        
+        // ensure we never return zero to prevent division by zero
+        return width > 0 ? width : 1.0
     }
 
 }
