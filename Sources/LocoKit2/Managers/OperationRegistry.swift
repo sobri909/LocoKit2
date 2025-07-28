@@ -18,8 +18,16 @@ public class OperationRegistry {
     
     // MARK: - Public API
     
-    public static func startOperation(_ category: OperationCategory, operation: String? = nil, objectKey: String? = nil) async -> OperationHandle {
-        highlander.startOperation(category, operation: operation, objectKey: objectKey)
+    public static func startOperation(
+        _ category: OperationCategory, 
+        operation: String? = nil, 
+        objectKey: String? = nil,
+        rejectDuplicates: Bool = false
+    ) async -> OperationHandle? {
+        if rejectDuplicates && highlander.hasMatchingOperation(category, operation: operation, objectKey: objectKey) {
+            return nil
+        }
+        return highlander.startOperation(category, operation: operation, objectKey: objectKey)
     }
     
     public static func endOperation(_ handle: OperationHandle) async {
@@ -27,6 +35,13 @@ public class OperationRegistry {
     }
     
     // MARK: - Instance methods
+    
+    private func hasMatchingOperation(_ category: OperationCategory, operation: String?, objectKey: String?) -> Bool {
+        guard let handles = activeOperations[category] else { return false }
+        return handles.contains { handle in
+            handle.operation == operation && handle.objectKey == objectKey
+        }
+    }
     
     public func startOperation(_ category: OperationCategory, operation: String? = nil, objectKey: String? = nil) -> OperationHandle {
         let handle = OperationHandle(category: category, operation: operation, objectKey: objectKey)

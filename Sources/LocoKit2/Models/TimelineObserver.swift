@@ -74,7 +74,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     }
 
     private func process(rowIds: [String: Set<Int64>]) async {
-        let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineObserver.process", objectKey: "\(rowIds.values.reduce(0) { $0 + $1.count }) changes")
+        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineObserver.process(rowIds:)", objectKey: "\(rowIds.values.reduce(0) { $0 + $1.count }) changes") else { return }
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         let baseRowIds = rowIds["TimelineItemBase", default: []].map(String.init).joined(separator: ",")

@@ -31,7 +31,9 @@ extension TimelineProcessor {
         confirmedPlace: Bool = true,
         customTitle: String? = nil
     ) async throws -> TimelineItem? {
-        let handle = await OperationRegistry.startOperation(.timeline, operation: "extractItem(\(isVisit ? "visit" : "trip"))", objectKey: segment.id)
+        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineProcessor.extractItem(from:isVisit:placeId:confirmedPlace:customTitle:)", objectKey: segment.id) else { 
+            return nil 
+        }
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         // TODO: think through a way to bring this back, but without the breakage

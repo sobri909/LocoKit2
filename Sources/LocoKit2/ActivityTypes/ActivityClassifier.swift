@@ -84,7 +84,7 @@ public enum ActivityClassifier {
         // no Core ML in background plz
         if await UIApplication.shared.applicationState == .background { return nil }
         
-        let handle = await OperationRegistry.startOperation(.activityTypes, operation: "classify([\(samples.count)])")
+        guard let handle = await OperationRegistry.startOperation(.activityTypes, operation: "ActivityClassifier.results(for:timeout:)") else { return nil }
         defer { Task { await OperationRegistry.endOperation(handle) } }
 
         let start = Date()

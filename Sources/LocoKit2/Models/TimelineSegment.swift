@@ -70,7 +70,7 @@ public final class TimelineSegment: Sendable {
     }
 
     private func fetchItems() async {
-        let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.fetchItems", objectKey: dateRange.description)
+        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.fetchItems()", objectKey: dateRange.description) else { return }
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         do {
@@ -97,7 +97,7 @@ public final class TimelineSegment: Sendable {
     private var lastCurrentItemId: String?
 
     private func update(from updatedItems: [TimelineItem]) async {
-        let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.update", objectKey: dateRange.description)
+        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.update(from:)", objectKey: dateRange.description) else { return }
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         let oldItems = timelineItems
@@ -137,7 +137,7 @@ public final class TimelineSegment: Sendable {
     }
 
     private func classifyItems(_ items: [TimelineItem]) async {
-        let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.classifyItems", objectKey: "\(items.count) items")
+        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.classifyItems(_:)", objectKey: "\(items.count) items") else { return }
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         var mutableItems = items

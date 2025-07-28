@@ -160,7 +160,15 @@ public enum ActivityTypesManager {
                 try ActivityTypesModel.fetchOne($0, key: geoKey)
             }
             if let model {
-                let handle = await OperationRegistry.startOperation(.activityTypes, operation: "updateModel(CD\(model.depth))", objectKey: model.geoKey)
+                guard let handle = await OperationRegistry.startOperation(
+                    .activityTypes, 
+                    operation: "ActivityTypesManager.updateModel(geoKey:)", 
+                    objectKey: model.geoKey,
+                    rejectDuplicates: true
+                ) else {
+                    logger.info("Skipping duplicate ActivityTypesManager.updateModel(geoKey:) for \(model.geoKey)", subsystem: .activitytypes)
+                    return
+                }
                 defer { Task { await OperationRegistry.endOperation(handle) } }
                 
                 update(model: model)
