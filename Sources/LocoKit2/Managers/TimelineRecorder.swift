@@ -201,13 +201,17 @@ public enum TimelineRecorder {
             return
         }
 
+        // scale sleep cycles based on time at unknown place:
+        // - first 2 minutes: 6 seconds (quick wake detection)
+        // - 2-60 minutes: scale from 6 to 30 seconds
+        // - after 60 minutes: cap at 30 seconds (matches Arc Timeline)
         let sleepMinutes = recordingEnded.age / 60
         if sleepMinutes < 2 {
             await loco.setSleepCycleDuration(6)
         } else if sleepMinutes <= 60 {
-            await loco.setSleepCycleDuration(6 + ((sleepMinutes - 2) / 58 * (60 - 6)))
+            await loco.setSleepCycleDuration(6 + ((sleepMinutes - 2) / 58 * (30 - 6)))
         } else {
-            await loco.setSleepCycleDuration(60)
+            await loco.setSleepCycleDuration(30)
         }
     }
 
