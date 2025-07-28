@@ -113,7 +113,7 @@ extension TimelineItem {
             }
 
             // cleanup after all that damage
-            await TimelineProcessor.process(itemsToProcess)
+            await TimelineProcessor.process(items: itemsToProcess)
 
         } else {
             // need to reprocess from self after the changes

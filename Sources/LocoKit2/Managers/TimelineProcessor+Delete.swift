@@ -11,7 +11,16 @@ import Foundation
 extension TimelineProcessor {
 
     public static func safeDelete(_ deadman: TimelineItem) async {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineProcessor.safeDelete(_:)", objectKey: deadman.id) else { return }
+        guard let handle = await OperationRegistry.startOperation(
+            .timeline,
+            operation: "TimelineProcessor.safeDelete(_:)",
+            objectKey: deadman.id,
+            rejectDuplicates: true
+        ) else {
+            logger.info("Skipping duplicate TimelineProcessor.safeDelete(_:)", subsystem: .timeline)
+            return
+        }
+        
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         if TimelineProcessor.debugLogging {

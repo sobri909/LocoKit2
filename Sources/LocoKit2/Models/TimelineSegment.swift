@@ -70,7 +70,15 @@ public final class TimelineSegment: Sendable {
     }
 
     private func fetchItems() async {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.fetchItems()", objectKey: dateRange.description) else { return }
+        guard let handle = await OperationRegistry.startOperation(
+            .timeline,
+            operation: "TimelineSegment.fetchItems()",
+            objectKey: dateRange.description,
+            rejectDuplicates: true
+        ) else {
+            logger.info("Skipping duplicate TimelineSegment.fetchItems()", subsystem: .timeline)
+            return
+        }
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         do {
@@ -131,13 +139,22 @@ public final class TimelineSegment: Sendable {
         guard UIApplication.shared.applicationState == .active else { return }
 
         Task {
-            await classifyItems(newItems)
+            await classify(items: newItems)
             await processItems(newItems, oldItems: oldItems)
         }
     }
 
-    private func classifyItems(_ items: [TimelineItem]) async {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.classifyItems(_:)", objectKey: "\(items.count) items") else { return }
+    private func classify(items: [TimelineItem]) async {
+        guard let handle = await OperationRegistry.startOperation(
+            .timeline,
+            operation: "TimelineSegment.classify(items:)",
+            objectKey: dateRange.description,
+            rejectDuplicates: true
+        ) else {
+            logger.info("Skipping duplicate TimelineSegment.classify(items:)", subsystem: .timeline)
+            return
+        }
+
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         var mutableItems = items
@@ -165,7 +182,7 @@ public final class TimelineSegment: Sendable {
         // if there's no currentItem, always process
         guard let currentItemId else {
             lastCurrentItemId = nil
-            await TimelineProcessor.process(newItems)
+            await TimelineProcessor.process(items: newItems)
             return
         }
 
@@ -178,7 +195,7 @@ public final class TimelineSegment: Sendable {
 
         // something else changed - do the processing
         lastCurrentItemId = currentItemId
-        await TimelineProcessor.process(newItems)
+        await TimelineProcessor.process(items: newItems)
     }
 
 }

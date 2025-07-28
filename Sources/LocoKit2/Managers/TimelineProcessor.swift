@@ -17,9 +17,6 @@ public enum TimelineProcessor {
     private static let maxProcessingListSize = 21
 
     public static func processFrom(itemId: String) async {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineProcessor.processFrom(itemId:)", objectKey: itemId) else { return }
-        defer { Task { await OperationRegistry.endOperation(handle) } }
-        
         do {
             if let list = try await processingList(fromItemId: itemId) {
                 await process(list)
@@ -29,23 +26,32 @@ public enum TimelineProcessor {
         }
     }
 
-    public static func process(_ items: [TimelineItem]) async {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineProcessor.process(_:)") else { return }
-        defer { Task { await OperationRegistry.endOperation(handle) } }
-        
+    public static func process(items: [TimelineItem]) async {
         let list = await TimelineLinkedList(fromItems: items)
         await process(list)
     }
 
     public static func process(itemIds: [String]) async {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineProcessor.process(itemIds:)") else { return }
-        defer { Task { await OperationRegistry.endOperation(handle) } }
-        
         let list = await TimelineLinkedList(fromItemIds: itemIds)
         await process(list)
     }
 
     public static func process(_ list: TimelineLinkedList) async {
+        let itemIds = await list.itemIds
+        let objectKey = Set(itemIds).hashValue.description
+        
+        guard let handle = await OperationRegistry.startOperation(
+            .timeline,
+            operation: "TimelineProcessor.process(list:)",
+            objectKey: objectKey,
+            rejectDuplicates: true
+        ) else {
+            logger.info("Skipping duplicate TimelineProcessor.process(list:)", subsystem: .timeline)
+            return
+        }
+        
+        defer { Task { await OperationRegistry.endOperation(handle) } }
+        
         var lastResult: MergeResult?
         do {
             while true {
