@@ -154,6 +154,18 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
     }
 
+    public var isBogus: Bool {
+        get throws {
+            guard let samples else {
+                throw TimelineError.samplesNotLoaded
+            }
+
+            if samples.isEmpty { return false }
+            
+            return samples.allSatisfy { $0.activityType == .bogus }
+        }
+    }
+
     public var hasAssignment: Bool {
         if let visit {
             if visit.placeId != nil {

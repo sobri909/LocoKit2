@@ -65,6 +65,12 @@ public final class MergeScores {
             // anyone can consume an invalid nolo
             if try consumee.isNolo && consumee.isInvalid { return .medium }
 
+            // bogus items can only consume bogus items
+            if try consumer.isBogus { return (try consumee.isBogus) ? .perfect : .impossible }
+
+            // anyone can consume an invalid bogus item
+            if try consumee.isBogus && consumee.isInvalid { return .medium }
+
             // test for impossible separation distance
             guard try consumer.isWithinMergeableDistance(of: consumee) else { return .impossible }
 
