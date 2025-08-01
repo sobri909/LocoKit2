@@ -221,7 +221,7 @@ public enum HealthManager {
     
     private static func updateHeartRateStats(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
         do {
-            let avgResult = try await TaskTimeout.withTimeout(seconds: 5) {
+            let avgResult = try await TaskTimeout.withTimeout(seconds: 10) {
                 let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
                 let heartRateType = HKQuantityType(.heartRate)
                 let avgDescriptor = HKStatisticsQueryDescriptor(
@@ -231,7 +231,7 @@ public enum HealthManager {
                 return try await avgDescriptor.result(for: healthStore)
             }
             
-            let maxResult = try await TaskTimeout.withTimeout(seconds: 5) {
+            let maxResult = try await TaskTimeout.withTimeout(seconds: 10) {
                 let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
                 let heartRateType = HKQuantityType(.heartRate)
                 let maxDescriptor = HKStatisticsQueryDescriptor(
@@ -382,7 +382,7 @@ public enum HealthManager {
     // MARK: - Private Fetching
 
     private static func fetchSum(for quantityType: HKQuantityType, from startDate: Date, to endDate: Date) async throws -> HKQuantity? {
-        let result = try await TaskTimeout.withTimeout(seconds: 5) {
+        let result = try await TaskTimeout.withTimeout(seconds: 10) {
             let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
             let descriptor = HKStatisticsQueryDescriptor(
                 predicate: .quantitySample(type: quantityType, predicate: samplePredicate),
@@ -400,7 +400,7 @@ public enum HealthManager {
     }
     
     private static func fetchHeartRateSamples(from startDate: Date, to endDate: Date) async throws -> [HKQuantitySample] {
-        let result = try await TaskTimeout.withTimeout(seconds: 5) {
+        let result = try await TaskTimeout.withTimeout(seconds: 10) {
             let heartRateType = HKQuantityType(.heartRate)
             let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
             let descriptor = HKSampleQueryDescriptor(
