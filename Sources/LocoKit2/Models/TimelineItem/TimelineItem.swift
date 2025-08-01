@@ -293,7 +293,6 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     public mutating func fetchSamples(forceFetch: Bool = false) async {
         guard forceFetch || samplesChanged || samples == nil else {
-            print("[\(debugShortId)] fetchSamples() skipping; no reason to fetch")
             return
         }
 
@@ -350,6 +349,13 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
         await visit?.update(from: updatedSamples)
         await trip?.update(from: updatedSamples)
+
+        // TODO: getting deadlocked in here
+        // these next two calls do their own db writes
+        // then there's the final db write in this method here
+        // so we could be saturating the writer
+        // or something else is saturated/deadlocked in HealthActor
+        // should move the health updates into a single write, for a start
         
         await HealthManager.updateHealthData(for: self)
         await HealthManager.updateHeartRateForSamples(in: self)

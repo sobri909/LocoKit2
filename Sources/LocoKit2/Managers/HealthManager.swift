@@ -220,25 +220,36 @@ public enum HealthManager {
     }
     
     private static func updateHeartRateStats(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
-        let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
-        let heartRateType = HKQuantityType(.heartRate)
-        
         do {
-            let avgDescriptor = HKStatisticsQueryDescriptor(
-                predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
-                options: .discreteAverage
-            )
+            let avgResult = try await TaskTimeout.withTimeout(seconds: 5) {
+                let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+                let heartRateType = HKQuantityType(.heartRate)
+                let avgDescriptor = HKStatisticsQueryDescriptor(
+                    predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
+                    options: .discreteAverage
+                )
+                return try await avgDescriptor.result(for: healthStore)
+            }
             
-            let maxDescriptor = HKStatisticsQueryDescriptor(
-                predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
-                options: .discreteMax
-            )
+            let maxResult = try await TaskTimeout.withTimeout(seconds: 5) {
+                let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+                let heartRateType = HKQuantityType(.heartRate)
+                let maxDescriptor = HKStatisticsQueryDescriptor(
+                    predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
+                    options: .discreteMax
+                )
+                return try await maxDescriptor.result(for: healthStore)
+            }
             
-            let avgResult = try await avgDescriptor.result(for: healthStore)
-            let maxResult = try await maxDescriptor.result(for: healthStore)
+            if avgResult == nil {
+                print("HealthKit average heart rate query timed out")
+            }
+            if maxResult == nil {
+                print("HealthKit max heart rate query timed out")
+            }
             
-            let averageQuantity = avgResult?.averageQuantity()
-            let maxQuantity = maxResult?.maximumQuantity()
+            let averageQuantity = avgResult??.averageQuantity()
+            let maxQuantity = maxResult??.maximumQuantity()
             
             if averageQuantity != nil || maxQuantity != nil {
                 let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
@@ -371,27 +382,41 @@ public enum HealthManager {
     // MARK: - Private Fetching
 
     private static func fetchSum(for quantityType: HKQuantityType, from startDate: Date, to endDate: Date) async throws -> HKQuantity? {
-        let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
-
-        let descriptor = HKStatisticsQueryDescriptor(
-            predicate: .quantitySample(type: quantityType, predicate: samplePredicate),
-            options: .cumulativeSum
-        )
-
-        return try await descriptor.result(for: healthStore)?.sumQuantity()
+        let result = try await TaskTimeout.withTimeout(seconds: 5) {
+            let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+            let descriptor = HKStatisticsQueryDescriptor(
+                predicate: .quantitySample(type: quantityType, predicate: samplePredicate),
+                options: .cumulativeSum
+            )
+            return try await descriptor.result(for: healthStore)
+        }
+        
+        guard let statistics = result else {
+            print("HealthKit query timed out for \(quantityType)")
+            return nil
+        }
+        
+        return statistics?.sumQuantity()
     }
     
     private static func fetchHeartRateSamples(from startDate: Date, to endDate: Date) async throws -> [HKQuantitySample] {
-        let heartRateType = HKQuantityType(.heartRate)
-        let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let result = try await TaskTimeout.withTimeout(seconds: 5) {
+            let heartRateType = HKQuantityType(.heartRate)
+            let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+            let descriptor = HKSampleQueryDescriptor(
+                predicates: [.quantitySample(type: heartRateType, predicate: samplePredicate)],
+                sortDescriptors: [SortDescriptor(\.startDate)],
+                limit: HKObjectQueryNoLimit
+            )
+            return try await descriptor.result(for: healthStore)
+        }
         
-        let descriptor = HKSampleQueryDescriptor(
-            predicates: [.quantitySample(type: heartRateType, predicate: samplePredicate)],
-            sortDescriptors: [SortDescriptor(\.startDate)],
-            limit: HKObjectQueryNoLimit
-        )
-
-        return try await descriptor.result(for: healthStore)
+        guard let samples = result else {
+            print("HealthKit heart rate query timed out")
+            return []
+        }
+        
+        return samples
     }
 
 }
