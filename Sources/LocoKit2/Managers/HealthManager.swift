@@ -124,102 +124,92 @@ public enum HealthManager {
         
         guard HKHealthStore.isHealthDataAvailable() else { return }
         
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                await updateStepCount(for: item, from: dateRange.start, to: dateRange.end)
+        // fetch all health data concurrently
+        async let steps = fetchStepCount(from: dateRange.start, to: dateRange.end)
+        async let flights = fetchFlightsClimbed(from: dateRange.start, to: dateRange.end)
+        async let energy = fetchActiveEnergy(from: dateRange.start, to: dateRange.end)
+        async let heartRateStats = fetchHeartRateStats(from: dateRange.start, to: dateRange.end)
+        
+        // wait for all results
+        let stepCount = await steps
+        let floorsAscended = await flights
+        let activeEnergyBurned = await energy
+        let (averageHeartRate, maxHeartRate) = await heartRateStats
+        
+        // check if we have any data to update
+        guard stepCount != nil || floorsAscended != nil || activeEnergyBurned != nil || 
+              averageHeartRate != nil || maxHeartRate != nil else {
+            return
+        }
+        
+        // single consolidated database write
+        do {
+            try await Database.pool.uncancellableWrite { db in
+                var mutableItem = item.base
+                try mutableItem.updateChanges(db) { item in
+                    if let stepCount { item.stepCount = stepCount }
+                    if let floorsAscended { item.floorsAscended = floorsAscended }
+                    if let activeEnergyBurned { item.activeEnergyBurned = activeEnergyBurned }
+                    if let averageHeartRate { item.averageHeartRate = averageHeartRate }
+                    if let maxHeartRate { item.maxHeartRate = maxHeartRate }
+                }
             }
-            
-            group.addTask {
-                await updateFlightsClimbed(for: item, from: dateRange.start, to: dateRange.end)
-            }
-            
-            group.addTask {
-                await updateActiveEnergy(for: item, from: dateRange.start, to: dateRange.end)
-            }
-            
-            group.addTask {
-                await updateHeartRateStats(for: item, from: dateRange.start, to: dateRange.end)
-            }
-
-            await group.waitForAll()
+        } catch {
+            logger.error(error, subsystem: .database)
         }
         
         lastHealthUpdateTimes[item.id] = .now
     }
 
-    private static func updateStepCount(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func fetchStepCount(from startDate: Date, to endDate: Date) async -> Int? {
         do {
             let stepType = HKQuantityType(.stepCount)
             let sumQuantity = try await fetchSum(for: stepType, from: startDate, to: endDate)
-
+            
             if let steps = sumQuantity?.doubleValue(for: .count()) {
-                do {
-                    try await Database.pool.uncancellableWrite { db in
-                        var mutableItem = item.base
-                        try mutableItem.updateChanges(db) {
-                            $0.stepCount = Int(steps)
-                        }
-                    }
-
-                } catch {
-                    logger.error(error, subsystem: .database)
-                }
+                return Int(steps)
             }
-
+            return nil
+            
         } catch {
             logger.error(error, subsystem: .healthkit)
+            return nil
         }
     }
     
-    private static func updateFlightsClimbed(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func fetchFlightsClimbed(from startDate: Date, to endDate: Date) async -> Int? {
         do {
             let flightsType = HKQuantityType(.flightsClimbed)
             let sumQuantity = try await fetchSum(for: flightsType, from: startDate, to: endDate)
-
+            
             if let flights = sumQuantity?.doubleValue(for: .count()) {
-                do {
-                    try await Database.pool.uncancellableWrite { db in
-                        var mutableItem = item.base
-                        try mutableItem.updateChanges(db) {
-                            $0.floorsAscended = Int(flights)
-                        }
-                    }
-                    
-                } catch {
-                    logger.error(error, subsystem: .database)
-                }
+                return Int(flights)
             }
+            return nil
             
         } catch {
             logger.error(error, subsystem: .healthkit)
+            return nil
         }
     }
     
-    private static func updateActiveEnergy(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func fetchActiveEnergy(from startDate: Date, to endDate: Date) async -> Double? {
         do {
             let energyType = HKQuantityType(.activeEnergyBurned)
             let sumQuantity = try await fetchSum(for: energyType, from: startDate, to: endDate)
-
+            
             if let energy = sumQuantity?.doubleValue(for: .kilocalorie()) {
-                do {
-                    try await Database.pool.uncancellableWrite { db in
-                        var mutableItem = item.base
-                        try mutableItem.updateChanges(db) {
-                            $0.activeEnergyBurned = energy
-                        }
-                    }
-                    
-                } catch {
-                    logger.error(error, subsystem: .database)
-                }
+                return energy
             }
+            return nil
             
         } catch {
             logger.error(error, subsystem: .healthkit)
+            return nil
         }
     }
     
-    private static func updateHeartRateStats(for item: TimelineItem, from startDate: Date, to endDate: Date) async {
+    private static func fetchHeartRateStats(from startDate: Date, to endDate: Date) async -> (average: Double?, max: Double?) {
         do {
             let avgResult = try await TaskTimeout.withTimeout(seconds: 10) {
                 let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
@@ -251,22 +241,15 @@ public enum HealthManager {
             let averageQuantity = avgResult??.averageQuantity()
             let maxQuantity = maxResult??.maximumQuantity()
             
-            if averageQuantity != nil || maxQuantity != nil {
-                let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
-                let average = averageQuantity?.doubleValue(for: heartRateUnit)
-                let max = maxQuantity?.doubleValue(for: heartRateUnit)
-                
-                try await Database.pool.uncancellableWrite { db in
-                    var mutableItem = item.base
-                    try mutableItem.updateChanges(db) {
-                        if let average { $0.averageHeartRate = average }
-                        if let max { $0.maxHeartRate = max }
-                    }
-                }
-            }
+            let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+            let average = averageQuantity?.doubleValue(for: heartRateUnit)
+            let max = maxQuantity?.doubleValue(for: heartRateUnit)
+            
+            return (average: average, max: max)
             
         } catch {
             logger.error(error, subsystem: .healthkit)
+            return (average: nil, max: nil)
         }
     }
 
