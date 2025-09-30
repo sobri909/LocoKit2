@@ -32,6 +32,7 @@ extension Place {
                     try mutableSelf.updateChanges(db) {
                         $0.visitCount = 0
                         $0.visitDays = 0
+                        $0.lastVisitDate = nil
                         $0.isStale = false
                         $0.arrivalTimes = nil
                         $0.leavingTimes = nil
@@ -74,6 +75,7 @@ extension Place {
 
             // use all visits for counts, samples, and arrival times
             let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
+            let lastVisitDate = visitStarts.max()
 
             // filter out currentItem for leaving times and durations
             let statsVisits = confirmedVisits.filter { $0.id != currentItemId }
@@ -93,11 +95,12 @@ extension Place {
                 locationData = nil
             }
 
-            try await Database.pool.uncancellableWrite { [self, occupancyTimes, locationData] db in
+            try await Database.pool.uncancellableWrite { [self, occupancyTimes, locationData, lastVisitDate] db in
                 var mutableSelf = self
                 try mutableSelf.updateChanges(db) {
                     $0.visitCount = visits.count
                     $0.visitDays = uniqueDays.count
+                    $0.lastVisitDate = lastVisitDate
                     $0.isStale = false
                     $0.arrivalTimes = Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current)
                     $0.leavingTimes = Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current)

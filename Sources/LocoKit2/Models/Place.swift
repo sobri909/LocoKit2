@@ -46,6 +46,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
     public var visitCount: Int = 0
     public var visitDays: Int = 0
+    public var lastVisitDate: Date?
     public var arrivalTimes: Histogram?
     public var leavingTimes: Histogram?
     public var visitDurations: Histogram?
@@ -222,6 +223,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
 
         case visitCount
         case visitDays
+        case lastVisitDate
     }
 
     // MARK: - Custom Decoder
@@ -258,7 +260,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         // stats
         visitCount = try container.decodeIfPresent(Int.self, forKey: .visitCount) ?? 0
         visitDays = try container.decodeIfPresent(Int.self, forKey: .visitDays) ?? 0
-        
+        lastVisitDate = try container.decodeIfPresent(Date.self, forKey: .lastVisitDate)
+
         // histograms default to nil (not included in JSON export/import)
         arrivalTimes = nil
         leavingTimes = nil
@@ -297,6 +300,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         // stats
         visitCount = row["visitCount"]
         visitDays = row["visitDays"]
+        lastVisitDate = row["lastVisitDate"]
 
         // Histograms with MessagePack
         let decoder = JSONDecoder()
@@ -346,6 +350,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         // stats
         container["visitCount"] = visitCount
         container["visitDays"] = visitDays
+        container["lastVisitDate"] = lastVisitDate
 
         // Histograms
         let encoder = JSONEncoder()

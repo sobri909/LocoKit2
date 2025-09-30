@@ -43,6 +43,7 @@ extension Database {
 
                 table.column("visitCount", .integer).notNull().indexed()
                 table.column("visitDays", .integer).notNull()
+                table.column("lastVisitDate", .datetime)
 
                 table.column("arrivalTimes", .blob)
                 table.column("leavingTimes", .blob)

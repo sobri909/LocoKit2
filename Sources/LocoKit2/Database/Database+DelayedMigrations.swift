@@ -45,5 +45,11 @@ extension Database {
                 columns: ["rtreeId"]
             )
         }
+
+        migrator.registerMigration("Place.lastVisitDate") { db in
+            try? db.alter(table: "Place") { table in
+                table.add(column: "lastVisitDate", .datetime)
+            }
+        }
     }
 }
