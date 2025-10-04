@@ -383,6 +383,21 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
     public func predictedLeavingTimes() -> [LeavingTime]? {
         guard let place, let duration = dateRange?.duration else { return nil }
 
+        // detect 24-hour-ish places (≥75% day coverage)
+        let is24HourPlace: Bool = {
+            guard let occupancyTimes = place.occupancyTimes,
+                  let allDaysHistogram = occupancyTimes.first,
+                  let firstBin = allDaysHistogram.bins.first,
+                  let lastBin = allDaysHistogram.bins.last else {
+                return false
+            }
+            let coveredRange = lastBin.end - firstBin.start
+            return coveredRange >= (.days(1) * 0.75)
+        }()
+
+        let leavingTimesRange = place.leavingTimes?.valueRange
+        let maxSearchDuration: TimeInterval = .days(1)
+
         let startDate: Date = .now
         let timeStep: TimeInterval = 60
         var timeForward: TimeInterval = 0
@@ -391,14 +406,32 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         var previousProb: Double = 0
         var isIncreasing = true
 
-        while true {
+        while timeForward < maxSearchDuration {
             let testDate = startDate + timeForward
             let testDuration = duration + timeForward
 
             // get probability for this timepoint
-            guard let currentProb = place.leavingProbabilityFor(duration: testDuration, date: testDate) else {
-                break // hit end of histogram data
+            let currentProb = place.leavingProbabilityFor(duration: testDuration, date: testDate)
+
+            if currentProb == nil {
+                // for 24-hour places, check if we can jump the overnight gap
+                if is24HourPlace, let range = leavingTimesRange {
+                    var calendar = Calendar.current
+                    calendar.timeZone = place.localTimeZone ?? .current
+                    let currentTimeOfDay = testDate.sinceStartOfDay(in: calendar)
+
+                    // if we're past the end of the range, jump to the start (next day)
+                    if currentTimeOfDay > range.upperBound {
+                        let gapSize = .days(1) - currentTimeOfDay + range.lowerBound
+                        timeForward += gapSize
+                        previousProb = 0
+                        continue
+                    }
+                }
+                break
             }
+
+            guard let currentProb else { break }
 
 
             if isIncreasing {
@@ -424,7 +457,10 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
             times.append(LeavingTime(date: peak.time, probability: peak.prob))
         }
 
-        return times.isEmpty ? nil : times
+        // filter out very low probability predictions (< 0.5%)
+        let filteredTimes = times.filter { $0.probability >= 0.005 }
+
+        return filteredTimes.isEmpty ? nil : filteredTimes
     }
     
     // MARK: - Change detection
