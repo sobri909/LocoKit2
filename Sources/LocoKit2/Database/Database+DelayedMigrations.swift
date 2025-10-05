@@ -51,5 +51,13 @@ extension Database {
                 table.add(column: "lastVisitDate", .datetime)
             }
         }
+
+        migrator.registerMigration("TimelineItemBase_visits_index") { db in
+            try? db.create(
+                index: "TimelineItemBase_on_isVisit_deleted_disabled_startDate",
+                on: "TimelineItemBase",
+                columns: ["isVisit", "deleted", "disabled", "startDate"]
+            )
+        }
     }
 }
