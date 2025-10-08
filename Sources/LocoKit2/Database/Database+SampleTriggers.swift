@@ -96,5 +96,52 @@ extension Database {
                  END;
                 """)
         }
+
+        migrator.registerMigration("disabled_state_constraint") { db in
+            // prevent inserting sample with mismatched disabled state
+            try? db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_BEFORE_INSERT_disabled_check
+                BEFORE INSERT ON LocomotionSample
+                WHEN NEW.timelineItemId IS NOT NULL
+                BEGIN
+                    SELECT RAISE(ABORT, 'Sample disabled state must match parent item disabled state')
+                    WHERE EXISTS (
+                        SELECT 1 FROM TimelineItemBase
+                        WHERE id = NEW.timelineItemId
+                        AND disabled != NEW.disabled
+                    );
+                END;
+                """)
+
+            // prevent updating sample to create mismatched disabled state
+            try? db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_BEFORE_UPDATE_disabled_check
+                BEFORE UPDATE OF disabled, timelineItemId ON LocomotionSample
+                WHEN NEW.timelineItemId IS NOT NULL
+                BEGIN
+                    SELECT RAISE(ABORT, 'Sample disabled state must match parent item disabled state')
+                    WHERE EXISTS (
+                        SELECT 1 FROM TimelineItemBase
+                        WHERE id = NEW.timelineItemId
+                        AND disabled != NEW.disabled
+                    );
+                END;
+                """)
+
+            // prevent updating item disabled state if samples have different disabled state
+            try? db.execute(sql: """
+                CREATE TRIGGER TimelineItemBase_BEFORE_UPDATE_disabled_check
+                BEFORE UPDATE OF disabled ON TimelineItemBase
+                WHEN NEW.disabled != OLD.disabled
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot change item disabled state when samples have different disabled state')
+                    WHERE EXISTS (
+                        SELECT 1 FROM LocomotionSample
+                        WHERE timelineItemId = NEW.id
+                        AND disabled != NEW.disabled
+                    );
+                END;
+                """)
+        }
     }
 }
