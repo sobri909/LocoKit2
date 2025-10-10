@@ -59,5 +59,11 @@ extension Database {
                 columns: ["isVisit", "deleted", "disabled", "startDate"]
             )
         }
+
+        migrator.registerMigration("LocomotionSample.heartRate") { db in
+            try? db.alter(table: "LocomotionSample") { table in
+                table.add(column: "heartRate", .double)
+            }
+        }
     }
 }
