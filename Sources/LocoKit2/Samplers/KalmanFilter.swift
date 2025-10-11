@@ -9,7 +9,7 @@ import Foundation
 import CoreLocation
 import Surge
 
-internal actor KalmanFilter {
+public actor KalmanFilter {
     
     private var lastTimestamp: Date?
 
@@ -59,9 +59,11 @@ internal actor KalmanFilter {
 
     private let altitudeKalman = AltitudeKalmanFilter(qMetresPerSecond: 3)
 
+    public init() {}
+
     // MARK: -
 
-    func add(location: CLLocation) {
+    public func add(location: CLLocation) {
         guard location.coordinate.isUsable else { return }
 
         let invalidVelocity = location.invalidVelocity
@@ -93,7 +95,7 @@ internal actor KalmanFilter {
         altitudeKalman.add(location: location)
     }
 
-    func currentEstimatedLocation() -> CLLocation {
+    public func currentEstimatedLocation() -> CLLocation {
         return CLLocation(
             coordinate: currentEstimatedCoordinate(),
             altitude: altitudeKalman.altitude ?? -1,
