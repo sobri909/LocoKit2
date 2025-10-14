@@ -10,20 +10,6 @@ import GRDB
 
 extension Database {
     public func addDelayedMigrations(to migrator: inout DatabaseMigrator) {
-        migrator.registerMigration("source_indexes") { db in
-            try? db.create(
-                index: "TimelineItemBase_on_source",
-                on: "TimelineItemBase",
-                columns: ["source"]
-            )
-            
-            try? db.create(
-                index: "LocomotionSample_on_source",
-                on: "LocomotionSample",
-                columns: ["source"]
-            )
-        }
-        
         migrator.registerMigration("Place.source") { db in
             try? db.alter(table: "Place") { table in
                 table.add(column: "source", .text).notNull().defaults(to: "LocoKit2").indexed()
