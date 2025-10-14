@@ -14,6 +14,8 @@ public enum ImportManager {
     private(set) static var importInProgress = false
     private static var importURL: URL?
     private static var bookmarkData: Data?
+    private static var wasObserving: Bool = true
+    private static var wasRecording: Bool = false
     
     // MARK: - Import process
     
@@ -25,6 +27,12 @@ public enum ImportManager {
         let startTime = Date()
         importInProgress = true
         bookmarkData = bookmark
+
+        // save initial states and disable observation/recording during import
+        wasObserving = TimelineObserver.highlander.enabled
+        wasRecording = await TimelineRecorder.isRecording
+        TimelineObserver.highlander.enabled = false
+        await TimelineRecorder.stopRecording()
         
         var isStale = false
         guard let url = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &isStale) else {
@@ -372,6 +380,13 @@ public enum ImportManager {
         if let importURL {
             importURL.stopAccessingSecurityScopedResource()
         }
+
+        // restore observation/recording to initial states
+        TimelineObserver.highlander.enabled = wasObserving
+        if wasRecording {
+            Task { await TimelineRecorder.startRecording() }
+        }
+
         importInProgress = false
         importURL = nil
         bookmarkData = nil
@@ -385,6 +400,13 @@ public enum ImportManager {
             let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
             try? FileManager.default.removeItem(at: edgesURL)
         }
+
+        // restore observation/recording to initial states
+        TimelineObserver.highlander.enabled = wasObserving
+        if wasRecording {
+            Task { await TimelineRecorder.startRecording() }
+        }
+
         importInProgress = false
         importURL = nil
         bookmarkData = nil
