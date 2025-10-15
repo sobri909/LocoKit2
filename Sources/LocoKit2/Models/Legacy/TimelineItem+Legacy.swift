@@ -19,6 +19,7 @@ extension TimelineItem {
         mutableBase.id = legacyItem.itemId
         mutableBase.source = legacyItem.source
         mutableBase.deleted = legacyItem.deleted
+        mutableBase.disabled = legacyItem.disabled
         mutableBase.previousItemId = legacyItem.previousItemId
         mutableBase.nextItemId = legacyItem.nextItemId
         

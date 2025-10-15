@@ -21,6 +21,8 @@ public enum OldLocoKitImporter {
     
     private static var arcAppDatabase: DatabasePool?
     private static var importDateRange: DateInterval?
+    private static var wasObserving: Bool = true
+    private static var wasRecording: Bool = false
     
     // MARK: - Public interface
     
@@ -34,6 +36,12 @@ public enum OldLocoKitImporter {
         currentPhase = .connecting
         progress = 0
         importDateRange = dateRange
+
+        // save initial states and disable observation/recording during import
+        wasObserving = TimelineObserver.highlander.enabled
+        wasRecording = await TimelineRecorder.isRecording
+        TimelineObserver.highlander.enabled = false
+        await TimelineRecorder.stopRecording()
         
         // Track counts for summary
         var placesCount = 0
@@ -58,12 +66,12 @@ public enum OldLocoKitImporter {
             
             // Import Timeline Items (from LocoKit.sqlite)
             currentPhase = .importingTimelineItems
-            let (importedCount, importedItemIds) = try await importTimelineItems()
+            let (importedCount, importedItemIds, itemDisabledStates) = try await importTimelineItems()
             itemsCount = importedCount
             
             // Import Samples (from LocoKit.sqlite)
             currentPhase = .importingSamples
-            let (samples, orphans) = try await importSamples(importedItemIds: importedItemIds)
+            let (samples, orphans) = try await importSamples(importedItemIds: importedItemIds, itemDisabledStates: itemDisabledStates)
             samplesCount = samples
             orphansProcessed = orphans
             
@@ -166,8 +174,8 @@ public enum OldLocoKitImporter {
     }
     
     // MARK: - Timeline Items Importing
-    
-    private static func importTimelineItems() async throws -> (count: Int, itemIds: Set<String>) {
+
+    private static func importTimelineItems() async throws -> (count: Int, itemIds: Set<String>, disabledStates: [String: Bool]) {
         logger.info("Starting Timeline Items import", subsystem: .importing)
         progress = 0
         
@@ -209,9 +217,14 @@ public enum OldLocoKitImporter {
         // Import items in batches
         let batchSize = 200 // Smaller than places since items are more complex
         let batches = legacyItems.chunked(into: batchSize)
-        
+
+        // Build disabled states mapping as we import
+        var itemDisabledStates: [String: Bool] = [:]
+
         for (batchIndex, batch) in batches.enumerated() {
-            try await Database.pool.write { db in
+            let batchDisabledStates = try await Database.pool.write { db -> [String: Bool] in
+                var localStates: [String: Bool] = [:]
+
                 for legacyItem in batch {
                     // Store edge relationships for later restoration
                     var previousId = legacyItem.previousItemId
@@ -240,6 +253,9 @@ public enum OldLocoKitImporter {
                     // Create and save TimelineItem from legacy item
                     let item = try TimelineItem(from: sanitisedLegacyItem)
                     try item.base.insert(db, onConflict: .ignore)
+
+                    // Track disabled state for sample import
+                    localStates[item.id] = item.base.disabled
                     
                     // Save visit or trip component
                     if let visit = item.visit {
@@ -262,7 +278,12 @@ public enum OldLocoKitImporter {
                     }
                     try item.trip?.insert(db, onConflict: .ignore)
                 }
+
+                return localStates
             }
+
+            // Merge batch disabled states into main collection
+            itemDisabledStates.merge(batchDisabledStates) { (_, new) in new }
             
             // Update progress
             let completedPercentage = Double(batchIndex + 1) / Double(batches.count)
@@ -286,13 +307,13 @@ public enum OldLocoKitImporter {
         
         progress = 1.0
         logger.info("Timeline Items import completed", subsystem: .importing)
-        
-        return (totalCount, importedItemIds)
+
+        return (totalCount, importedItemIds, itemDisabledStates)
     }
     
     // MARK: - Sample Importing
-    
-    private static func importSamples(importedItemIds: Set<String>) async throws -> (samples: Int, orphansProcessed: Int) {
+
+    private static func importSamples(importedItemIds: Set<String>, itemDisabledStates: [String: Bool]) async throws -> (samples: Int, orphansProcessed: Int) {
         logger.info("Starting Samples import", subsystem: .importing)
         progress = 0
         
@@ -302,6 +323,9 @@ public enum OldLocoKitImporter {
         
         // Track orphaned samples by their original parent timeline item ID
         var orphanedSamples: [String: [LocomotionSample]] = [:]
+
+        // Track disabled samples from enabled parents (scenario 2) for preserved parent creation
+        var disabledSamplesFromEnabledParents: [String: [LocomotionSample]] = [:]
         
         // Check if table exists and get sample count
         let (minRowId, maxRowId, totalCount) = try await legacyPool.read { [importDateRange] db in
@@ -356,7 +380,13 @@ public enum OldLocoKitImporter {
             }
             
             if !batch.isEmpty {
-                try await processLegacySampleBatch(batch, importedItemIds: importedItemIds, orphanedSamples: &orphanedSamples)
+                try await processLegacySampleBatch(
+                    batch,
+                    importedItemIds: importedItemIds,
+                    itemDisabledStates: itemDisabledStates,
+                    orphanedSamples: &orphanedSamples,
+                    disabledSamplesFromEnabledParents: &disabledSamplesFromEnabledParents
+                )
                 processedCount += batch.count
                 
                 // Progress logging every 100 batches (100k samples)
@@ -372,6 +402,11 @@ public enum OldLocoKitImporter {
             currentRowId = batchEndRowId + 1
         }
         
+        // Create preserved parent items for scenario 2 mismatches
+        if !disabledSamplesFromEnabledParents.isEmpty {
+            try await createPreservedParentItems(for: disabledSamplesFromEnabledParents)
+        }
+
         // Process orphaned samples
         var orphansProcessed = 0
         if !orphanedSamples.isEmpty {
@@ -406,7 +441,9 @@ public enum OldLocoKitImporter {
     private static func processLegacySampleBatch(
         _ batch: [LegacySample],
         importedItemIds: Set<String>,
-        orphanedSamples: inout [String: [LocomotionSample]]
+        itemDisabledStates: [String: Bool],
+        orphanedSamples: inout [String: [LocomotionSample]],
+        disabledSamplesFromEnabledParents: inout [String: [LocomotionSample]]
     ) async throws {
         // Skip empty batches
         if batch.isEmpty { return }
@@ -418,17 +455,36 @@ public enum OldLocoKitImporter {
             return
         }
         
-        // Process the batch and collect orphans
-        let (batchOrphans, orphanCount) = try await Database.pool.write { db in
+        // Process the batch and collect orphans / mismatches
+        let (batchOrphans, batchScenario2, orphanCount, scenario1Count, scenario2Count) = try await Database.pool.write { db in
             var localOrphans: [String: [LocomotionSample]] = [:]
+            var localScenario2: [String: [LocomotionSample]] = [:]
             var localOrphanCount = 0
-            
+            var localScenario1Count = 0
+            var localScenario2Count = 0
+
             for legacySample in batch {
                 // Create new LocomotionSample from legacy data
                 var sample = LocomotionSample(from: legacySample)
-                
+
+                // Check for disabled state mismatches
+                if let itemId = sample.timelineItemId, let itemDisabled = itemDisabledStates[itemId] {
+                    if itemDisabled && !sample.disabled {
+                        // scenario 1: item disabled, sample enabled → force sample to disabled
+                        sample.disabled = true
+                        localScenario1Count += 1
+
+                    } else if !itemDisabled && sample.disabled {
+                        // scenario 2: item enabled, sample disabled → collect for preserved parent creation
+                        localScenario2[itemId, default: []].append(sample)
+                        localScenario2Count += 1
+                        // orphan from current parent (will be reassigned to preserved parent later)
+                        sample.timelineItemId = nil
+                    }
+                }
+
                 // Check for references to missing TimelineItems
-                if let originalItemId = sample.timelineItemId, !importedItemIds.contains(originalItemId) {
+                if let originalItemId = legacySample.timelineItemId, !importedItemIds.contains(originalItemId) {
                     // Only treat as orphan if not disabled
                     if !legacySample.disabled {
                         localOrphans[originalItemId, default: []].append(sample)
@@ -440,23 +496,128 @@ public enum OldLocoKitImporter {
                 // Insert the new sample with conflict handling for race conditions
                 try sample.insert(db, onConflict: .ignore)
             }
-            
-            return (localOrphans, localOrphanCount)
+
+            return (localOrphans, localScenario2, localOrphanCount, localScenario1Count, localScenario2Count)
         }
         
         // Log orphans if found
         if orphanCount > 0 {
             print("Found \(orphanCount) orphaned samples in current batch")
         }
-        
+
+        // Log disabled state mismatches
+        if scenario1Count > 0 {
+            logger.info("Normalized \(scenario1Count) samples (scenario 1: item.disabled=true, sample.disabled=false)", subsystem: .importing)
+        }
+        if scenario2Count > 0 {
+            logger.info("Collected \(scenario2Count) samples for preserved parent creation (scenario 2: item.disabled=false, sample.disabled=true)", subsystem: .importing)
+        }
+
         if !batchOrphans.isEmpty {
             for (itemId, samples) in batchOrphans {
                 orphanedSamples[itemId, default: []].append(contentsOf: samples)
             }
         }
+
+        if !batchScenario2.isEmpty {
+            for (itemId, samples) in batchScenario2 {
+                disabledSamplesFromEnabledParents[itemId, default: []].append(contentsOf: samples)
+            }
+        }
+    }
+
+    // Create preserved parent items for disabled samples from enabled parents
+    private static func createPreservedParentItems(
+        for disabledSamplesFromEnabledParents: [String: [LocomotionSample]]
+    ) async throws {
+        let totalScenario2Samples = disabledSamplesFromEnabledParents.values.reduce(0) { $0 + $1.count }
+        logger.info("Creating preserved parent items for \(disabledSamplesFromEnabledParents.count) items with \(totalScenario2Samples) disabled samples", subsystem: .importing)
+
+        let (visitCount, tripCount) = try await Database.pool.write { db -> (Int, Int) in
+            var visits = 0
+            var trips = 0
+
+            for (originalItemId, disabledSamples) in disabledSamplesFromEnabledParents {
+                // fetch original item to determine type and copy metadata
+                guard let originalItem = try TimelineItem.itemRequest(includeSamples: false).filter(Column("id") == originalItemId).fetchOne(db) else {
+                    logger.info("Could not find original item \(originalItemId) for preserved parent creation", subsystem: .importing)
+                    continue
+                }
+
+                // create preserved parent matching original type
+                var preservedBase = TimelineItemBase(isVisit: originalItem.base.isVisit)
+                preservedBase.source = originalItem.base.source
+                preservedBase.disabled = true
+
+                try preservedBase.insert(db)
+
+                // create visit or trip component with metadata
+                if originalItem.base.isVisit, let originalVisit = originalItem.visit {
+                    visits += 1
+
+                    var preservedVisit = TimelineItemVisit(
+                        itemId: preservedBase.id,
+                        latitude: originalVisit.latitude,
+                        longitude: originalVisit.longitude,
+                        radiusMean: originalVisit.radiusMean,
+                        radiusSD: originalVisit.radiusSD
+                    )
+                    preservedVisit.copyMetadata(from: originalVisit)
+                    try preservedVisit.insert(db)
+
+                } else if !originalItem.base.isVisit, let originalTrip = originalItem.trip {
+                    trips += 1
+
+                    var preservedTrip = TimelineItemTrip(itemId: preservedBase.id, samples: [])
+                    preservedTrip.classifiedActivityType = originalTrip.classifiedActivityType
+                    preservedTrip.confirmedActivityType = originalTrip.confirmedActivityType
+                    preservedTrip.uncertainActivityType = originalTrip.uncertainActivityType
+                    try preservedTrip.insert(db)
+                }
+
+                // reassign disabled samples to preserved parent
+                for var sample in disabledSamples {
+                    try sample.updateChanges(db) {
+                        $0.timelineItemId = preservedBase.id
+                    }
+                }
+            }
+
+            return (visits, trips)
+        }
+
+        // log summary stats
+        print("OldLocoKitImporter preserved parent summary:")
+        print("- Total items: \(disabledSamplesFromEnabledParents.count)")
+        print("- Visits: \(visitCount), Trips: \(tripCount)")
+        print("- Total samples: \(totalScenario2Samples)")
+
+        let sampleCounts = disabledSamplesFromEnabledParents.mapValues { $0.count }
+        if !sampleCounts.isEmpty {
+            let counts = sampleCounts.values
+            let minSamples = counts.min() ?? 0
+            let maxSamples = counts.max() ?? 0
+            let avgSamples = counts.reduce(0, +) / counts.count
+            print("- Sample counts: min=\(minSamples), max=\(maxSamples), avg=\(avgSamples)")
+
+            // top 10 by sample count
+            let sorted = sampleCounts.sorted { $0.value > $1.value }
+            print("- Top 10 items by sample count:")
+            for (itemId, count) in sorted.prefix(10) {
+                print("  - Item \(itemId): \(count) samples")
+            }
+        }
+
+        logger.info("Created \(disabledSamplesFromEnabledParents.count) preserved parent items (\(visitCount) visits, \(tripCount) trips)", subsystem: .importing)
     }
 
     private static func cleanupAndReset() {
+        // restore observation/recording to initial states
+        TimelineObserver.highlander.enabled = wasObserving
+        if wasRecording {
+            Task { await TimelineRecorder.startRecording() }
+        }
+
         arcAppDatabase = nil
         importInProgress = false
         currentPhase = nil

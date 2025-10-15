@@ -18,6 +18,7 @@ public struct LegacyItem: FetchableRecord, TableRecord, Codable, Hashable, Senda
     public let endDate: Date?
     public var source: String = "LocoKit"
     public var deleted = false
+    public var disabled = false
     
     // Visit specific fields
     public var placeId: String?
