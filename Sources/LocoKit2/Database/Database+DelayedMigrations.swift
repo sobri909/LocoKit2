@@ -98,5 +98,11 @@ extension Database {
                 END;
                 """)
         }
+
+        migrator.registerMigration("TimelineItemBase.locked") { db in
+            try? db.alter(table: "TimelineItemBase") { table in
+                table.add(column: "locked", .boolean).notNull().defaults(to: false)
+            }
+        }
     }
 }

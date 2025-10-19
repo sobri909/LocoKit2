@@ -54,8 +54,8 @@ extension TimelineProcessor {
                 .fetchOne(db)
         }
 
-        // if fully contained, transfer samples and delete
-        if let container, let samples = item.samples {
+        // if fully contained, transfer samples and delete (but not if locked)
+        if let container, let samples = item.samples, !item.base.locked {
             try await Database.pool.write { db in
                 for var sample in samples {
                     try sample.updateChanges(db) {

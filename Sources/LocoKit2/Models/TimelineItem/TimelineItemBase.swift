@@ -20,6 +20,7 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
     public var sourceVersion: String = LocomotionManager.locoKitVersion
     public var disabled = false
     public var deleted = false
+    public var locked = false
 
     public var samplesChanged = false
 

@@ -31,6 +31,9 @@ public final class MergeScores {
         // disabled can't consume or be consumed
         if consumer.disabled || consumee.disabled { return .impossible }
 
+        // locked can't consume or be consumed
+        if consumer.locked || consumee.locked { return .impossible }
+
         // can't consume a different source
         if consumer.source != consumee.source { return .impossible }
 

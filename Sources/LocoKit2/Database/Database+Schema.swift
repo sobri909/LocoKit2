@@ -69,6 +69,7 @@ extension Database {
                 table.column("sourceVersion", .text).notNull()
                 table.column("disabled", .boolean).notNull()
                 table.column("deleted", .boolean).notNull()
+                table.column("locked", .boolean).notNull()
                 table.column("samplesChanged", .boolean).notNull()
 
                 table.column("previousItemId", .text).indexed()

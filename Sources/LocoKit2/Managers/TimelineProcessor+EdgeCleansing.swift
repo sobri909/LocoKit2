@@ -71,6 +71,7 @@ extension TimelineProcessor {
         guard otherItem.isTrip else { return nil }
 
         guard !item.deleted && !otherItem.deleted else { return nil }
+        guard !item.locked && !otherItem.locked else { return nil }
         guard item.source == otherItem.source else { return nil } // no edge stealing between different data sources
         guard try item.isWithinMergeableDistance(of: otherItem) else { return nil }
         guard item.timeInterval(from: otherItem) < .minutes(10) else { return nil } // 10 mins seems like a lot?

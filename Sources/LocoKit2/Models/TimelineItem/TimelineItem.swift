@@ -37,6 +37,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
     public var source: String { base.source }
     public var disabled: Bool { base.disabled }
     public var deleted: Bool { base.deleted }
+    public var locked: Bool { base.locked }
     public var samplesChanged: Bool { base.samplesChanged }
     
     public var debugShortId: String { String(id.split(separator: "-")[0]) }
