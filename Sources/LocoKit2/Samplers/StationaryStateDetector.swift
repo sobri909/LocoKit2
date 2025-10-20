@@ -8,21 +8,23 @@
 import Foundation
 import CoreLocation
 
-actor StationaryStateDetector {
+public actor StationaryStateDetector {
 
-    private let targetTimeWindow: TimeInterval = 10.0 
+    private let targetTimeWindow: TimeInterval = 10.0
     private let accuracyThreshold: CLLocationAccuracy = 50.0
     private let meanSpeedThreshold: CLLocationSpeed = 0.5
     private let sdSpeedThreshold: CLLocationSpeed = 0.3
 
     private var sample: [CLLocation] = []
 
-    func add(location: CLLocation) {
+    public init() {}
+
+    public func add(location: CLLocation) {
         sample.append(location)
         sample.sort { $0.timestamp < $1.timestamp }
     }
 
-    func currentState() -> MovingStateDetails {
+    public func currentState() -> MovingStateDetails {
         guard let newest = sample.last else {
             return MovingStateDetails(.uncertain, n: 0, timestamp: .now)
         }

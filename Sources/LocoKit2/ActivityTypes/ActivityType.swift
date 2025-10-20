@@ -148,7 +148,7 @@ public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
     ]
 
     public static let workoutTypes: [ActivityType] = [
-        .walking, .running, .cycling, .skateboarding, .inlineSkating, .skiing, .snowboarding, .horseback, .hiking, .surfing, .swimming, .rowing
+        .walking, .running, .cycling, .skateboarding, .inlineSkating, .skiing, .snowboarding, .horseback, .hiking, .surfing, .swimming, .rowing, .kayaking, .golf, .wheelchair
     ]
 
 }

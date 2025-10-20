@@ -214,8 +214,14 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     // MARK: - Item creation
 
-    public static func createItem(from samples: [LocomotionSample], isVisit: Bool, db: GRDB.Database) throws -> TimelineItem {
-        let base = TimelineItemBase(isVisit: isVisit)
+    public static func createItem(from samples: [LocomotionSample], isVisit: Bool, disabled: Bool = false, source: String? = nil, locked: Bool = false, db: GRDB.Database) throws -> TimelineItem {
+        var base = TimelineItemBase(isVisit: isVisit)
+        base.disabled = disabled
+        base.locked = locked
+        if let source {
+            base.source = source
+        }
+
         let visit: TimelineItemVisit?
         let trip: TimelineItemTrip?
 
@@ -233,6 +239,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         for var sample in samples {
             try sample.updateChanges(db) {
                 $0.timelineItemId = base.id
+                $0.disabled = disabled
             }
         }
 

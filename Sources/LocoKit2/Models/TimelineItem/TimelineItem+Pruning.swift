@@ -30,11 +30,11 @@ extension TimelineItem {
 
         let (maxInterval, epsilon): (TimeInterval, CLLocationDistance)
         if ActivityType.workoutTypes.contains(activityType) {
-            (maxInterval, epsilon) = (2.0, 3.0) // workout types
+            (maxInterval, epsilon) = (2.0, 2.0) // workout types
         } else if activityType == .airplane {
             (maxInterval, epsilon) = (15.0, 100.0) // airplane
         } else {
-            (maxInterval, epsilon) = (6.0, 4.0) // default case (vehicles)
+            (maxInterval, epsilon) = (6.0, 3.0) // default case (vehicles)
         }
 
         let sortedSamples = samples.sorted { $0.date < $1.date }
