@@ -167,7 +167,7 @@ extension TimelineProcessor {
             return
         }
 
-        try await Database.pool.write { db in
+        let reenabledItemIds = try await Database.pool.write { db -> [String] in
             // disable item (trigger auto-syncs samples)
             var mutableItem = item
             try mutableItem.base.updateChanges(db) {
@@ -185,6 +185,7 @@ extension TimelineProcessor {
                 .fetchAll(db)
 
             // re-enable those items (trigger auto-syncs samples)
+            var itemIds: [String] = []
             for overlappingItem in overlappingDisabledItems {
                 var mutableOverlapping = overlappingItem
                 try mutableOverlapping.base.updateChanges(db) {
@@ -192,7 +193,15 @@ extension TimelineProcessor {
                 }
 
                 logger.info("disableItem(): Re-enabled \(overlappingItem.debugShortId)", subsystem: .timeline)
+                itemIds.append(overlappingItem.id)
             }
+
+            return itemIds
+        }
+
+        // trigger edge healing and merge processing for re-enabled items
+        if !reenabledItemIds.isEmpty {
+            await process(itemIds: reenabledItemIds)
         }
     }
 
