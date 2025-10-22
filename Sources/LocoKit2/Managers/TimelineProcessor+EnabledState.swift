@@ -205,10 +205,6 @@ extension TimelineProcessor {
         withSamples samples: [LocomotionSample],
         db: GRDB.Database
     ) throws -> String {
-        print("🔍 createSplitItem: attempting to create split with \(samples.count) samples")
-        print("   Sample date range: \(samples.first?.date ?? Date()) to \(samples.last?.date ?? Date())")
-        print("   Samples disabled states (in-memory): \(samples.map(\.disabled))")
-
         // create new base with same type and source as original
         var base = TimelineItemBase(isVisit: originalItem.isVisit)
         base.source = originalItem.source
@@ -244,8 +240,6 @@ extension TimelineProcessor {
         try visit?.insert(db)
         try trip?.insert(db)
 
-        print("   Created new item: \(String(base.id.split(separator: "-")[0]))")
-
         // reassign samples to new item and enable them
         // use batch update to avoid updateChanges() comparing in-memory state
         let sampleIds = samples.map(\.id)
@@ -255,12 +249,6 @@ extension TimelineProcessor {
                 Column("timelineItemId").set(to: base.id),
                 Column("disabled").set(to: false)
             ])
-
-        print("   Reassigned \(sampleIds.count) samples to new item")
-
-        // verify final state
-        let finalCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM LocomotionSample WHERE timelineItemId = ? AND disabled = 0", arguments: [base.id]) ?? 0
-        print("   Final enabled sample count in DB: \(finalCount)")
 
         return base.id
     }
