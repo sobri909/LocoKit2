@@ -75,6 +75,29 @@ extension Database {
                     WHERE timelineItemId = NEW.id;
                 END;
                 """)
+
+            // create sample-side constraints: prevent assigning samples with wrong disabled state
+            try? db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_BEFORE_INSERT_disabled_check
+                BEFORE INSERT ON LocomotionSample
+                BEGIN
+                    SELECT RAISE(ABORT, 'Sample disabled state must match parent item disabled state')
+                    FROM TimelineItemBase
+                    WHERE id = NEW.timelineItemId
+                    AND disabled != NEW.disabled;
+                END;
+                """)
+
+            try? db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_BEFORE_UPDATE_disabled_check
+                BEFORE UPDATE OF disabled, timelineItemId ON LocomotionSample
+                BEGIN
+                    SELECT RAISE(ABORT, 'Sample disabled state must match parent item disabled state')
+                    FROM TimelineItemBase
+                    WHERE id = NEW.timelineItemId
+                    AND disabled != NEW.disabled;
+                END;
+                """)
         }
     }
 }
