@@ -357,7 +357,9 @@ public enum HealthManager {
         guard healthKitEnabled else { return [] }
         guard let dateRange = item.dateRange else { return [] }
         guard HKHealthStore.isHealthDataAvailable() else { return [] }
-        if await UIApplication.shared.applicationState == .background { return [] }
+        guard await UIApplication.shared.applicationState != .background else {
+            throw TimelineError.backgroundRestriction
+        }
 
         return try await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
     }
