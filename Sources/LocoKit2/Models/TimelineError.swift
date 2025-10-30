@@ -12,4 +12,5 @@ public enum TimelineError: Error {
     case itemNotFound
     case invalidItem(String)
     case invalidSegment(String)
+    case backgroundRestriction
 }
