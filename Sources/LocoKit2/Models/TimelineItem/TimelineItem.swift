@@ -323,7 +323,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
     }
 
-    private static func collateSegments(from samples: [LocomotionSample], disabled: Bool) -> [ItemSegment] {
+    public static func collateSegments(from samples: [LocomotionSample], disabled: Bool) -> [ItemSegment] {
         var segments: [ItemSegment] = []
         var currentSamples: [LocomotionSample] = []
 
