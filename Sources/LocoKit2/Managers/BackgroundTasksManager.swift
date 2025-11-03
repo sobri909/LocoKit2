@@ -52,10 +52,9 @@ public enum BackgroundTasksManager {
             if nextRunTime > .now {
                 request.earliestBeginDate = nextRunTime
             }
-
-        } else { // if never completed before, schedule after minimum delay
-            request.earliestBeginDate = Date(timeIntervalSinceNow: minimumDelay)
+            // if nextRunTime <= .now, don't set earliestBeginDate (run ASAP)
         }
+        // if never completed before, don't set earliestBeginDate (run ASAP)
         
         request.requiresNetworkConnectivity = taskDefinition.requiresNetwork
         request.requiresExternalPower = taskDefinition.requiresPower
