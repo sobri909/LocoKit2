@@ -120,6 +120,11 @@ internal final class Merge: Hashable, Sendable {
         // do the db changes
         do {
             try await Database.pool.write { [mutableKeeper, samplesToMove, itemsToDelete] db in
+                // call merge hook before applying changes
+                if let hook = TimelineItem.onItemMerge {
+                    try hook(self.keeper, itemsToDelete, db)
+                }
+
                 try mutableKeeper.base.updateChanges(db, from: self.keeper.base)
                 for var sample in samplesToMove {
                     try sample.updateChanges(db) {
