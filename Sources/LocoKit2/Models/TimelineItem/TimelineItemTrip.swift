@@ -118,4 +118,16 @@ public struct TimelineItemTrip: FetchableRecord, PersistableRecord, Identifiable
         return nil
     }
 
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let itemId = Column(CodingKeys.itemId)
+        public static let lastSaved = Column(CodingKeys.lastSaved)
+        public static let distance = Column(CodingKeys.distance)
+        public static let speed = Column(CodingKeys.speed)
+        public static let classifiedActivityType = Column(CodingKeys.classifiedActivityType)
+        public static let confirmedActivityType = Column(CodingKeys.confirmedActivityType)
+        public static let uncertainActivityType = Column(CodingKeys.uncertainActivityType)
+    }
+
 }

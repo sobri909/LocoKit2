@@ -78,4 +78,29 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
         self.endDate = sample.date
     }
 
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let id = Column(CodingKeys.id)
+        public static let lastSaved = Column(CodingKeys.lastSaved)
+        public static let isVisit = Column(CodingKeys.isVisit)
+        public static let startDate = Column(CodingKeys.startDate)
+        public static let endDate = Column(CodingKeys.endDate)
+        public static let source = Column(CodingKeys.source)
+        public static let sourceVersion = Column(CodingKeys.sourceVersion)
+        public static let disabled = Column(CodingKeys.disabled)
+        public static let deleted = Column(CodingKeys.deleted)
+        public static let locked = Column(CodingKeys.locked)
+        public static let samplesChanged = Column(CodingKeys.samplesChanged)
+        public static let stepCount = Column(CodingKeys.stepCount)
+        public static let floorsAscended = Column(CodingKeys.floorsAscended)
+        public static let floorsDescended = Column(CodingKeys.floorsDescended)
+        public static let averageAltitude = Column(CodingKeys.averageAltitude)
+        public static let activeEnergyBurned = Column(CodingKeys.activeEnergyBurned)
+        public static let averageHeartRate = Column(CodingKeys.averageHeartRate)
+        public static let maxHeartRate = Column(CodingKeys.maxHeartRate)
+        public static let previousItemId = Column(CodingKeys.previousItemId)
+        public static let nextItemId = Column(CodingKeys.nextItemId)
+    }
+    
 }

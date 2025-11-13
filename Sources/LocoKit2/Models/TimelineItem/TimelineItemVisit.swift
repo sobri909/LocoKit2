@@ -11,6 +11,7 @@ import GRDB
 
 public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiable, Codable, Hashable, Sendable {
 
+
     public static let minimumKeeperDuration: TimeInterval = .minutes(2)
     public static let minimumValidDuration: TimeInterval = 10
 
@@ -204,6 +205,22 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         setUncertainty(otherVisit.uncertainPlace)
         customTitle = otherVisit.customTitle
         streetAddress = otherVisit.streetAddress
+    }
+
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let itemId = Column(CodingKeys.itemId)
+        public static let lastSaved = Column(CodingKeys.lastSaved)
+        public static let latitude = Column(CodingKeys.latitude)
+        public static let longitude = Column(CodingKeys.longitude)
+        public static let radiusMean = Column(CodingKeys.radiusMean)
+        public static let radiusSD = Column(CodingKeys.radiusSD)
+        public static let placeId = Column(CodingKeys.placeId)
+        public static let confirmedPlace = Column(CodingKeys.confirmedPlace)
+        public static let uncertainPlace = Column(CodingKeys.uncertainPlace)
+        public static let customTitle = Column(CodingKeys.customTitle)
+        public static let streetAddress = Column(CodingKeys.streetAddress)
     }
 
 }
