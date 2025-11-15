@@ -106,27 +106,6 @@ public extension CLLocationCoordinate2D {
             return crossTrackDistance
         }
     }
-
-    func simplePerpendicularDistance(to line: (CLLocationCoordinate2D, CLLocationCoordinate2D)) -> CLLocationDistance {
-        // Constants
-        let metersPerDegreeLat = 111319.9  // meters per degree latitude
-
-        // Compute meters per degree longitude for each latitude
-        let metersPerDegreeLonSelf = metersPerDegreeLat * cos(self.latitude.radians)
-        let metersPerDegreeLonA = metersPerDegreeLat * cos(line.0.latitude.radians)
-        let metersPerDegreeLonB = metersPerDegreeLat * cos(line.1.latitude.radians)
-
-        // Convert coordinates to approximately square projection
-        let p = (self.latitude * metersPerDegreeLat, self.longitude * metersPerDegreeLonSelf)
-        let a = (line.0.latitude * metersPerDegreeLat, line.0.longitude * metersPerDegreeLonA)
-        let b = (line.1.latitude * metersPerDegreeLat, line.1.longitude * metersPerDegreeLonB)
-
-        // Simple 2D perpendicular distance formula
-        let numerator = abs((b.1 - a.1) * p.0 - (b.0 - a.0) * p.1 + b.0 * a.1 - b.1 * a.0)
-        let denominator = sqrt(pow(b.1 - a.1, 2) + pow(b.0 - a.0, 2))
-
-        return numerator / denominator
-    }
 }
 
 public struct CodableLocation: Codable {
