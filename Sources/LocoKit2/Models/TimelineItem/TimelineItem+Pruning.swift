@@ -55,12 +55,14 @@ extension TimelineItem {
             }
         }
 
-        print("""
-          pruneTripSamples() results:
-          - Activity type: \(activityType.displayName)
-          - Total samples: \(sortedSamples.count)
-          - Keeping: \(keepIndices.count) samples (\(Int((Double(keepIndices.count) / Double(sortedSamples.count)) * 100))%)
-          """)
+        if keepIndices.count < sortedSamples.count {
+            print("""
+              pruneTripSamples() results:
+              - Activity type: \(activityType.displayName)
+              - Total samples: \(sortedSamples.count)
+              - Keeping: \(keepIndices.count) samples (\(Int((Double(keepIndices.count) / Double(sortedSamples.count)) * 100))%)
+              """)
+        }
     }
 
     @TimelineActor
@@ -131,11 +133,13 @@ extension TimelineItem {
             }
         }
 
-        print("""
+        if keepSamples.count < samples.count {
+            print("""
               pruneVisitSamples() results:
               - Total samples: \(samples.count)
               - Keeping \(keepSamples.count) samples (\(Int((Double(keepSamples.count) / Double(samples.count)) * 100))%)
               """)
+        }
     }
 
     private func chooseBestSample(from candidates: [LocomotionSample]) -> LocomotionSample? {
