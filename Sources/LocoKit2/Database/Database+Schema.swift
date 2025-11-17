@@ -104,26 +104,7 @@ extension Database {
             )
 
             try db.create(table: "TimelineItemVisit") { table in
-                table.primaryKey("itemId", .text)
-                    .references("TimelineItemBase", onDelete: .cascade, deferred: true)
-                table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
-
-                table.column("latitude", .double).notNull()
-                table.column("longitude", .double).notNull()
-                table.column("radiusMean", .double).notNull()
-                table.column("radiusSD", .double).notNull()
-
-                table.column("placeId", .text).indexed()
-                    .references("Place", onDelete: .restrict, deferred: true)
-
-                table.column("confirmedPlace", .boolean).notNull()
-                    .check { $0 == false || Column("placeId") != nil }
-                table.column("uncertainPlace", .boolean).notNull().defaults(to: true)
-                    .check { ($0 == true && Column("confirmedPlace") == false) || ($0 == false && Column("placeId") != nil) }
-
-                table.column("customTitle", .text).indexed()
-                    .check { $0 == nil || length($0) > 0 }
-                table.column("streetAddress", .text).indexed()
+                Self.defineTimelineItemVisitTable(table)
             }
 
             try db.create(table: "TimelineItemTrip") { table in
@@ -219,5 +200,39 @@ extension Database {
                 table.column("lastCompleted", .datetime)
             }
         }
+    }
+
+    // MARK: - Shared Table Schemas
+
+    static func defineTimelineItemVisitTable(_ table: TableDefinition) {
+        table.primaryKey("itemId", .text)
+            .references("TimelineItemBase", onDelete: .cascade, deferred: true)
+        table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+
+        table.column("latitude", .double)
+        table.column("longitude", .double)
+        table.column("radiusMean", .double).notNull()
+        table.column("radiusSD", .double).notNull()
+
+        table.column("placeId", .text).indexed()
+            .references("Place", onDelete: .restrict, deferred: true)
+
+        table.column("confirmedPlace", .boolean).notNull()
+            .check { $0 == false || Column("placeId") != nil }
+        table.column("uncertainPlace", .boolean).notNull().defaults(to: true)
+            .check { ($0 == true && Column("confirmedPlace") == false) || ($0 == false && Column("placeId") != nil) }
+
+        table.column("customTitle", .text).indexed()
+            .check { $0 == nil || length($0) > 0 }
+        table.column("streetAddress", .text).indexed()
+
+        // coordinates must be both NULL or both valid (not null island, within range)
+        table.check(sql: """
+            (latitude IS NULL AND longitude IS NULL) OR
+            (latitude IS NOT NULL AND longitude IS NOT NULL AND
+             latitude BETWEEN -90 AND 90 AND
+             longitude BETWEEN -180 AND 180 AND
+             (latitude != 0 OR longitude != 0))
+            """)
     }
 }

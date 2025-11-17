@@ -99,5 +99,34 @@ extension Database {
                 END;
                 """)
         }
+
+        migrator.registerMigration("TimelineItemVisit.nullableCoordinates") { db in
+            // recreate table with nullable coordinates and constraint
+            try? db.create(table: "TimelineItemVisit_new") { table in
+                Database.defineTimelineItemVisitTable(table)
+            }
+
+            // copy data, converting null island coordinates to NULL
+            try? db.execute(sql: """
+                INSERT INTO TimelineItemVisit_new
+                SELECT
+                    itemId,
+                    lastSaved,
+                    CASE WHEN latitude = 0 AND longitude = 0 THEN NULL ELSE latitude END,
+                    CASE WHEN latitude = 0 AND longitude = 0 THEN NULL ELSE longitude END,
+                    radiusMean,
+                    radiusSD,
+                    placeId,
+                    confirmedPlace,
+                    uncertainPlace,
+                    customTitle,
+                    streetAddress
+                FROM TimelineItemVisit
+                """)
+
+            // drop old table and rename new
+            try? db.drop(table: "TimelineItemVisit")
+            try? db.rename(table: "TimelineItemVisit_new", to: "TimelineItemVisit")
+        }
     }
 }

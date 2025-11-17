@@ -14,7 +14,8 @@ extension Place {
     }
 
     public func overlaps(_ visit: TimelineItemVisit) -> Bool {
-        return distance(from: visit) < 0
+        guard let dist = distance(from: visit) else { return false }
+        return dist < 0
     }
 
     public func overlaps(_ segment: ItemSegment) -> Bool {
@@ -33,8 +34,9 @@ extension Place {
     }
 
     // TODO: Arc Timeline uses 4sd if visitCount is < 2
-    public func distance(from visit: TimelineItemVisit) -> CLLocationDistance {
-        return center.location.distance(from: visit.center.location) - radius.with3sd - visit.radius.with1sd
+    public func distance(from visit: TimelineItemVisit) -> CLLocationDistance? {
+        guard let visitCenter = visit.center else { return nil }
+        return center.location.distance(from: visitCenter.location) - radius.with3sd - visit.radius.with1sd
     }
 
     public func distance(from segment: ItemSegment) -> CLLocationDistance? {

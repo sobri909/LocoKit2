@@ -45,11 +45,11 @@ extension TimelineItem {
         self.base = mutableBase
         
         if legacyItem.isVisit {
-            // Create visit with placeholder coordinates - will be updated when samples are imported
+            // create visit with nil coordinates - will be calculated from samples later
             var visit = TimelineItemVisit(
                 itemId: legacyItem.itemId,
-                latitude: 0,  // null island placeholder
-                longitude: 0,  // null island placeholder
+                latitude: nil,  // coordinates calculated from samples
+                longitude: nil,  // coordinates calculated from samples
                 radiusMean: 50,  // reasonable default radius
                 radiusSD: 10  // reasonable default SD
             )

@@ -20,8 +20,8 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     public let itemId: String
     public var lastSaved: Date = .now
-    public var latitude: CLLocationDegrees
-    public var longitude: CLLocationDegrees
+    public var latitude: CLLocationDegrees?  // nullable
+    public var longitude: CLLocationDegrees?  // nullable
     public var radiusMean: CLLocationDistance
     public var radiusSD: CLLocationDistance
 
@@ -36,8 +36,9 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     public var id: String { itemId }
 
-    public var center: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    public var center: CLLocationCoordinate2D? {  // optional
+        guard let latitude, let longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
     public var radius: Radius {
@@ -65,8 +66,8 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     // direct initialiser for imports and other special cases
     public init(
         itemId: String,
-        latitude: CLLocationDegrees,
-        longitude: CLLocationDegrees,
+        latitude: CLLocationDegrees?,
+        longitude: CLLocationDegrees?,
         radiusMean: CLLocationDistance,
         radiusSD: CLLocationDistance
     ) {
@@ -80,11 +81,13 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
     // MARK: - Comparisons etc
 
     public func overlaps(_ otherVisit: TimelineItemVisit) -> Bool {
-        return distance(from: otherVisit) < 0
+        guard let dist = distance(from: otherVisit) else { return false }
+        return dist < 0
     }
 
-    public func distance(from otherVisit: TimelineItemVisit) -> CLLocationDistance {
-        return center.location.distance(from: otherVisit.center.location) - radius.with1sd - otherVisit.radius.with1sd
+    public func distance(from otherVisit: TimelineItemVisit) -> CLLocationDistance? {
+        guard let thisCenter = center, let otherCenter = otherVisit.center else { return nil }
+        return thisCenter.location.distance(from: otherCenter.location) - radius.with1sd - otherVisit.radius.with1sd
     }
 
     public func distance(from otherItem: TimelineItem) throws -> CLLocationDistance? {
@@ -92,14 +95,15 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
             return distance(from: otherVisit)
         }
 
-        if otherItem.isTrip, let otherEdge = try otherItem.edgeSample(withOtherItemId: self.id)?.location, otherEdge.coordinate.isUsable {
-            return center.location.distance(from: otherEdge) - radius.with1sd
+        if otherItem.isTrip, let thisCenter = center, let otherEdge = try otherItem.edgeSample(withOtherItemId: self.id)?.location, otherEdge.coordinate.isUsable {
+            return thisCenter.location.distance(from: otherEdge) - radius.with1sd
         }
         
         return nil
     }
 
     public func contains(_ location: CLLocation, sd: Double) -> Bool {
+        guard let center else { return false }
         let testRadius = radius.withSD(sd).clamped(min: Self.minRadius, max: Self.maxRadius)
         return location.distance(from: center.location) <= testRadius
     }
