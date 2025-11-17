@@ -182,7 +182,7 @@ public enum ActivityTypesManager {
     public static func processModelUpdate(model: ActivityTypesModel, fileMissing: Bool = false) {
         guard model.needsUpdate else { return }
 
-        let shouldUpdateImmediately = fileMissing || (model.depth == 2 && model.completenessScore < 1.0)
+        let shouldUpdateImmediately = fileMissing || (model.depth == 2 && model.completenessScore < 0.1)
         
         if shouldUpdateImmediately {
             let geoKey = model.geoKey
