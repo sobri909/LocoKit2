@@ -12,7 +12,18 @@ import GRDB
 public enum ExportManager {
     public static let schemaVersion = "2.0.0"
 
-    private(set) static var exportInProgress = false
+    // MARK: - Export state
+
+    public private(set) static var exportInProgress = false
+    public private(set) static var currentPhase: ExportPhase?
+    public private(set) static var progress: Double = 0
+
+    public enum ExportPhase: Sendable {
+        case connecting
+        case exportingPlaces
+        case exportingItems
+        case exportingSamples
+    }
 
     // MARK: - Export paths
 
@@ -47,7 +58,9 @@ public enum ExportManager {
 
         let startTime = Date()
         exportInProgress = true
-        
+        currentPhase = .connecting
+        progress = 0
+
         logger.info("ExportManager: Starting JSON export", subsystem: .exporting)
 
         // create root export dir with timestamp
@@ -155,6 +168,9 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
         
+        currentPhase = .exportingPlaces
+        progress = 0
+
         logger.info("ExportManager: Starting places export", subsystem: .exporting)
 
         // get all places
@@ -173,11 +189,17 @@ public enum ExportManager {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
 
+        let totalBuckets = bucketedPlaces.count
+        var completedBuckets = 0
+
         for (prefix, places) in bucketedPlaces {
             let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
             let data = try encoder.encode(places)
             try data.write(to: bucketURL)
             print("Exported \(places.count) places to \(prefix).json")
+
+            completedBuckets += 1
+            progress = Double(completedBuckets) / Double(totalBuckets)
         }
         
         logger.info("ExportManager: Places export completed (\(places.count) places in \(bucketedPlaces.count) buckets)", subsystem: .exporting)
@@ -196,6 +218,9 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
         
+        currentPhase = .exportingItems
+        progress = 0
+
         logger.info("ExportManager: Starting timeline items export", subsystem: .exporting)
 
         // Get all timeline items with their full relationships loaded
@@ -221,11 +246,17 @@ public enum ExportManager {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
 
+        let totalMonths = monthlyItems.count
+        var completedMonths = 0
+
         for (monthKey, items) in monthlyItems {
             let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
             let data = try encoder.encode(items)
             try data.write(to: monthURL)
             print("Exported \(items.count) items to \(monthKey).json")
+
+            completedMonths += 1
+            progress = Double(completedMonths) / Double(totalMonths)
         }
         
         logger.info("ExportManager: Timeline items export completed (\(items.count) items in \(monthlyItems.count) months)", subsystem: .exporting)
@@ -244,6 +275,9 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
         
+        currentPhase = .exportingSamples
+        progress = 0
+
         logger.info("ExportManager: Starting samples export", subsystem: .exporting)
 
         // First get the date range of samples to export
@@ -304,9 +338,12 @@ public enum ExportManager {
                 
                 totalExported += weekSamples.count
                 weekCount += 1
-                
+
+                // update progress based on samples exported
+                progress = Double(totalExported) / Double(totalCount)
+
                 print("Exported \(weekSamples.count) samples to \(weekId).json")
-                
+
                 // Log progress every 10 weeks
                 if weekCount % 10 == 0 {
                     logger.info("ExportManager: Samples export progress - \(totalExported)/\(totalCount) samples in \(weekCount) weeks", subsystem: .exporting)

@@ -11,7 +11,20 @@ import GRDB
 @ImportExportActor
 public enum ImportManager {
 
-    private(set) static var importInProgress = false
+    // MARK: - Import state
+
+    public private(set) static var importInProgress = false
+    public private(set) static var currentPhase: ImportPhase?
+    public private(set) static var progress: Double = 0
+
+    public enum ImportPhase: Sendable {
+        case validating
+        case importingPlaces
+        case importingItems
+        case importingSamples
+        case processingOrphans
+    }
+
     private static var importURL: URL?
     private static var bookmarkData: Data?
     private static var wasObserving: Bool = true
@@ -26,6 +39,8 @@ public enum ImportManager {
         
         let startTime = Date()
         importInProgress = true
+        currentPhase = .validating
+        progress = 0
         bookmarkData = bookmark
 
         // save initial states and disable observation/recording during import
@@ -144,10 +159,15 @@ public enum ImportManager {
             options: [.skipsHiddenFiles]
         ).filter { $0.pathExtension == "json" }
 
+        currentPhase = .importingPlaces
+        progress = 0
+
         logger.info("ImportManager: Starting places import (\(placeFiles.count) files)", subsystem: .importing)
 
         var totalPlaces = 0
-        
+        let totalFiles = placeFiles.count
+        var processedFiles = 0
+
         for fileURL in placeFiles {
             do {
                 let fileData = try Data(contentsOf: fileURL)
@@ -160,6 +180,9 @@ public enum ImportManager {
                     }
                 }
                 totalPlaces += places.count
+
+                processedFiles += 1
+                progress = Double(processedFiles) / Double(totalFiles)
             } catch {
                 logger.error(error, subsystem: .importing)
                 continue
@@ -187,12 +210,17 @@ public enum ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
+        currentPhase = .importingItems
+        progress = 0
+
         logger.info("ImportManager: Starting timeline items import (\(itemFiles.count) files)", subsystem: .importing)
 
         var totalItems = 0
         var allTimelineItemIds = Set<String>()
         var itemDisabledStates: [String: Bool] = [:]
-        
+        let totalFiles = itemFiles.count
+        var processedFiles = 0
+
         // Process monthly files
         for fileURL in itemFiles {
             do {
@@ -263,6 +291,9 @@ public enum ImportManager {
                     // merge batch disabled states into main collection
                     itemDisabledStates.merge(batchDisabledStates) { (_, new) in new }
                 }
+
+                processedFiles += 1
+                progress = Double(processedFiles) / Double(totalFiles)
             } catch {
                 logger.error(error, subsystem: .database)
                 continue // Log and continue on file errors
@@ -308,10 +339,14 @@ public enum ImportManager {
             .filter { $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
+        currentPhase = .importingSamples
+        progress = 0
+
         logger.info("ImportManager: Starting samples import (\(sampleFiles.count) files)", subsystem: .importing)
 
         var totalSamples = 0
         var processedFiles = 0
+        let totalFiles = sampleFiles.count
         // track orphaned samples by their original parent timeline item ID
         var orphanedSamples: [String: [LocomotionSample]] = [:]
 
@@ -395,6 +430,8 @@ public enum ImportManager {
                 }
                 
                 processedFiles += 1
+                progress = Double(processedFiles) / Double(totalFiles)
+
                 // Log progress every 50 files
                 if processedFiles % 50 == 0 {
                     logger.info("ImportManager: Samples import progress - processed \(processedFiles)/\(sampleFiles.count) files, \(totalSamples) samples", subsystem: .importing)
@@ -412,6 +449,9 @@ public enum ImportManager {
         }
 
         // process orphaned samples after all imports complete
+        currentPhase = .processingOrphans
+        progress = 0
+
         var totalOrphansProcessed = 0
         if !orphanedSamples.isEmpty {
             let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
