@@ -178,7 +178,7 @@ public enum TimelineRecorder {
         }
 
         // Map probability to duration (6-60 seconds)
-        let shortCycleThreshold = 0.2 // probability threshold for 6s sleep cycles
+        let shortCycleThreshold = 0.1 // probability threshold for 6s sleep cycles
 
         switch probability {
         case shortCycleThreshold...1.0:  // high probability
