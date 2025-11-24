@@ -43,12 +43,12 @@ extension TimelineProcessor {
 
         // get overlapping items
         let overlappers = try await Database.pool.uncancellableRead { db in
-            try TimelineItem
-                .itemRequest(includeSamples: true)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("endDate") > segment.dateRange.start && Column("startDate") < segment.dateRange.end)
-                .order(Column("startDate").asc)
-                .fetchAll(db)
+            let request = TimelineItem
+                .itemBaseRequest(includeSamples: true)
+                .filter { $0.deleted == false && $0.disabled == false }
+                .filter { $0.endDate > segment.dateRange.start && $0.startDate < segment.dateRange.end }
+                .order(\.startDate.asc)
+            return try request.asRequest(of: TimelineItem.self).fetchAll(db)
         }
 
         let (newItem, itemsToHeal) = try await Database.pool.uncancellableWrite { db in

@@ -215,4 +215,33 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         case rtreeId
     }
 
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let id = Column(CodingKeys.id)
+        public static let lastSaved = Column(CodingKeys.lastSaved)
+        public static let date = Column(CodingKeys.date)
+        public static let secondsFromGMT = Column(CodingKeys.secondsFromGMT)
+        public static let source = Column(CodingKeys.source)
+        public static let sourceVersion = Column(CodingKeys.sourceVersion)
+        public static let movingState = Column(CodingKeys.movingState)
+        public static let recordingState = Column(CodingKeys.recordingState)
+        public static let disabled = Column(CodingKeys.disabled)
+        public static let timelineItemId = Column(CodingKeys.timelineItemId)
+        public static let latitude = Column(CodingKeys.latitude)
+        public static let longitude = Column(CodingKeys.longitude)
+        public static let altitude = Column(CodingKeys.altitude)
+        public static let horizontalAccuracy = Column(CodingKeys.horizontalAccuracy)
+        public static let verticalAccuracy = Column(CodingKeys.verticalAccuracy)
+        public static let speed = Column(CodingKeys.speed)
+        public static let course = Column(CodingKeys.course)
+        public static let classifiedActivityType = Column(CodingKeys.classifiedActivityType)
+        public static let confirmedActivityType = Column(CodingKeys.confirmedActivityType)
+        public static let stepHz = Column(CodingKeys.stepHz)
+        public static let xyAcceleration = Column(CodingKeys.xyAcceleration)
+        public static let zAcceleration = Column(CodingKeys.zAcceleration)
+        public static let heartRate = Column(CodingKeys.heartRate)
+        public static let rtreeId = Column(CodingKeys.rtreeId)
+    }
+
 }

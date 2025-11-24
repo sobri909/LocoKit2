@@ -72,22 +72,22 @@ struct EdgeRecordManager {
                     
                     if let previousId = record.previousId {
                         let previousExists = try TimelineItemBase
-                            .filter(Column("id") == previousId && Column("deleted") == false)
+                            .filter { $0.id == previousId && $0.deleted == false }
                             .fetchCount(db) > 0
                         if !previousExists {
                             validPreviousId = nil
                         }
                     }
-                    
+
                     if let nextId = record.nextId {
                         let nextExists = try TimelineItemBase
-                            .filter(Column("id") == nextId && Column("deleted") == false)
+                            .filter { $0.id == nextId && $0.deleted == false }
                             .fetchCount(db) > 0
                         if !nextExists {
                             validNextId = nil
                         }
                     }
-                    
+
                     // Prevent circular references
                     if let prev = validPreviousId, let next = validNextId, prev == next {
                         logger.info("Preventing circular edge reference during restore: itemId=\(record.itemId)", subsystem: .importing)
@@ -95,12 +95,12 @@ struct EdgeRecordManager {
                         validPreviousId = nil
                         validNextId = nil
                     }
-                    
+
                     try TimelineItemBase
-                        .filter(Column("id") == record.itemId)
+                        .filter { $0.id == record.itemId }
                         .updateAll(db, [
-                            Column("previousItemId").set(to: validPreviousId),
-                            Column("nextItemId").set(to: validNextId)
+                            TimelineItemBase.Columns.previousItemId.set(to: validPreviousId),
+                            TimelineItemBase.Columns.nextItemId.set(to: validNextId)
                         ])
                 }
             }

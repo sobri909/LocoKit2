@@ -112,7 +112,7 @@ public enum ActivityTypesManager {
                         """,
                         arguments: [ActivityTypesModel.modelMinTrainingSamples[0]!, ActivityTypesModel.modelMinTrainingSamples[0]!]
                     )
-                    .order(Column("depth").desc, Column("totalSamples").asc)
+                    .order { [$0.depth.desc, $0.totalSamples.asc] }
                     .fetchOne(db)
             }
             
@@ -125,9 +125,9 @@ public enum ActivityTypesManager {
     public static func fetchPendingModelGeoKeys() async throws -> [String] {
         return try await Database.pool.read { db in
             let request = ActivityTypesModel
-                .select(Column("geoKey"))
-                .filter(Column("needsUpdate") == true)
-                .order(Column("depth").desc, Column("totalSamples").asc)
+                .select(\.geoKey)
+                .filter { $0.needsUpdate == true }
+                .order { [$0.depth.desc, $0.totalSamples.asc] }
             return try String.fetchAll(db, request)
         }
     }
@@ -354,7 +354,7 @@ public enum ActivityTypesManager {
                         AND likely(zAcceleration IS NOT NULL)
                         AND likely(stepHz IS NOT NULL)
                         """)
-                    .order(Column("date").desc)
+                    .order(\.date.desc)
                     .limit(ActivityTypesModel.modelMaxTrainingSamples[model.depth]!)
                 
                 return try query.fetchAll(db)

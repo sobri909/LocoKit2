@@ -105,7 +105,7 @@ public enum ExportManager {
             let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
                 let places = try Place.fetchCount(db)
                 let items = try TimelineItemBase
-                    .filter(Column("startDate") != nil)
+                    .filter { $0.startDate != nil }
                     .fetchCount(db)
                 let samples = try LocomotionSample.fetchCount(db)
                 return (places, items, samples)
@@ -131,7 +131,7 @@ public enum ExportManager {
         let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
             let places = try Place.fetchCount(db)
             let items = try TimelineItemBase
-                .filter(Column("startDate") != nil)
+                .filter { $0.startDate != nil }
                 .fetchCount(db)
             let samples = try LocomotionSample.fetchCount(db)
             return (places, items, samples)
@@ -320,8 +320,8 @@ public enum ExportManager {
             // Query only this week's samples
             let weekSamples = try await Database.pool.uncancellableRead { [currentWeekStart, weekEnd] db in
                 try LocomotionSample
-                    .filter(Column("date") >= currentWeekStart && Column("date") < weekEnd)
-                    .order(Column("date").asc)
+                    .filter { $0.date >= currentWeekStart && $0.date < weekEnd }
+                    .order(\.date.asc)
                     .fetchAll(db)
             }
             

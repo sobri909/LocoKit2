@@ -226,6 +226,41 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         case lastVisitDate
     }
 
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let id = Column(CodingKeys.id)
+        public static let lastSaved = Column(CodingKeys.lastSaved)
+        public static let source = Column(CodingKeys.source)
+        public static let latitude = Column(CodingKeys.latitude)
+        public static let longitude = Column(CodingKeys.longitude)
+        public static let radiusMean = Column(CodingKeys.radiusMean)
+        public static let radiusSD = Column(CodingKeys.radiusSD)
+        public static let secondsFromGMT = Column(CodingKeys.secondsFromGMT)
+        public static let name = Column(CodingKeys.name)
+        public static let streetAddress = Column(CodingKeys.streetAddress)
+        public static let countryCode = Column(CodingKeys.countryCode)
+        public static let locality = Column(CodingKeys.locality)
+        public static let isStale = Column(CodingKeys.isStale)
+        public static let rtreeId = Column(CodingKeys.rtreeId)
+        public static let mapboxPlaceId = Column(CodingKeys.mapboxPlaceId)
+        public static let mapboxCategory = Column(CodingKeys.mapboxCategory)
+        public static let mapboxMakiIcon = Column(CodingKeys.mapboxMakiIcon)
+        public static let googlePlaceId = Column(CodingKeys.googlePlaceId)
+        public static let googlePrimaryType = Column(CodingKeys.googlePrimaryType)
+        public static let foursquarePlaceId = Column(CodingKeys.foursquarePlaceId)
+        public static let foursquareCategoryId = Column(CodingKeys.foursquareCategoryId)
+        public static let visitCount = Column(CodingKeys.visitCount)
+        public static let visitDays = Column(CodingKeys.visitDays)
+        public static let lastVisitDate = Column(CodingKeys.lastVisitDate)
+
+        // histogram columns (not in CodingKeys)
+        public static let arrivalTimes = Column("arrivalTimes")
+        public static let leavingTimes = Column("leavingTimes")
+        public static let visitDurations = Column("visitDurations")
+        public static let occupancyTimes = Column("occupancyTimes")
+    }
+
     // MARK: - Custom Decoder
 
     public init(from decoder: Decoder) throws {

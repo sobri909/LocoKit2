@@ -35,4 +35,24 @@ public struct LegacyPlace: FetchableRecord, TableRecord, Codable, Hashable, Send
     public var coordinate: CLLocationCoordinate2D {
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
+
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let placeId = Column("placeId")
+        public static let name = Column("name")
+        public static let latitude = Column("latitude")
+        public static let longitude = Column("longitude")
+        public static let radiusMean = Column("radiusMean")
+        public static let radiusSD = Column("radiusSD")
+        public static let streetAddress = Column("streetAddress")
+        public static let secondsFromGMT = Column("secondsFromGMT")
+        public static let mapboxPlaceId = Column("mapboxPlaceId")
+        public static let mapboxCategory = Column("mapboxCategory")
+        public static let mapboxMakiIcon = Column("mapboxMakiIcon")
+        public static let googlePlaceId = Column("googlePlaceId")
+        public static let googlePrimaryType = Column("googlePrimaryType")
+        public static let foursquareVenueId = Column("foursquareVenueId")
+        public static let foursquareCategoryIntId = Column("foursquareCategoryIntId")
+    }
 }

@@ -19,10 +19,11 @@ extension Place {
 
             let visits = try await Database.pool.read { [id] db in
                 try TimelineItem
-                    .itemRequest(includeSamples: false, includePlaces: true)
+                    .itemBaseRequest(includeSamples: false, includePlaces: true)
                     .filter(sql: "visit.placeId = ?", arguments: [id])
-                    .filter(Column("deleted") == false)
-                    .filter(Column("disabled") == false)
+                    .filter { $0.deleted == false }
+                    .filter { $0.disabled == false }
+                    .asRequest(of: TimelineItem.self)
                     .fetchAll(db)
             }
 
@@ -61,9 +62,9 @@ extension Place {
                 
                 samples = try await Database.pool.read { db in
                     try LocomotionSample
-                        .filter(confirmedVisitIds.contains(Column("timelineItemId")))
-                        .filter(Column("disabled") == false)
-                        .order(Column("date").desc)
+                        .filter { confirmedVisitIds.contains($0.timelineItemId) }
+                        .filter { $0.disabled == false }
+                        .order(\.date.desc)
                         .limit(maxSamplesToLoad)
                         .fetchAll(db)
                 }

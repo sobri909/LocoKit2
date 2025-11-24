@@ -56,4 +56,30 @@ public struct LegacyItem: FetchableRecord, TableRecord, Codable, Hashable, Senda
         self.endDate = sample.date
         self.source = sample.source
     }
+
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let itemId = Column("itemId")
+        public static let isVisit = Column("isVisit")
+        public static let startDate = Column("startDate")
+        public static let endDate = Column("endDate")
+        public static let source = Column("source")
+        public static let deleted = Column("deleted")
+        public static let disabled = Column("disabled")
+        public static let placeId = Column("placeId")
+        public static let manualPlace = Column("manualPlace")
+        public static let streetAddress = Column("streetAddress")
+        public static let customTitle = Column("customTitle")
+        public static let distance = Column("distance")
+        public static let manualActivityType = Column("manualActivityType")
+        public static let activityType = Column("activityType")
+        public static let activityTypeConfidenceScore = Column("activityTypeConfidenceScore")
+        public static let activeEnergyBurned = Column("activeEnergyBurned")
+        public static let averageHeartRate = Column("averageHeartRate")
+        public static let maxHeartRate = Column("maxHeartRate")
+        public static let hkStepCount = Column("hkStepCount")
+        public static let previousItemId = Column("previousItemId")
+        public static let nextItemId = Column("nextItemId")
+    }
 }

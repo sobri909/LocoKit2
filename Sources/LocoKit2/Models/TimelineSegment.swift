@@ -82,13 +82,15 @@ public final class TimelineSegment: Sendable {
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
         do {
-            let items = try await Database.pool.read { [dateRange] in
-                return try TimelineItem
-                    .itemRequest(includeSamples: false, includePlaces: true)
-                    .filter(Column("deleted") == false && Column("disabled") == false)
-                    .filter(Column("endDate") > dateRange.start && Column("startDate") < dateRange.end)
-                    .order(Column("endDate").desc)
-                    .fetchAll($0)
+            let items = try await Database.pool.read { [dateRange] db in
+                let request = TimelineItem
+                    .itemBaseRequest(includeSamples: false, includePlaces: true)
+                    .filter { $0.deleted == false && $0.disabled == false }
+                    .filter { $0.endDate > dateRange.start && $0.startDate < dateRange.end }
+                    .order(\.endDate.desc)
+                return try request
+                    .asRequest(of: TimelineItem.self)
+                    .fetchAll(db)
             }
             await update(from: items)
 

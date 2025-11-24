@@ -31,12 +31,12 @@ extension TimelineProcessor {
 
         // query overlapping active items
         let overlappingItems = try await Database.pool.read { db in
-            try TimelineItem
-                .itemRequest(includeSamples: true)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("id") != itemId)
-                .filter(Column("startDate") < dateRange.end && Column("endDate") > dateRange.start)
-                .fetchAll(db)
+            let request = TimelineItem
+                .itemBaseRequest(includeSamples: true)
+                .filter { $0.deleted == false && $0.disabled == false }
+                .filter { $0.id != itemId }
+                .filter { $0.startDate < dateRange.end && $0.endDate > dateRange.start }
+            return try request.asRequest(of: TimelineItem.self).fetchAll(db)
         }
 
         try await Database.pool.write { db in
@@ -177,12 +177,12 @@ extension TimelineProcessor {
             logger.info("disableItem(): Disabled \(item.debugShortId)", subsystem: .timeline)
 
             // find overlapping disabled items that were previously hidden by this item
-            let overlappingDisabledItems = try TimelineItem
-                .itemRequest(includeSamples: true)
-                .filter(Column("deleted") == false && Column("disabled") == true)
-                .filter(Column("id") != itemId)
-                .filter(Column("startDate") < dateRange.end && Column("endDate") > dateRange.start)
-                .fetchAll(db)
+            let disabledRequest = TimelineItem
+                .itemBaseRequest(includeSamples: true)
+                .filter { $0.deleted == false && $0.disabled == true }
+                .filter { $0.id != itemId }
+                .filter { $0.startDate < dateRange.end && $0.endDate > dateRange.start }
+            let overlappingDisabledItems = try disabledRequest.asRequest(of: TimelineItem.self).fetchAll(db)
 
             // re-enable those items (trigger auto-syncs samples)
             var itemIds: [String] = []
@@ -253,10 +253,10 @@ extension TimelineProcessor {
         // use batch update to avoid updateChanges() comparing in-memory state
         let sampleIds = samples.map(\.id)
         try LocomotionSample
-            .filter(sampleIds.contains(Column("id")))
+            .filter { sampleIds.contains($0.id) }
             .updateAll(db, [
-                Column("timelineItemId").set(to: base.id),
-                Column("disabled").set(to: false)
+                LocomotionSample.Columns.timelineItemId.set(to: base.id),
+                LocomotionSample.Columns.disabled.set(to: false)
             ])
 
         return base.id

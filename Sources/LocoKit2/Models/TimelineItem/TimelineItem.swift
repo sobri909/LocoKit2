@@ -268,12 +268,12 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
     public static func fetchItem(itemId: String, includeSamples: Bool, includePlace: Bool = false) async throws -> TimelineItem? {
         return try await Database.pool.uncancellableRead {
             return try itemRequest(includeSamples: includeSamples, includePlaces: includePlace)
-                .filter(Column("id") == itemId)
+                .filter(TimelineItemBase.Columns.id == itemId)
                 .fetchOne($0)
         }
     }
 
-    public static func itemRequest(includeSamples: Bool, includePlaces: Bool = false) -> QueryInterfaceRequest<TimelineItem> {
+    public static func itemBaseRequest(includeSamples: Bool, includePlaces: Bool = false) -> QueryInterfaceRequest<TimelineItemBase> {
         var request = TimelineItemBase
             .including(optional: TimelineItemBase.trip)
 
@@ -291,10 +291,15 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
 
         if includeSamples {
-            request = request.including(all: TimelineItemBase.samples.order(Column("date").asc))
+            request = request.including(all: TimelineItemBase.samples.order(\.date.asc))
         }
 
-        return request.asRequest(of: TimelineItem.self)
+        return request
+    }
+
+    public static func itemRequest(includeSamples: Bool, includePlaces: Bool = false) -> QueryInterfaceRequest<TimelineItem> {
+        return itemBaseRequest(includeSamples: includeSamples, includePlaces: includePlaces)
+            .asRequest(of: TimelineItem.self)
     }
 
     // MARK: - Sample fetching
@@ -308,7 +313,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
             // use uncancellableRead because leaving an item without samples loaded can be bad
             let fetchedSamples = try await Database.pool.uncancellableRead { [base] in
                 try base.samples
-                    .order(Column("date").asc)
+                    .order(\.date.asc)
                     .fetchAll($0)
             }
 

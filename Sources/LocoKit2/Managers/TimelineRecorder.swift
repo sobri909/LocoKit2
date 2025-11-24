@@ -44,12 +44,12 @@ public enum TimelineRecorder {
 
     public static func currentItem(includeSamples: Bool = false, includePlaces: Bool = false) -> TimelineItem? {
         do {
-            let item = try Database.pool.read {
-                try TimelineItem
-                    .itemRequest(includeSamples: includeSamples, includePlaces: includePlaces)
-                    .filter(Column("deleted") == false && Column("disabled") == false)
-                    .order(Column("endDate").desc)
-                    .fetchOne($0)
+            let item = try Database.pool.read { db in
+                let request = TimelineItem
+                    .itemBaseRequest(includeSamples: includeSamples, includePlaces: includePlaces)
+                    .filter { $0.deleted == false && $0.disabled == false }
+                    .order(\.endDate.desc)
+                return try request.asRequest(of: TimelineItem.self).fetchOne(db)
             }
 
             // update currentItemId if changed
@@ -105,8 +105,8 @@ public enum TimelineRecorder {
     public static func updateCurrentItemId() {
         currentItemId = try? Database.pool.read {
             try TimelineItemBase
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .order(Column("endDate").desc)
+                .filter { $0.deleted == false && $0.disabled == false }
+                .order(\.endDate.desc)
                 .selectPrimaryKey()
                 .fetchOne($0)
         }

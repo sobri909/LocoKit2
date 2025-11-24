@@ -58,4 +58,30 @@ public struct LegacySample: FetchableRecord, TableRecord, Identifiable, Codable,
             timestamp: date
         )
     }
+
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let sampleId = Column("sampleId")
+        public static let date = Column("date")
+        public static let secondsFromGMT = Column("secondsFromGMT")
+        public static let source = Column("source")
+        public static let movingState = Column("movingState")
+        public static let recordingState = Column("recordingState")
+        public static let deleted = Column("deleted")
+        public static let disabled = Column("disabled")
+        public static let classifiedType = Column("classifiedType")
+        public static let confirmedType = Column("confirmedType")
+        public static let timelineItemId = Column("timelineItemId")
+        public static let latitude = Column("latitude")
+        public static let longitude = Column("longitude")
+        public static let altitude = Column("altitude")
+        public static let horizontalAccuracy = Column("horizontalAccuracy")
+        public static let verticalAccuracy = Column("verticalAccuracy")
+        public static let speed = Column("speed")
+        public static let course = Column("course")
+        public static let stepHz = Column("stepHz")
+        public static let xyAcceleration = Column("xyAcceleration")
+        public static let zAcceleration = Column("zAcceleration")
+    }
 }

@@ -45,13 +45,13 @@ extension TimelineProcessor {
 
         // check for full containment by another item first
         let container = try await Database.pool.read { db in
-            try TimelineItem
-                .itemRequest(includeSamples: false)
-                .filter(Column("startDate") <= dateRange.start)
-                .filter(Column("endDate") >= dateRange.end)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("id") != item.id)
-                .fetchOne(db)
+            let request = TimelineItem
+                .itemBaseRequest(includeSamples: false)
+                .filter { $0.startDate <= dateRange.start }
+                .filter { $0.endDate >= dateRange.end }
+                .filter { $0.deleted == false && $0.disabled == false }
+                .filter { $0.id != item.id }
+            return try request.asRequest(of: TimelineItem.self).fetchOne(db)
         }
 
         // if fully contained, transfer samples and delete (but not if locked)
@@ -90,15 +90,16 @@ extension TimelineProcessor {
         
         // find nearest item within a larger window
         let nearest = try await Database.pool.read { db in
-            try TimelineItem.itemRequest(includeSamples: false)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("id") != item.id)
-                .filter(Column("endDate") >= dateRange.start - searchWindow)
-                .filter(Column("endDate") <= dateRange.start + searchWindow)
+            let request = TimelineItem
+                .itemBaseRequest(includeSamples: false)
+                .filter { $0.deleted == false && $0.disabled == false }
+                .filter { $0.id != item.id }
+                .filter { $0.endDate >= dateRange.start - searchWindow }
+                .filter { $0.endDate <= dateRange.start + searchWindow }
                 .annotated(with: SQL(sql: "ABS(strftime('%s', endDate) - strftime('%s', ?))",
                                     arguments: [dateRange.start]).forKey("gap"))
                 .order(literal: "gap")
-                .fetchOne(db)
+            return try request.asRequest(of: TimelineItem.self).fetchOne(db)
         }
 
         if let nearest, let nearestEndDate = nearest.dateRange?.end {
@@ -150,15 +151,16 @@ extension TimelineProcessor {
         
         // find nearest item within a larger window
         let nearest = try await Database.pool.read { db in
-            try TimelineItem.itemRequest(includeSamples: false)
-                .filter(Column("deleted") == false && Column("disabled") == false)
-                .filter(Column("id") != item.id)
-                .filter(Column("startDate") >= dateRange.end - searchWindow)
-                .filter(Column("startDate") <= dateRange.end + searchWindow)
+            let request = TimelineItem
+                .itemBaseRequest(includeSamples: false)
+                .filter { $0.deleted == false && $0.disabled == false }
+                .filter { $0.id != item.id }
+                .filter { $0.startDate >= dateRange.end - searchWindow }
+                .filter { $0.startDate <= dateRange.end + searchWindow }
                 .annotated(with: SQL(sql: "ABS(strftime('%s', startDate) - strftime('%s', ?))",
                                     arguments: [dateRange.end]).forKey("gap"))
                 .order(literal: "gap")
-                .fetchOne(db)
+            return try request.asRequest(of: TimelineItem.self).fetchOne(db)
         }
 
         if let nearest, let nearestStartDate = nearest.dateRange?.start {

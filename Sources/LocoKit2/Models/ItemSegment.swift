@@ -70,8 +70,8 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
     public func validateIsContiguous() async throws -> Bool {
         let dbSampleIds = try await Database.pool.read { db in
             let request = LocomotionSample
-                .select(Column("id"))
-                .filter(dateRange.range.contains(Column("date")))
+                .select(\.id)
+                .filter { dateRange.range.contains($0.date) }
             return try String.fetchSet(db, request)
         }
 

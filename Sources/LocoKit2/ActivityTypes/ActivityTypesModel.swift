@@ -132,11 +132,11 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
     @ActivityTypesActor
     public static func fetchModelFor(coordinate: CLLocationCoordinate2D, depth: Int) -> ActivityTypesModel {
         var request = ActivityTypesModel
-            .filter(Column("depth") == depth)
+            .filter { $0.depth == depth }
         if depth > 0 {
             request = request
-                .filter(Column("latitudeMin") <= coordinate.latitude && Column("latitudeMax") >= coordinate.latitude)
-                .filter(Column("longitudeMin") <= coordinate.longitude && Column("longitudeMax") >= coordinate.longitude)
+                .filter { $0.latitudeMin <= coordinate.latitude && $0.latitudeMax >= coordinate.latitude }
+                .filter { $0.longitudeMin <= coordinate.longitude && $0.longitudeMax >= coordinate.longitude }
         }
 
         // try to fetch existing model
@@ -330,6 +330,22 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
         case 1: return depth1
         default: return depth0
         }
+    }
+
+    // MARK: - Columns
+
+    public enum Columns {
+        public static let geoKey = Column("geoKey")
+        public static let filename = Column("filename")
+        public static let depth = Column("depth")
+        public static let latitudeMin = Column("latitudeMin")
+        public static let latitudeMax = Column("latitudeMax")
+        public static let longitudeMin = Column("longitudeMin")
+        public static let longitudeMax = Column("longitudeMax")
+        public static let lastUpdated = Column("lastUpdated")
+        public static let accuracyScore = Column("accuracyScore")
+        public static let totalSamples = Column("totalSamples")
+        public static let needsUpdate = Column("needsUpdate")
     }
 
 }

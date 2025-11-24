@@ -108,11 +108,11 @@ public final class TimelineLinkedList: AsyncSequence {
     @MainActor
     private func addObserverFor(itemId: String) -> AnyDatabaseCancellable {
         return ValueObservation
-            .trackingConstantRegion {
-                try TimelineItem
-                    .itemRequest(includeSamples: true, includePlaces: true)
-                    .filter(Column("id") == itemId)
-                    .fetchOne($0)
+            .trackingConstantRegion { db in
+                let request = TimelineItem
+                    .itemBaseRequest(includeSamples: true, includePlaces: true)
+                    .filter { $0.id == itemId }
+                return try request.asRequest(of: TimelineItem.self).fetchOne(db)
             }
             .removeDuplicates()
             .shared(in: Database.pool)
