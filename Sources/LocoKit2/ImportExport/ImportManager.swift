@@ -242,8 +242,8 @@ public enum ImportManager {
 
                         // check which ones exist in the database
                         let validPlaceIds = try String.fetchSet(db, Place
-                            .select(Column("id"))
-                            .filter(placeIds.contains(Column("id"))))
+                            .select(\.id)
+                            .filter { placeIds.contains($0.id) })
 
                         for item in batch {
                             // Store edge record before nulling the relationships

@@ -198,10 +198,10 @@ public enum OldLocoKitImporter {
             }
             
             // Build query with date filtering if needed
-            var query = LegacyItem.filter(Column("deleted") == false)
-            
+            var query = LegacyItem.filter { $0.deleted == false }
+
             if let dateRange = importDateRange {
-                query = query.filter(Column("startDate") >= dateRange.start && Column("startDate") < dateRange.end)
+                query = query.filter { $0.startDate >= dateRange.start && $0.startDate < dateRange.end }
             }
             
             return try query.fetchAll(db)
@@ -261,7 +261,7 @@ public enum OldLocoKitImporter {
                     if let visit = item.visit {
                         // check if placeId exists before saving
                         if let placeId = visit.placeId {
-                            let placeExists = try Place.filter(Column("id") == placeId).fetchCount(db) > 0
+                            let placeExists = try Place.filter { $0.id == placeId }.fetchCount(db) > 0
                             if !placeExists {
                                 logger.warning("Visit \(visit.itemId) references non-existent place: \(placeId)")
                                 // clear the invalid placeId
@@ -336,10 +336,10 @@ public enum OldLocoKitImporter {
             }
             
             // Build base query with date filtering if needed
-            var baseQuery = LegacySample.filter(Column("deleted") == false)
-            
+            var baseQuery = LegacySample.filter { $0.deleted == false }
+
             if let dateRange = importDateRange {
-                baseQuery = baseQuery.filter(Column("date") >= dateRange.start && Column("date") < dateRange.end)
+                baseQuery = baseQuery.filter { $0.date >= dateRange.start && $0.date < dateRange.end }
             }
             
             // Get min/max rowids and count for filtered samples
@@ -369,13 +369,13 @@ public enum OldLocoKitImporter {
             // Only read a chunk of samples in each iteration
             let batch = try await legacyPool.read { [currentRowId, batchEndRowId, importDateRange] db in
                 var query = LegacySample
-                    .filter(Column("deleted") == false)
+                    .filter { $0.deleted == false }
                     .filter(Column("rowid") >= currentRowId && Column("rowid") <= batchEndRowId)
-                
+
                 if let dateRange = importDateRange {
-                    query = query.filter(Column("date") >= dateRange.start && Column("date") < dateRange.end)
+                    query = query.filter { $0.date >= dateRange.start && $0.date < dateRange.end }
                 }
-                
+
                 return try query.order(Column("rowid")).fetchAll(db)
             }
             

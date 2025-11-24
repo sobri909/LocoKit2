@@ -74,13 +74,13 @@ extension Database {
 
                 table.column("previousItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
-                    .check { $0 != Column("id") }
-                    .check { $0 == nil || $0 != Column("nextItemId") }
+                    .check { $0 != TimelineItemBase.Columns.id }
+                    .check { $0 == nil || $0 != TimelineItemBase.Columns.nextItemId }
 
                 table.column("nextItemId", .text).indexed()
                     .references("TimelineItemBase", onDelete: .setNull, deferred: true)
-                    .check { $0 != Column("id") }
-                    .check { $0 == nil || $0 != Column("previousItemId") }
+                    .check { $0 != TimelineItemBase.Columns.id }
+                    .check { $0 == nil || $0 != TimelineItemBase.Columns.previousItemId }
 
                 table.column("stepCount", .integer)
                 table.column("floorsAscended", .integer)
@@ -117,8 +117,8 @@ extension Database {
                 table.column("classifiedActivityType", .integer)
                 table.column("confirmedActivityType", .integer)
                 table.column("uncertainActivityType", .boolean).notNull().defaults(to: true)
-                    .check { $0 == true || Column("classifiedActivityType") != nil || Column("confirmedActivityType") != nil }
-                    .check { $0 == false || Column("confirmedActivityType") == nil }
+                    .check { $0 == true || TimelineItemTrip.Columns.classifiedActivityType != nil || TimelineItemTrip.Columns.confirmedActivityType != nil }
+                    .check { $0 == false || TimelineItemTrip.Columns.confirmedActivityType == nil }
             }
 
             // MARK: - LocomotionSample
@@ -218,9 +218,9 @@ extension Database {
             .references("Place", onDelete: .restrict, deferred: true)
 
         table.column("confirmedPlace", .boolean).notNull()
-            .check { $0 == false || Column("placeId") != nil }
+            .check { $0 == false || TimelineItemVisit.Columns.placeId != nil }
         table.column("uncertainPlace", .boolean).notNull().defaults(to: true)
-            .check { ($0 == true && Column("confirmedPlace") == false) || ($0 == false && Column("placeId") != nil) }
+            .check { ($0 == true && TimelineItemVisit.Columns.confirmedPlace == false) || ($0 == false && TimelineItemVisit.Columns.placeId != nil) }
 
         table.column("customTitle", .text).indexed()
             .check { $0 == nil || length($0) > 0 }

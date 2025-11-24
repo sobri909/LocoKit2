@@ -244,8 +244,9 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
 
         let newItem = try TimelineItem
-            .itemRequest(includeSamples: false)
-            .filter(Column("id") == base.id)
+            .itemBaseRequest(includeSamples: false)
+            .filter { $0.id == base.id }
+            .asRequest(of: TimelineItem.self)
             .fetchOne(db)
 
         guard let newItem else {

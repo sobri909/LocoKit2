@@ -28,7 +28,11 @@ public enum ImportHelpers {
 
             for (originalItemId, disabledSamples) in disabledSamplesFromEnabledParents {
                 // fetch original item to determine type and copy metadata
-                guard let originalItem = try TimelineItem.itemRequest(includeSamples: false).filter(Column("id") == originalItemId).fetchOne(db) else {
+                let request = TimelineItem
+                    .itemBaseRequest(includeSamples: false)
+                    .filter { $0.id == originalItemId }
+                    .asRequest(of: TimelineItem.self)
+                guard let originalItem = try request.fetchOne(db) else {
                     logger.info("Could not find original item \(originalItemId) for preserved parent creation", subsystem: .importing)
                     continue
                 }

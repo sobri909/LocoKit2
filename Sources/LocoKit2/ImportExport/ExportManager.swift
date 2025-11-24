@@ -226,8 +226,9 @@ public enum ExportManager {
         // Get all timeline items with their full relationships loaded
         let items = try await Database.pool.uncancellableRead { db in
             try TimelineItem
-                .itemRequest(includeSamples: false, includePlaces: false)
-                .order(Column("startDate").asc)  // order by date for grouping
+                .itemBaseRequest(includeSamples: false, includePlaces: false)
+                .order(\.startDate.asc)
+                .asRequest(of: TimelineItem.self)
                 .fetchAll(db)
         }
 
@@ -282,10 +283,10 @@ public enum ExportManager {
 
         // First get the date range of samples to export
         let (minDate, maxDate, totalCount) = try await Database.pool.uncancellableRead { db in
-            let min = try Date.fetchOne(db, LocomotionSample.select(min(Column("date"))))
-            let max = try Date.fetchOne(db, LocomotionSample.select(max(Column("date"))))
+            let earliest = try LocomotionSample.select({ min($0.date) }, as: Date.self).fetchOne(db)
+            let latest = try LocomotionSample.select({ max($0.date) }, as: Date.self).fetchOne(db)
             let count = try LocomotionSample.fetchCount(db)
-            return (min, max, count)
+            return (earliest, latest, count)
         }
         
         guard let minDate, let maxDate else {
