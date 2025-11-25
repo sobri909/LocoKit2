@@ -254,10 +254,10 @@ extension TimelineProcessor {
         let sampleIds = samples.map(\.id)
         try LocomotionSample
             .filter { sampleIds.contains($0.id) }
-            .updateAll(db, [
-                LocomotionSample.Columns.timelineItemId.set(to: base.id),
-                LocomotionSample.Columns.disabled.set(to: false)
-            ])
+            .updateAll(db) { [
+                $0.timelineItemId.set(to: base.id),
+                $0.disabled.set(to: false)
+            ] }
 
         return base.id
     }

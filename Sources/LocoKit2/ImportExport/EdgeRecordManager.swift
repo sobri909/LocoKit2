@@ -98,10 +98,10 @@ struct EdgeRecordManager {
 
                     try TimelineItemBase
                         .filter { $0.id == record.itemId }
-                        .updateAll(db, [
-                            TimelineItemBase.Columns.previousItemId.set(to: validPreviousId),
-                            TimelineItemBase.Columns.nextItemId.set(to: validNextId)
-                        ])
+                        .updateAll(db) { [
+                            $0.previousItemId.set(to: validPreviousId),
+                            $0.nextItemId.set(to: validNextId)
+                        ] }
                 }
             }
             
