@@ -113,7 +113,12 @@ extension TimelineProcessor {
                             $0.setUncertainty(false)
                         }
                     }
-                    
+
+                    // mark place stale so its stats get updated
+                    try Place
+                        .filter { $0.id == placeId }
+                        .updateAll(db) { $0.isStale.set(to: true) }
+
                 } else if let customTitle {
                     try newItem.visit?.updateChanges(db) {
                         $0.customTitle = customTitle

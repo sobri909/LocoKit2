@@ -17,9 +17,9 @@ extension Place {
 
             let currentItemId = await TimelineRecorder.currentItemId
 
-            let visits = try await Database.pool.read { [id] db in
+            let visits = try await Database.pool.read { db in
                 try TimelineItem
-                    .itemBaseRequest(includeSamples: false, includePlaces: true)
+                    .itemBaseRequest(includeSamples: false, includePlaces: false)
                     .filter(sql: "visit.placeId = ?", arguments: [id])
                     .filter { $0.deleted == false }
                     .filter { $0.disabled == false }
