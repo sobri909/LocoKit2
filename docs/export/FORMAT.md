@@ -1,7 +1,7 @@
 # LocoKit2 Export Format Specification
 
 ## Version
-- Current schema version: 1.0.0
+- Current schema version: 2.0.0
 - Uses semantic versioning (major.minor.patch)
 - Major version changes indicate breaking format changes
 - Minor versions add features in a backward-compatible way
@@ -20,9 +20,9 @@ Designed for full database backups and incremental updates. Files grouped by typ
 export-YYYY-MM-DD-HHmmss/
   metadata.json
   places/
-    0.json[.gz]   # Places with UUIDs starting "0" (e.g. "01ABCDEF-...")
-    1.json[.gz]   # Places with UUIDs starting "1" (e.g. "12BCDEF0-...")
-    .../          # Through "F"
+    0.json   # Places with UUIDs starting "0"
+    1.json   # Places with UUIDs starting "1"
+    .../     # Through "9", then "A" through "F" (16 buckets total)
   items/
     2025-01.json[.gz]   # Timeline items for January 2025
     2025-02.json[.gz]   # Timeline items for February 2025
@@ -38,50 +38,52 @@ export-YYYY-MM-DD-HHmmss/
 metadata.json:
 ```json
 {
-  "schemaVersion": "1.0.0",     // Semantic version of export format
+  "schemaVersion": "2.0.0",     // Semantic version of export format
   "exportMode": "bucketed",     // "bucketed" or "singleFile"
-  "exportType": "full",         // "full" or "dateRange"
-  
-  // Required for dateRange exports
-  "exportRange": {
-    "start": "2025-01-05T00:00:00Z",
-    "end": "2025-01-05T23:59:59Z"
-  },
-  
-  // Export session timing
-  "sessionStartDate": "2025-01-10T13:45:00Z",  // When this export session began
-  "sessionFinishDate": "2025-01-10T13:46:32Z", // When session completed - used as epoch for next incremental export
-  
+  "exportType": "full",         // "full" or "incremental"
+
+  // Export session timing (numeric: seconds since reference date)
+  "sessionStartDate": 786072997.381,   // When this export session began
+  "sessionFinishDate": 786073162.480,  // When session completed
+
+  // For incremental backups
+  "lastBackupDate": 786072997.381,     // Timestamp for next incremental query
+
   // Session completion status
   "itemsCompleted": true,   // All qualifying items were exported
   "placesCompleted": true,  // All qualifying places were exported
   "samplesCompleted": true, // All qualifying samples were exported
-  
+
   "stats": {
     "placeCount": 5640,    // Total places in this export
     "itemCount": 38308,    // Total timeline items in this export
     "sampleCount": 6989051 // Total samples in this export
+  },
+
+  // Optional: extension state for app-specific tables
+  "extensions": {
+    "notes": { "recordCount": 142 }
   }
 }
 ```
 
-### 2. Single File Format
+### 2. Single File Format (Planned)
 
-Designed for sharing specific date ranges. All data contained in one file.
+Designed for sharing specific date ranges. All data contained in one file. Not yet implemented.
 
 #### File Structure
 ```
 2025-01-05.json[.gz]   # Contents:
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "exportMode": "singleFile",
-  "exportType": "dateRange",
+  "exportType": "partial",
   "exportRange": {
-    "start": "2025-01-05T00:00:00Z",
-    "end": "2025-01-05T23:59:59Z"
+    "start": 786000000.0,
+    "end": 786086400.0
   },
-  "sessionStartDate": "2025-01-10T13:45:00Z",
-  "sessionFinishDate": "2025-01-10T13:46:32Z",
+  "sessionStartDate": 786072997.381,
+  "sessionFinishDate": 786073162.480,
   "itemsCompleted": true,
   "placesCompleted": true,
   "samplesCompleted": true,
@@ -121,15 +123,30 @@ This approach ensures that exports contain the complete dataset needed for full 
 
 ## Incremental Updates
 
-The bucketed format supports incremental updates through scheduled backup sessions. Each session:
+The bucketed format supports incremental backups using the `lastBackupDate` field in metadata.json.
 
-1. Uses the previous session's `sessionFinishDate` as its starting point
-2. Exports objects with `lastSaved` timestamps after that point
-3. Records its own `sessionFinishDate` for use by the next session
+### How It Works
 
-Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying objects were successfully exported during that session. For example, if `itemsCompleted` is true, all items with `lastSaved` greater than the previous session's finish date were exported.
+1. Query records where `lastSaved > lastBackupDate` (bounded by session start time)
+2. For each bucket with changes, rewrite the entire bucket file
+3. On successful completion, update `lastBackupDate` to this session's start time
 
-The same directory structure can receive multiple export sessions, allowing for efficient incremental backups without creating new directories for each session.
+### Bounded Snapshot
+
+Incremental exports use a bounded time window:
+- Lower bound: `lastBackupDate` from previous backup (or nil for first run)
+- Upper bound: session start time (prevents "chasing" incoming data)
+
+This ensures clean backup windows with no missed or duplicate data.
+
+### Cancellation Handling
+
+If a backup is cancelled before completion:
+- `lastBackupDate` is NOT updated
+- Next run re-checks all buckets from previous `lastBackupDate`
+- Re-checking already-backed-up buckets is cheap (query returns empty)
+
+Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying objects were successfully exported during that session.
 
 ## Data Types
 
@@ -139,6 +156,8 @@ The same directory structure can receive multiple export sessions, allowing for 
   id: string           // UUID
   name: string        // Required, non-null
   streetAddress: string | null
+  locality: string | null
+  countryCode: string | null
   secondsFromGMT: number
   latitude: number
   longitude: number
@@ -147,12 +166,11 @@ The same directory structure can receive multiple export sessions, allowing for 
   isStale: boolean
   visitCount: number
   visitDays: number
-  lastSaved: string   // ISO8601 datetime with timezone
-  
+  lastSaved: number   // seconds since reference date
+  source: string      // eg "LocoKit2"
+  rtreeId: number | null
+
   // Provider IDs
-  mapboxPlaceId: string | null
-  mapboxCategory: string | null
-  mapboxMakiIcon: string | null
   googlePlaceId: string | null
   googlePrimaryType: string | null
   foursquarePlaceId: string | null
@@ -170,20 +188,22 @@ Base fields common to all timeline items:
   base: {
     id: string               // UUID
     isVisit: boolean        // Type discriminator
-    startDate: string       // ISO8601 datetime
-    endDate: string         // ISO8601 datetime
+    startDate: number       // seconds since reference date
+    endDate: number         // seconds since reference date
     source: string
     sourceVersion: string
     disabled: boolean
     deleted: boolean
-    lastSaved: string       // ISO8601 datetime with timezone
+    lastSaved: number       // seconds since reference date
     previousItemId: string | null
     nextItemId: string | null
-    
+    samplesChanged: boolean
+    locked: boolean
+
     // HealthKit stats
     stepCount: number | null
     floorsAscended: number | null
-    floorsDescended: number | null 
+    floorsDescended: number | null
     averageAltitude: number | null
     activeEnergyBurned: number | null
     averageHeartRate: number | null
@@ -197,6 +217,7 @@ Additional fields for visit items:
 ```typescript
 {
   visit: {
+    itemId: string           // UUID, foreign key to base
     latitude: number
     longitude: number
     radiusMean: number
@@ -204,9 +225,7 @@ Additional fields for visit items:
     placeId: string | null
     confirmedPlace: boolean
     uncertainPlace: boolean
-    customTitle: string | null
-    streetAddress: string | null
-    lastSaved: string        // ISO8601 datetime with timezone
+    lastSaved: number        // seconds since reference date
   }
 }
 ```
@@ -216,12 +235,13 @@ Additional fields for trip items:
 ```typescript
 {
   trip: {
+    itemId: string           // UUID, foreign key to base
     distance: number
     speed: number
     classifiedActivityType: number | null
     confirmedActivityType: number | null
     uncertainActivityType: boolean
-    lastSaved: string        // ISO8601 datetime with timezone
+    lastSaved: number        // seconds since reference date
   }
 }
 ```
@@ -230,14 +250,14 @@ Additional fields for trip items:
 ```typescript
 {
   id: string                // UUID
-  date: string             // ISO8601 datetime
+  date: number             // seconds since reference date
   source: string
   sourceVersion: string
   secondsFromGMT: number
   movingState: number      // Maps to MovingState enum
   recordingState: number   // Maps to RecordingState enum
   disabled: boolean
-  lastSaved: string        // ISO8601 datetime with timezone
+  lastSaved: number        // seconds since reference date
   timelineItemId: string | null
   
   // Location data
@@ -262,10 +282,11 @@ Additional fields for trip items:
 
 ## Notes
 
-- All dates use ISO8601 format with UTC timezone
-- Timezone offsets (secondsFromGMT) stored separately
+- All dates are numeric (seconds since reference date, ie Foundation Date)
+- Timezone offsets (secondsFromGMT) stored separately for local time reconstruction
 - UUIDs are string format without curly braces
-- Empty/null fields should be omitted from JSON
-- Files can optionally be gzipped (indicated by .gz extension)
-- Week numbers use ISO week date system for UTC
-- Week files use YYYY-Www format (e.g. "2025-W01")
+- Empty/null fields may be omitted from JSON
+- Compression (.gz) planned but not yet implemented (see BIG-118)
+- Week numbers use ISO week date system, UTC-based
+- Week files use YYYY-Www format (eg "2025-W01")
+- Place buckets use first character of UUID (0-9, A-F)

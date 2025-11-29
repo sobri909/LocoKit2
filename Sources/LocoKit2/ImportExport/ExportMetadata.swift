@@ -13,6 +13,7 @@ public enum ExportMode: String, Codable, Sendable {
 
 public enum ExportType: String, Codable, Sendable {
     case full
+    case incremental
 }
 
 public struct ExportMetadata: Codable, Sendable {
@@ -28,6 +29,18 @@ public struct ExportMetadata: Codable, Sendable {
     let samplesCompleted: Bool
     
     let stats: ExportStats
+
+    // incremental backup tracking
+    var lastBackupDate: Date?
+    var extensions: [String: ExtensionState]?
+}
+
+public struct ExtensionState: Codable, Sendable {
+    public var recordCount: Int
+
+    public init(recordCount: Int) {
+        self.recordCount = recordCount
+    }
 }
 
 public struct ExportStats: Codable, Sendable {

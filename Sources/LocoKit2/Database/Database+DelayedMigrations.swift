@@ -128,5 +128,14 @@ extension Database {
             try? db.drop(table: "TimelineItemVisit")
             try? db.rename(table: "TimelineItemVisit_new", to: "TimelineItemVisit")
         }
+
+        migrator.registerMigration("LocomotionSample_lastSaved_index") { db in
+            // index for efficient incremental backup queries
+            try? db.create(
+                index: "LocomotionSample_on_lastSaved",
+                on: "LocomotionSample",
+                columns: ["lastSaved"]
+            )
+        }
     }
 }

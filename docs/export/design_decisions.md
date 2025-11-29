@@ -4,9 +4,9 @@
 Core approach with clean separation and efficient organization:
 
 1. Places
-   - Simple UUID bucketing (00.json through FF.json)
+   - Simple UUID bucketing (0.json through F.json, 16 buckets)
    - No subdirectories for simpler file handling
-   - First two chars of UUID determine bucket
+   - First character of UUID determines bucket
    - Uppercase UUIDs for better readability and consistency with Apple
    - No compression initially for easier debugging
 
@@ -34,10 +34,10 @@ Core approach with clean separation and efficient organization:
 ### File Organization Implementation
 1. Place Bucketing:
    ```swift
-   // Group by first 2 chars of UUID
+   // Group by first char of UUID (0-9, A-F = 16 buckets)
    var bucketedPlaces: [String: [Place]] = [:]
    for place in places {
-       let prefix = String(place.id.prefix(2)).uppercased()
+       let prefix = String(place.id.prefix(1)).uppercased()
        bucketedPlaces[prefix, default: []].append(place)
    }
    ```
@@ -169,13 +169,12 @@ Key challenges handled:
 - Week files may need partial updates
 - Timezone complexity with international data
 
-### Future Data Merging
-Planned lastSaved timestamp system:
-- Add lastSaved column to core tables
-- SQL triggers to auto-update on writes
-- Use timestamps to resolve import conflicts
-- Only update if import data is newer
-- Enables proper merging between devices
+### Data Merging (Implemented)
+The lastSaved timestamp system is now in place:
+- lastSaved column on all core tables (Place, TimelineItemBase, TimelineItemVisit, TimelineItemTrip, LocomotionSample)
+- SQL triggers auto-update lastSaved on writes
+- Used for incremental backup queries (WHERE lastSaved > lastBackupDate)
+- Import merging by lastSaved comparison planned but not yet implemented
 
 ### Legacy Format Support
 To be implemented:

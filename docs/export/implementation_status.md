@@ -10,24 +10,26 @@ Current status of the export/import system implementation.
 - [x] Error handling and state management
 - [x] JSON encoding with formatting and sorting
 
-### Export Format 
+### Export Format
 - [x] Basic file organization (places, items, samples)
-- [x] UUID-based place bucketing (00.json through FF.json)
+- [x] UUID-based place bucketing (0.json through F.json, 16 buckets)
 - [x] Month-based item files (YYYY-MM.json)
 - [x] Week-based sample files (YYYY-Www.json)
 - [x] Proper date sorting before grouping
 - [x] Standardized uppercase UUIDs
+- [x] Incremental export mode with lastBackupDate tracking
+- [x] Extension handler protocol for app-specific tables
 
 ## In Progress
 
 ### Error Handling
-- [ ] Export cancellation handling
+- [x] Export cancellation handling (Task.checkCancellation between phases/buckets)
 - [ ] Cleanup of partial exports on failure
 - [ ] Recovery from interrupted exports
 
 ### Progress Tracking
-- [ ] Phase-specific progress reporting
-- [ ] Overall progress calculation
+- [x] Phase-specific progress reporting
+- [x] Overall progress calculation
 - [ ] UI integration for progress display
 
 ### Performance
@@ -55,11 +57,10 @@ Current status of the export/import system implementation.
 
 ## Future Work
 
-### Arc Editor Features
-- [ ] Automatic daily/monthly export updates
-- [ ] UI for manual exports (date range selection)
-- [ ] Export browser/viewer
-- [ ] Import progress display
+### App Integration
+- [ ] Example BGTask scheduled backup implementation
+- [ ] Example ExportExtensionHandler for app-specific tables
+- [ ] UI integration examples
 
 ### Legacy Support
 - [ ] Conversion tools for old Arc Timeline exports

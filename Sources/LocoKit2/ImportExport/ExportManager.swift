@@ -8,6 +8,15 @@
 import Foundation
 import GRDB
 
+// MARK: - Extension Protocol
+
+public protocol ExportExtensionHandler: Sendable {
+    var identifier: String { get }
+    func export(to directory: URL, type: ExportType, lastBackupDate: Date?) async throws -> Int
+}
+
+// MARK: -
+
 @ImportExportActor
 public enum ExportManager {
     public static let schemaVersion = "2.0.0"
@@ -17,6 +26,11 @@ public enum ExportManager {
     public private(set) static var exportInProgress = false
     public private(set) static var currentPhase: ExportPhase?
     public private(set) static var progress: Double = 0
+
+    // bounded snapshot for incremental exports
+    private static var currentExportType: ExportType = .full
+    private static var snapshotLowerBound: Date?  // lastBackupDate from manifest (nil = export all)
+    private static var snapshotUpperBound: Date?  // startTime of this export session
 
     public enum ExportPhase: Sendable {
         case connecting
@@ -51,7 +65,11 @@ public enum ExportManager {
 
     // MARK: - Export process
 
-    public static func startExport() async throws {
+    public static func export(
+        to baseURL: URL,
+        type: ExportType = .full,
+        extensions: [ExportExtensionHandler] = []
+    ) async throws {
         guard !exportInProgress else {
             throw ImportExportError.exportInProgress
         }
@@ -61,57 +79,79 @@ public enum ExportManager {
         currentPhase = .connecting
         progress = 0
 
-        logger.info("ExportManager: Starting JSON export", subsystem: .exporting)
-
-        // create root export dir with timestamp
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        let timestamp = formatter.string(from: .now)
-
-        // Get iCloud container root
-        guard let iCloudRoot = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
-            cleanupFailedExport()
-            throw ImportExportError.iCloudNotAvailable
-        }
+        logger.info("ExportManager: Starting \(type) export", subsystem: .exporting)
 
         do {
-            // Create Documents dir under container root if needed
-            let documentsRoot = iCloudRoot.appendingPathComponent("Documents", isDirectory: true)
-            try FileManager.default.createDirectory(at: documentsRoot, withIntermediateDirectories: true)
+            // set up export directory
+            switch type {
+            case .full:
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+                let timestamp = formatter.string(from: .now)
+                let exportDir = baseURL.appendingPathComponent("export-\(timestamp)", isDirectory: true)
+                try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
+                currentExportURL = exportDir
 
-            // Create exports dir under Documents
-            let exportsRoot = documentsRoot.appendingPathComponent("Exports", isDirectory: true)
-            try FileManager.default.createDirectory(at: exportsRoot, withIntermediateDirectories: true)
+            case .incremental:
+                // use baseURL directly as the backup directory
+                try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+                currentExportURL = baseURL
+            }
 
-            let rootURL = exportsRoot.appendingPathComponent("export-\(timestamp)", isDirectory: true)
-
-            try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
-            currentExportURL = rootURL
-
-            // create type dirs
+            // create type subdirs
             try FileManager.default.createDirectory(at: placesURL!, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: itemsURL!, withIntermediateDirectories: true)
             try FileManager.default.createDirectory(at: samplesURL!, withIntermediateDirectories: true)
 
-            // Write initial metadata before starting export
-            try await writeInitialMetadata()
-
-            // start with places export
-            try await exportPlaces()
-            
-            // Export completed successfully
-            let duration = Date().timeIntervalSince(startTime)
-            let durationString = String(format: "%.1f", duration)
-            let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
-                let places = try Place.fetchCount(db)
-                let items = try TimelineItemBase
-                    .filter { $0.startDate != nil }
-                    .fetchCount(db)
-                let samples = try LocomotionSample.fetchCount(db)
-                return (places, items, samples)
+            // purge any iCloud conflict files before incremental export
+            if type == .incremental {
+                iCloudCoordinator.purgeConflictFiles(in: placesURL!)
+                iCloudCoordinator.purgeConflictFiles(in: itemsURL!)
+                iCloudCoordinator.purgeConflictFiles(in: samplesURL!)
             }
-            logger.info("ExportManager completed successfully in \(durationString)s: \(placeCount) places, \(itemCount) items, \(sampleCount) samples", subsystem: .exporting)
-            
+
+            // set up bounded snapshot for queries
+            currentExportType = type
+            snapshotUpperBound = startTime
+            snapshotLowerBound = nil
+
+            // for incremental, read existing manifest for lastBackupDate
+            if type == .incremental, let existingManifest = try? loadManifest() {
+                snapshotLowerBound = existingManifest.lastBackupDate
+                logger.info("ExportManager: Incremental from \(snapshotLowerBound?.description ?? "beginning")", subsystem: .exporting)
+            }
+
+            // write initial metadata
+            try await writeInitialMetadata(type: type, startTime: startTime)
+
+            // sequential export phases with cancellation checks
+            try Task.checkCancellation()
+            try await exportPlaces()
+
+            try Task.checkCancellation()
+            try await exportItems()
+
+            try Task.checkCancellation()
+            try await exportSamples()
+
+            // run extension handlers
+            for handler in extensions {
+                try Task.checkCancellation()
+                let count = try await handler.export(
+                    to: currentExportURL!,
+                    type: type,
+                    lastBackupDate: snapshotLowerBound
+                )
+                logger.info("ExportManager: Extension '\(handler.identifier)' exported \(count) records", subsystem: .exporting)
+            }
+
+            // finalize
+            try finaliseMetadata(completed: true, startTime: startTime)
+            exportInProgress = false
+
+            let duration = Date().timeIntervalSince(startTime)
+            logger.info("ExportManager: \(type) export completed in \(String(format: "%.1f", duration))s", subsystem: .exporting)
+
         } catch {
             logger.error("Export failed: \(error.localizedDescription)", subsystem: .exporting)
             logger.error(error, subsystem: .exporting)
@@ -122,12 +162,20 @@ public enum ExportManager {
 
     // MARK: - Metadata
 
-    private static func writeInitialMetadata() async throws {
+    private static func loadManifest() throws -> ExportMetadata? {
+        guard let metadataURL, FileManager.default.fileExists(atPath: metadataURL.path) else {
+            return nil
+        }
+        let data = try Data(contentsOf: metadataURL)
+        return try JSONDecoder().decode(ExportMetadata.self, from: data)
+    }
+
+    private static func writeInitialMetadata(type: ExportType, startTime: Date) async throws {
         guard let metadataURL else {
             throw ImportExportError.exportNotInitialised
         }
 
-        // Gather stats
+        // gather stats
         let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
             let places = try Place.fetchCount(db)
             let items = try TimelineItemBase
@@ -146,9 +194,9 @@ public enum ExportManager {
         let metadata = ExportMetadata(
             schemaVersion: ExportManager.schemaVersion,
             exportMode: .bucketed,
-            exportType: .full,
-            sessionStartDate: .now,
-            sessionFinishDate: nil, // will be set when export completes
+            exportType: type,
+            sessionStartDate: startTime,
+            sessionFinishDate: nil,
             itemsCompleted: false,
             placesCompleted: false,
             samplesCompleted: false,
@@ -158,7 +206,7 @@ public enum ExportManager {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
         let data = try encoder.encode(metadata)
-        try data.write(to: metadataURL)
+        try iCloudCoordinator.writeCoordinated(data: data, to: metadataURL)
     }
 
     // MARK: - Places
@@ -167,48 +215,69 @@ public enum ExportManager {
         guard let placesURL else {
             throw ImportExportError.exportNotInitialised
         }
-        
+
         currentPhase = .exportingPlaces
         progress = 0
 
         logger.info("ExportManager: Starting places export", subsystem: .exporting)
 
-        // get all places
+        // for incremental: find which buckets have changes
+        let isIncremental = currentExportType == .incremental
+        let changedBuckets: Set<String>?
+        if isIncremental {
+            let changedPlaces = try await Database.pool.uncancellableRead { [snapshotLowerBound, snapshotUpperBound] db in
+                var request = Place.all()
+                if let lower = snapshotLowerBound {
+                    request = request.filter { $0.lastSaved > lower }
+                }
+                if let upper = snapshotUpperBound {
+                    request = request.filter { $0.lastSaved <= upper }
+                }
+                return try request.fetchAll(db)
+            }
+            changedBuckets = Set(changedPlaces.map { String($0.id.prefix(1)).uppercased() })
+            if changedBuckets!.isEmpty {
+                logger.info("ExportManager: No place changes to export", subsystem: .exporting)
+                return
+            }
+        } else {
+            changedBuckets = nil
+        }
+
+        // get all places, grouped by uuid prefix
         let places = try await Database.pool.uncancellableRead { db in
             try Place.fetchAll(db)
         }
 
-        // group places by uuid prefix
         var bucketedPlaces: [String: [Place]] = [:]
         for place in places {
             let prefix = String(place.id.prefix(1)).uppercased()
             bucketedPlaces[prefix, default: []].append(place)
         }
 
-        // export each bucket
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
 
-        let totalBuckets = bucketedPlaces.count
+        // filter to only changed buckets for incremental
+        let bucketsToWrite = isIncremental
+            ? bucketedPlaces.filter { changedBuckets!.contains($0.key) }
+            : bucketedPlaces
+
+        let totalBuckets = bucketsToWrite.count
         var completedBuckets = 0
 
-        for (prefix, places) in bucketedPlaces {
+        for (prefix, bucketPlaces) in bucketsToWrite {
+            try Task.checkCancellation()
+
             let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
-            let data = try encoder.encode(places)
-            try data.write(to: bucketURL)
-            print("Exported \(places.count) places to \(prefix).json")
+            let data = try encoder.encode(bucketPlaces)
+            try iCloudCoordinator.writeCoordinated(data: data, to: bucketURL)
 
             completedBuckets += 1
             progress = Double(completedBuckets) / Double(totalBuckets)
         }
-        
+
         logger.info("ExportManager: Places export completed (\(places.count) places in \(bucketedPlaces.count) buckets)", subsystem: .exporting)
-
-        // Mark places as completed
-        try finaliseMetadata(placesCompleted: true)
-
-        // Continue with items export
-        try await exportItems()
     }
 
     // MARK: - Items
@@ -217,13 +286,43 @@ public enum ExportManager {
         guard let itemsURL else {
             throw ImportExportError.exportNotInitialised
         }
-        
+
         currentPhase = .exportingItems
         progress = 0
 
         logger.info("ExportManager: Starting timeline items export", subsystem: .exporting)
 
-        // Get all timeline items with their full relationships loaded
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+
+        // for incremental: find which months have changes
+        let isIncremental = currentExportType == .incremental
+        let changedMonths: Set<String>?
+        if isIncremental {
+            let changedItems = try await Database.pool.uncancellableRead { [snapshotLowerBound, snapshotUpperBound] db in
+                var request = TimelineItem
+                    .itemBaseRequest(includeSamples: false, includePlaces: false)
+                if let lower = snapshotLowerBound {
+                    request = request.filter { $0.lastSaved > lower }
+                }
+                if let upper = snapshotUpperBound {
+                    request = request.filter { $0.lastSaved <= upper }
+                }
+                return try request.asRequest(of: TimelineItem.self).fetchAll(db)
+            }
+            changedMonths = Set(changedItems.compactMap { item in
+                guard let startDate = item.dateRange?.start else { return nil }
+                return formatter.string(from: startDate)
+            })
+            if changedMonths!.isEmpty {
+                logger.info("ExportManager: No item changes to export", subsystem: .exporting)
+                return
+            }
+        } else {
+            changedMonths = nil
+        }
+
+        // get all items, grouped by month
         let items = try await Database.pool.uncancellableRead { db in
             try TimelineItem
                 .itemBaseRequest(includeSamples: false, includePlaces: false)
@@ -232,142 +331,136 @@ public enum ExportManager {
                 .fetchAll(db)
         }
 
-        // group items by YYYY-MM
         var monthlyItems: [String: [TimelineItem]] = [:]
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-
         for item in items {
             guard let startDate = item.dateRange?.start else { continue }
             let monthKey = formatter.string(from: startDate)
             monthlyItems[monthKey, default: []].append(item)
         }
 
-        // export each month's items
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
 
-        let totalMonths = monthlyItems.count
+        // filter to only changed months for incremental
+        let monthsToWrite = isIncremental
+            ? monthlyItems.filter { changedMonths!.contains($0.key) }
+            : monthlyItems
+
+        let totalMonths = monthsToWrite.count
         var completedMonths = 0
 
-        for (monthKey, items) in monthlyItems {
+        for (monthKey, bucketItems) in monthsToWrite {
+            try Task.checkCancellation()
+
             let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
-            let data = try encoder.encode(items)
-            try data.write(to: monthURL)
-            print("Exported \(items.count) items to \(monthKey).json")
+            let data = try encoder.encode(bucketItems)
+            try iCloudCoordinator.writeCoordinated(data: data, to: monthURL)
 
             completedMonths += 1
             progress = Double(completedMonths) / Double(totalMonths)
         }
-        
+
         logger.info("ExportManager: Timeline items export completed (\(items.count) items in \(monthlyItems.count) months)", subsystem: .exporting)
-
-        // Mark items as completed
-        try finaliseMetadata(placesCompleted: true, itemsCompleted: true)
-
-        // Continue with samples export
-        try await exportSamples()
     }
 
     // MARK: - Samples
-    
+
     private static func exportSamples() async throws {
         guard let samplesURL else {
             throw ImportExportError.exportNotInitialised
         }
-        
+
         currentPhase = .exportingSamples
         progress = 0
 
         logger.info("ExportManager: Starting samples export", subsystem: .exporting)
 
-        // First get the date range of samples to export
         let (minDate, maxDate, totalCount) = try await Database.pool.uncancellableRead { db in
             let earliest = try LocomotionSample.select({ min($0.date) }, as: Date.self).fetchOne(db)
             let latest = try LocomotionSample.select({ max($0.date) }, as: Date.self).fetchOne(db)
             let count = try LocomotionSample.fetchCount(db)
             return (earliest, latest, count)
         }
-        
+
         guard let minDate, let maxDate else {
             logger.info("ExportManager: No samples to export", subsystem: .exporting)
-            // Update metadata with success (but no samples)
-            try finaliseMetadata(placesCompleted: true, itemsCompleted: true, samplesCompleted: true)
-            exportInProgress = false
             return
         }
-        
+
         logger.info("ExportManager: Found \(totalCount) samples from \(minDate) to \(maxDate)", subsystem: .exporting)
 
-        // Set up UTC calendar for consistent week calculations
         var calendar = Calendar.current
         calendar.timeZone = TimeZone(identifier: "UTC")!
-        calendar.firstWeekday = 2  // Monday = 2
-        
-        // Process samples week by week to avoid memory pressure
+        calendar.firstWeekday = 2
+
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
-        
+
         var totalExported = 0
         var weekCount = 0
-        
-        // Start from the beginning of the week containing minDate
         var currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: minDate)!.start
-        
+        let isIncremental = currentExportType == .incremental
+
         while currentWeekStart <= maxDate {
-            // Calculate week end
+            try Task.checkCancellation()
+
             let weekEnd = calendar.date(byAdding: .weekOfYear, value: 1, to: currentWeekStart)!
-            
-            // Query only this week's samples
+
+            // for incremental: check if this week has any changes
+            if isIncremental {
+                let hasChanges = try await Database.pool.uncancellableRead { [currentWeekStart, weekEnd, snapshotLowerBound, snapshotUpperBound] db in
+                    var request = LocomotionSample
+                        .filter { $0.date >= currentWeekStart && $0.date < weekEnd }
+                    if let lower = snapshotLowerBound {
+                        request = request.filter { $0.lastSaved > lower }
+                    }
+                    if let upper = snapshotUpperBound {
+                        request = request.filter { $0.lastSaved <= upper }
+                    }
+                    return try request.fetchCount(db) > 0
+                }
+                if !hasChanges {
+                    currentWeekStart = weekEnd
+                    continue
+                }
+            }
+
+            // fetch all samples for this week
             let weekSamples = try await Database.pool.uncancellableRead { [currentWeekStart, weekEnd] db in
                 try LocomotionSample
                     .filter { $0.date >= currentWeekStart && $0.date < weekEnd }
                     .order(\.date.asc)
                     .fetchAll(db)
             }
-            
+
             if !weekSamples.isEmpty {
-                // Generate week ID in YYYY-Www format
                 let weekOfYear = calendar.component(.weekOfYear, from: currentWeekStart)
                 let year = calendar.component(.year, from: currentWeekStart)
                 let weekId = String(format: "%4d-W%02d", year, weekOfYear)
-                
-                // Write this week's samples
+
                 let weekURL = samplesURL.appendingPathComponent("\(weekId).json")
                 let data = try encoder.encode(weekSamples)
-                try data.write(to: weekURL)
-                
+                try iCloudCoordinator.writeCoordinated(data: data, to: weekURL)
+
                 totalExported += weekSamples.count
                 weekCount += 1
-
-                // update progress based on samples exported
                 progress = Double(totalExported) / Double(totalCount)
 
-                print("Exported \(weekSamples.count) samples to \(weekId).json")
-
-                // Log progress every 10 weeks
                 if weekCount % 10 == 0 {
-                    logger.info("ExportManager: Samples export progress - \(totalExported)/\(totalCount) samples in \(weekCount) weeks", subsystem: .exporting)
+                    logger.info("ExportManager: Samples progress - \(totalExported)/\(totalCount) in \(weekCount) weeks", subsystem: .exporting)
                 }
             }
-            
-            // Move to next week
+
             currentWeekStart = weekEnd
         }
-        
+
         logger.info("ExportManager: Samples export completed (\(totalExported) samples in \(weekCount) weeks)", subsystem: .exporting)
-
-        // Update metadata with success
-        try finaliseMetadata(placesCompleted: true, itemsCompleted: true, samplesCompleted: true)
-
-        // Export complete - clear state
-        exportInProgress = false
     }
 
 
-    // MARK: - Error handling
+    // MARK: - Metadata Finalization
 
-    private static func finaliseMetadata(placesCompleted: Bool = false, itemsCompleted: Bool = false, samplesCompleted: Bool = false) throws {
+    private static func finaliseMetadata(completed: Bool, startTime: Date) throws {
         guard let metadataURL else {
             throw ImportExportError.exportNotInitialised
         }
@@ -376,32 +469,32 @@ public enum ExportManager {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
 
-        // Read existing metadata
         let data = try Data(contentsOf: metadataURL)
-        let metadata = try decoder.decode(ExportMetadata.self, from: data)
+        var metadata = try decoder.decode(ExportMetadata.self, from: data)
 
-        // Update with completion status
+        if completed {
+            metadata.lastBackupDate = startTime
+        }
+
         let updatedMetadata = ExportMetadata(
             schemaVersion: metadata.schemaVersion,
             exportMode: metadata.exportMode,
             exportType: metadata.exportType,
             sessionStartDate: metadata.sessionStartDate,
-            sessionFinishDate: samplesCompleted ? .now : nil,  // Only set finish time if fully complete
-            itemsCompleted: itemsCompleted,
-            placesCompleted: placesCompleted,
-            samplesCompleted: samplesCompleted,
-            stats: metadata.stats
+            sessionFinishDate: completed ? .now : nil,
+            itemsCompleted: completed,
+            placesCompleted: completed,
+            samplesCompleted: completed,
+            stats: metadata.stats,
+            lastBackupDate: metadata.lastBackupDate,
+            extensions: metadata.extensions
         )
 
-        // Write updated metadata
         let updatedData = try encoder.encode(updatedMetadata)
-        try updatedData.write(to: metadataURL)
+        try iCloudCoordinator.writeCoordinated(data: updatedData, to: metadataURL)
     }
 
     private static func cleanupFailedExport() {
-        // Leave completion flags as-is but ensure finish time is set
-        try? finaliseMetadata()
-
         if let currentExportURL {
             try? FileManager.default.removeItem(at: currentExportURL)
         }

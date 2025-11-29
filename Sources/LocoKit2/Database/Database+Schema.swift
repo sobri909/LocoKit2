@@ -125,7 +125,7 @@ extension Database {
 
             try db.create(table: "LocomotionSample") { table in
                 table.primaryKey("id", .text)
-                table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+                table.column("lastSaved", .datetime).notNull().indexed().defaults(sql: "CURRENT_TIMESTAMP")
                 table.column("rtreeId", .integer).indexed()
 
                 table.column("date", .datetime).notNull().indexed()
