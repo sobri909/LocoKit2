@@ -10,6 +10,7 @@ public extension TimeInterval {
     static func minutes(_ minutes: Int) -> TimeInterval { 60.0 * Double(minutes) }
     static func hours(_ hours: Int) -> TimeInterval { .minutes(60) * Double(hours) }
     static func days(_ days: Int) -> TimeInterval { .hours(24) * Double(days) }
+    static func months(_ months: Int) -> TimeInterval { .days(30) * Double(months) }  // approximate
     var unit: Measurement<UnitDuration> { Measurement(value: self, unit: UnitDuration.seconds) }
 }
 

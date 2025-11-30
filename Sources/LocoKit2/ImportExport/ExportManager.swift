@@ -32,6 +32,10 @@ public enum ExportManager {
     private static var snapshotLowerBound: Date?  // lastBackupDate from manifest (nil = export all)
     private static var snapshotUpperBound: Date?  // startTime of this export session
 
+    // catch-up mode for first-run chunked backups
+    private static var catchUpDateRange: DateInterval?  // nil = normal mode, set = catch-up chunk
+    private static let catchUpChunkSize: TimeInterval = .months(6)
+
     public enum ExportPhase: Sendable {
         case connecting
         case exportingPlaces
@@ -114,11 +118,32 @@ public enum ExportManager {
             currentExportType = type
             snapshotUpperBound = startTime
             snapshotLowerBound = nil
+            catchUpDateRange = nil
 
-            // for incremental, read existing manifest for lastBackupDate
+            // for incremental, read existing manifest and determine mode
             if type == .incremental, let existingManifest = try? loadManifest() {
-                snapshotLowerBound = existingManifest.lastBackupDate
-                logger.info("ExportManager: Incremental from \(snapshotLowerBound?.description ?? "beginning")", subsystem: .exporting)
+                if let lastBackup = existingManifest.lastBackupDate {
+                    // normal incremental mode
+                    snapshotLowerBound = lastBackup
+                    logger.info("ExportManager: Incremental from \(lastBackup)", subsystem: .exporting)
+
+                } else {
+                    // catch-up mode: no completed backup yet
+                    let progressDate = existingManifest.backupProgressDate
+                    let earliestDate = await getEarliestDataDate()
+                    let chunkStart = progressDate ?? earliestDate ?? startTime
+                    let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
+                    catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
+                    logger.info("ExportManager: Catch-up mode from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
+                }
+
+            } else if type == .incremental {
+                // no manifest exists - start catch-up from earliest data
+                let earliestDate = await getEarliestDataDate()
+                let chunkStart = earliestDate ?? startTime
+                let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
+                catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
+                logger.info("ExportManager: Catch-up mode (first run) from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
             }
 
             // write initial metadata
@@ -131,8 +156,34 @@ public enum ExportManager {
             try Task.checkCancellation()
             try await exportItems()
 
-            try Task.checkCancellation()
-            try await exportSamples()
+            // samples export (with catch-up loop if needed)
+            if catchUpDateRange != nil {
+                while catchUpDateRange != nil {
+                    try Task.checkCancellation()
+                    try await exportSamples()
+
+                    try finaliseMetadata(
+                        placesCompleted: true,
+                        itemsCompleted: true,
+                        samplesCompleted: false,
+                        startTime: startTime
+                    )
+
+                    // check if caught up, calculate next chunk if not
+                    if let manifest = try? loadManifest() {
+                        if manifest.lastBackupDate != nil {
+                            catchUpDateRange = nil
+                        } else if let progressDate = manifest.backupProgressDate {
+                            let nextEnd = min(progressDate.addingTimeInterval(catchUpChunkSize), startTime)
+                            catchUpDateRange = DateInterval(start: progressDate, end: nextEnd)
+                        }
+                    }
+                }
+
+            } else {
+                try Task.checkCancellation()
+                try await exportSamples()
+            }
 
             // run extension handlers
             var extensionStates: [String: ExtensionState] = [:]
@@ -148,11 +199,16 @@ public enum ExportManager {
             }
 
             // finalize
-            try finaliseMetadata(completed: true, startTime: startTime, extensions: extensionStates)
+            try finaliseMetadata(
+                placesCompleted: true,
+                itemsCompleted: true,
+                samplesCompleted: true,
+                startTime: startTime,
+                extensions: extensionStates
+            )
             exportInProgress = false
 
-            let duration = Date().timeIntervalSince(startTime)
-            logger.info("ExportManager: \(type) export completed in \(String(format: "%.1f", duration))s", subsystem: .exporting)
+            logger.info("ExportManager: \(type) export completed in \(String(format: "%.1f", startTime.age))s", subsystem: .exporting)
 
         } catch {
             logger.error("Export failed: \(error.localizedDescription)", subsystem: .exporting)
@@ -170,6 +226,12 @@ public enum ExportManager {
         }
         let data = try Data(contentsOf: metadataURL)
         return try JSONDecoder().decode(ExportMetadata.self, from: data)
+    }
+
+    private static func getEarliestDataDate() async -> Date? {
+        try? await Database.pool.read { db in
+            try LocomotionSample.select({ min($0.date) }, as: Date.self).fetchOne(db)
+        }
     }
 
     private static func writeInitialMetadata(type: ExportType, startTime: Date) async throws {
@@ -276,7 +338,7 @@ public enum ExportManager {
             try iCloudCoordinator.writeCoordinated(data: data, to: bucketURL)
 
             completedBuckets += 1
-            progress = Double(completedBuckets) / Double(totalBuckets)
+            progress = (Double(completedBuckets) / Double(totalBuckets)).clamped(min: 0, max: 1)
         }
 
         logger.info("ExportManager: Places export completed (\(places.count) places in \(bucketedPlaces.count) buckets)", subsystem: .exporting)
@@ -359,7 +421,7 @@ public enum ExportManager {
             try iCloudCoordinator.writeCoordinated(data: data, to: monthURL)
 
             completedMonths += 1
-            progress = Double(completedMonths) / Double(totalMonths)
+            progress = (Double(completedMonths) / Double(totalMonths)).clamped(min: 0, max: 1)
         }
 
         logger.info("ExportManager: Timeline items export completed (\(items.count) items in \(monthlyItems.count) months)", subsystem: .exporting)
@@ -377,19 +439,41 @@ public enum ExportManager {
 
         logger.info("ExportManager: Starting samples export", subsystem: .exporting)
 
-        let (minDate, maxDate, totalCount) = try await Database.pool.uncancellableRead { db in
-            let earliest = try LocomotionSample.select({ min($0.date) }, as: Date.self).fetchOne(db)
-            let latest = try LocomotionSample.select({ max($0.date) }, as: Date.self).fetchOne(db)
-            let count = try LocomotionSample.fetchCount(db)
-            return (earliest, latest, count)
-        }
+        // determine date range to export
+        let exportStart: Date
+        let exportEnd: Date
+        let totalCount: Int
 
-        guard let minDate, let maxDate else {
-            logger.info("ExportManager: No samples to export", subsystem: .exporting)
-            return
-        }
+        if let catchUpRange = catchUpDateRange {
+            // catch-up mode: export specific date range
+            exportStart = catchUpRange.start
+            exportEnd = catchUpRange.end
+            totalCount = try await Database.pool.uncancellableRead { [exportStart, exportEnd] db in
+                try LocomotionSample
+                    .filter { $0.date >= exportStart && $0.date < exportEnd }
+                    .fetchCount(db)
+            }
+            logger.info("ExportManager: Catch-up chunk with \(totalCount) samples from \(exportStart) to \(exportEnd)", subsystem: .exporting)
 
-        logger.info("ExportManager: Found \(totalCount) samples from \(minDate) to \(maxDate)", subsystem: .exporting)
+        } else {
+            // full or normal incremental: use full data range
+            let (minDate, maxDate, count) = try await Database.pool.uncancellableRead { db in
+                let earliest = try LocomotionSample.select({ min($0.date) }, as: Date.self).fetchOne(db)
+                let latest = try LocomotionSample.select({ max($0.date) }, as: Date.self).fetchOne(db)
+                let count = try LocomotionSample.fetchCount(db)
+                return (earliest, latest, count)
+            }
+
+            guard let minDate, let maxDate else {
+                logger.info("ExportManager: No samples to export", subsystem: .exporting)
+                return
+            }
+
+            exportStart = minDate
+            exportEnd = maxDate
+            totalCount = count
+            logger.info("ExportManager: Found \(totalCount) samples from \(exportStart) to \(exportEnd)", subsystem: .exporting)
+        }
 
         var calendar = Calendar.current
         calendar.timeZone = TimeZone(identifier: "UTC")!
@@ -400,16 +484,16 @@ public enum ExportManager {
 
         var totalExported = 0
         var weekCount = 0
-        var currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: minDate)!.start
-        let isIncremental = currentExportType == .incremental
+        var currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: exportStart)!.start
+        let isNormalIncremental = currentExportType == .incremental && catchUpDateRange == nil
 
-        while currentWeekStart <= maxDate {
+        while currentWeekStart <= exportEnd {
             try Task.checkCancellation()
 
             let weekEnd = calendar.date(byAdding: .weekOfYear, value: 1, to: currentWeekStart)!
 
-            // for incremental: check if this week has any changes
-            if isIncremental {
+            // for normal incremental (not catch-up): check if this week has any changes
+            if isNormalIncremental {
                 let hasChanges = try await Database.pool.uncancellableRead { [currentWeekStart, weekEnd, snapshotLowerBound, snapshotUpperBound] db in
                     var request = LocomotionSample
                         .filter { $0.date >= currentWeekStart && $0.date < weekEnd }
@@ -446,7 +530,7 @@ public enum ExportManager {
 
                 totalExported += weekSamples.count
                 weekCount += 1
-                progress = Double(totalExported) / Double(totalCount)
+                progress = (Double(totalExported) / Double(totalCount)).clamped(min: 0, max: 1)
 
                 if weekCount % 10 == 0 {
                     logger.info("ExportManager: Samples progress - \(totalExported)/\(totalCount) in \(weekCount) weeks", subsystem: .exporting)
@@ -463,7 +547,9 @@ public enum ExportManager {
     // MARK: - Metadata Finalization
 
     private static func finaliseMetadata(
-        completed: Bool,
+        placesCompleted: Bool,
+        itemsCompleted: Bool,
+        samplesCompleted: Bool,
         startTime: Date,
         extensions: [String: ExtensionState] = [:]
     ) throws {
@@ -476,10 +562,26 @@ public enum ExportManager {
         encoder.outputFormatting = [.prettyPrinted]
 
         let data = try Data(contentsOf: metadataURL)
-        var metadata = try decoder.decode(ExportMetadata.self, from: data)
+        let metadata = try decoder.decode(ExportMetadata.self, from: data)
 
-        if completed {
-            metadata.lastBackupDate = startTime
+        // handle catch-up mode vs normal mode
+        var newBackupProgressDate = metadata.backupProgressDate
+        var newLastBackupDate = metadata.lastBackupDate
+
+        if let catchUpRange = catchUpDateRange {
+            // catch-up mode: update progress
+            newBackupProgressDate = catchUpRange.end
+
+            // check if we're caught up (chunk end reached present time)
+            if catchUpRange.end >= startTime {
+                newLastBackupDate = startTime
+                newBackupProgressDate = nil  // clear progress, we're done catching up
+                logger.info("ExportManager: Catch-up complete, switching to normal incremental mode", subsystem: .exporting)
+            }
+
+        } else if samplesCompleted {
+            // normal mode: update lastBackupDate when samples are done
+            newLastBackupDate = startTime
         }
 
         // merge new extension states with existing
@@ -488,17 +590,20 @@ public enum ExportManager {
             mergedExtensions[key] = value
         }
 
+        let allCompleted = placesCompleted && itemsCompleted && samplesCompleted
+
         let updatedMetadata = ExportMetadata(
             schemaVersion: metadata.schemaVersion,
             exportMode: metadata.exportMode,
             exportType: metadata.exportType,
             sessionStartDate: metadata.sessionStartDate,
-            sessionFinishDate: completed ? .now : nil,
-            itemsCompleted: completed,
-            placesCompleted: completed,
-            samplesCompleted: completed,
+            sessionFinishDate: allCompleted ? .now : nil,
+            itemsCompleted: itemsCompleted,
+            placesCompleted: placesCompleted,
+            samplesCompleted: samplesCompleted,
             stats: metadata.stats,
-            lastBackupDate: metadata.lastBackupDate,
+            lastBackupDate: newLastBackupDate,
+            backupProgressDate: newBackupProgressDate,
             extensions: mergedExtensions.isEmpty ? nil : mergedExtensions
         )
 
