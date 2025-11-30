@@ -25,7 +25,7 @@ Current status of the export/import system implementation.
 ### Error Handling
 - [x] Export cancellation handling (Task.checkCancellation between phases/buckets)
 - [ ] Cleanup of partial exports on failure
-- [ ] Recovery from interrupted exports
+- [x] Recovery from interrupted exports (catch-up mode with backupProgressDate)
 
 ### Progress Tracking
 - [x] Phase-specific progress reporting
@@ -58,8 +58,8 @@ Current status of the export/import system implementation.
 ## Future Work
 
 ### App Integration
-- [ ] Example BGTask scheduled backup implementation
-- [ ] Example ExportExtensionHandler for app-specific tables
+- [x] BGTask scheduled backup implementation (BackupManager in Arc Timeline Editor)
+- [x] ExportExtensionHandler for app-specific tables (NotesExportHandler in Arc Timeline Editor)
 - [ ] UI integration examples
 
 ### Legacy Support

@@ -48,6 +48,7 @@ metadata.json:
 
   // For incremental backups
   "lastBackupDate": 786072997.381,     // Timestamp for next incremental query
+  "backupProgressDate": null,          // Catch-up progress (nil when complete)
 
   // Session completion status
   "itemsCompleted": true,   // All qualifying items were exported
@@ -139,11 +140,19 @@ Incremental exports use a bounded time window:
 
 This ensures clean backup windows with no missed or duplicate data.
 
+### Catch-Up Mode
+
+For first-run backups with large datasets, the system uses catch-up mode:
+- Exports samples in 6-month chunks to stay within iOS background task limits
+- `backupProgressDate` tracks how far catch-up has progressed
+- Loops through chunks until complete or task is cancelled
+- Once caught up, `lastBackupDate` is set and `backupProgressDate` cleared
+
 ### Cancellation Handling
 
 If a backup is cancelled before completion:
-- `lastBackupDate` is NOT updated
-- Next run re-checks all buckets from previous `lastBackupDate`
+- `lastBackupDate` is NOT updated (or `backupProgressDate` preserves catch-up progress)
+- Next run resumes from where it left off
 - Re-checking already-backed-up buckets is cheap (query returns empty)
 
 Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying objects were successfully exported during that session.
