@@ -86,65 +86,13 @@ public enum ExportManager {
         logger.info("ExportManager: Starting \(type) export", subsystem: .exporting)
 
         do {
-            // set up export directory
-            switch type {
-            case .full:
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-                let timestamp = formatter.string(from: .now)
-                let exportDir = baseURL.appendingPathComponent("export-\(timestamp)", isDirectory: true)
-                try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
-                currentExportURL = exportDir
-
-            case .incremental:
-                // use baseURL directly as the backup directory
-                try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
-                currentExportURL = baseURL
-            }
-
-            // create type subdirs
-            try FileManager.default.createDirectory(at: placesURL!, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: itemsURL!, withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: samplesURL!, withIntermediateDirectories: true)
-
-            // purge any iCloud conflict files before incremental export
-            if type == .incremental {
-                iCloudCoordinator.purgeConflictFiles(in: placesURL!)
-                iCloudCoordinator.purgeConflictFiles(in: itemsURL!)
-                iCloudCoordinator.purgeConflictFiles(in: samplesURL!)
-            }
-
-            // set up bounded snapshot for queries
+            try setupExportDirectory(type: type, baseURL: baseURL)
             currentExportType = type
             snapshotUpperBound = startTime
             snapshotLowerBound = nil
             catchUpDateRange = nil
 
-            // for incremental, read existing manifest and determine mode
-            if type == .incremental, let existingManifest = try? loadManifest() {
-                if let lastBackup = existingManifest.lastBackupDate {
-                    // normal incremental mode
-                    snapshotLowerBound = lastBackup
-                    logger.info("ExportManager: Incremental from \(lastBackup)", subsystem: .exporting)
-
-                } else {
-                    // catch-up mode: no completed backup yet
-                    let progressDate = existingManifest.backupProgressDate
-                    let earliestDate = await getEarliestDataDate()
-                    let chunkStart = progressDate ?? earliestDate ?? startTime
-                    let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
-                    catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
-                    logger.info("ExportManager: Catch-up mode from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
-                }
-
-            } else if type == .incremental {
-                // no manifest exists - start catch-up from earliest data
-                let earliestDate = await getEarliestDataDate()
-                let chunkStart = earliestDate ?? startTime
-                let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
-                catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
-                logger.info("ExportManager: Catch-up mode (first run) from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
-            }
+            await determineIncrementalMode(type: type, startTime: startTime)
 
             // write initial metadata
             try await writeInitialMetadata(type: type, startTime: startTime)
@@ -156,34 +104,7 @@ public enum ExportManager {
             try Task.checkCancellation()
             try await exportItems()
 
-            // samples export (with catch-up loop if needed)
-            if catchUpDateRange != nil {
-                while catchUpDateRange != nil {
-                    try Task.checkCancellation()
-                    try await exportSamples()
-
-                    try finaliseMetadata(
-                        placesCompleted: true,
-                        itemsCompleted: true,
-                        samplesCompleted: false,
-                        startTime: startTime
-                    )
-
-                    // check if caught up, calculate next chunk if not
-                    if let manifest = try? loadManifest() {
-                        if manifest.lastBackupDate != nil {
-                            catchUpDateRange = nil
-                        } else if let progressDate = manifest.backupProgressDate {
-                            let nextEnd = min(progressDate.addingTimeInterval(catchUpChunkSize), startTime)
-                            catchUpDateRange = DateInterval(start: progressDate, end: nextEnd)
-                        }
-                    }
-                }
-
-            } else {
-                try Task.checkCancellation()
-                try await exportSamples()
-            }
+            try await exportSamplesWithCatchUp(startTime: startTime)
 
             // run extension handlers
             var extensionStates: [String: ExtensionState] = [:]
@@ -215,6 +136,126 @@ public enum ExportManager {
             logger.error(error, subsystem: .exporting)
             cleanupFailedExport()
             throw error
+        }
+    }
+
+    // MARK: - Setup
+
+    private static func determineIncrementalMode(type: ExportType, startTime: Date) async {
+        guard type == .incremental else { return }
+
+        if let existingManifest = try? loadManifest() {
+            if let lastBackup = existingManifest.lastBackupDate {
+                // normal incremental: export changes since last backup
+                snapshotLowerBound = lastBackup
+                logger.info("ExportManager: Incremental from \(lastBackup)", subsystem: .exporting)
+
+            } else {
+                // catch-up mode: resuming incomplete first backup
+                let progressDate = existingManifest.backupProgressDate
+                let earliestDate = await getEarliestDataDate()
+                let chunkStart = progressDate ?? earliestDate ?? startTime
+                let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
+                catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
+                logger.info("ExportManager: Catch-up mode from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
+            }
+
+        } else {
+            // no manifest: first backup, start catch-up from earliest data
+            let earliestDate = await getEarliestDataDate()
+            let chunkStart = earliestDate ?? startTime
+            let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
+            catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
+            logger.info("ExportManager: Catch-up mode (first run) from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
+        }
+    }
+
+    private static func exportBucketed<T: Encodable & Sendable>(
+        phase: ExportPhase,
+        directory: URL,
+        entityName: String,
+        fetchChangedKeys: () async throws -> Set<String>,
+        fetchAll: () async throws -> [T],
+        bucketKey: (T) -> String?
+    ) async throws {
+        currentPhase = phase
+        progress = 0
+
+        logger.info("ExportManager: Starting \(entityName) export", subsystem: .exporting)
+
+        // for incremental: find which buckets have changes
+        let isIncremental = currentExportType == .incremental
+        let changedKeys: Set<String>?
+
+        if isIncremental {
+            changedKeys = try await fetchChangedKeys()
+            if changedKeys!.isEmpty {
+                logger.info("ExportManager: No \(entityName) changes to export", subsystem: .exporting)
+                return
+            }
+        } else {
+            changedKeys = nil
+        }
+
+        // fetch all and group by bucket key
+        let allItems = try await fetchAll()
+
+        var bucketed: [String: [T]] = [:]
+        for item in allItems {
+            guard let key = bucketKey(item) else { continue }
+            bucketed[key, default: []].append(item)
+        }
+
+        // filter to only changed buckets for incremental
+        let bucketsToWrite = isIncremental
+            ? bucketed.filter { changedKeys!.contains($0.key) }
+            : bucketed
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted]
+
+        let totalBuckets = bucketsToWrite.count
+        var completedBuckets = 0
+
+        for (key, items) in bucketsToWrite {
+            try Task.checkCancellation()
+
+            let bucketURL = directory.appendingPathComponent("\(key).json")
+            let data = try encoder.encode(items)
+            try iCloudCoordinator.writeCoordinated(data: data, to: bucketURL)
+
+            completedBuckets += 1
+            progress = (Double(completedBuckets) / Double(totalBuckets)).clamped(min: 0, max: 1)
+        }
+
+        logger.info("ExportManager: \(entityName) export completed (\(allItems.count) in \(bucketed.count) buckets)", subsystem: .exporting)
+    }
+
+    private static func setupExportDirectory(type: ExportType, baseURL: URL) throws {
+        switch type {
+        case .full:
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+            let timestamp = formatter.string(from: .now)
+            let exportDir = baseURL.appendingPathComponent("export-\(timestamp)", isDirectory: true)
+            try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
+            currentExportURL = exportDir
+
+        case .incremental:
+            try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+            currentExportURL = baseURL
+        }
+
+        // create subdirectories
+        try FileManager.default.createDirectory(at: placesURL!, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: itemsURL!, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: samplesURL!, withIntermediateDirectories: true)
+
+        // purge iCloud conflict files for incremental
+        if type == .incremental {
+            iCloudCoordinator.purgeConflictFiles(in: placesURL!)
+            iCloudCoordinator.purgeConflictFiles(in: itemsURL!)
+            iCloudCoordinator.purgeConflictFiles(in: samplesURL!)
         }
     }
 
@@ -280,68 +321,32 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
 
-        currentPhase = .exportingPlaces
-        progress = 0
-
-        logger.info("ExportManager: Starting places export", subsystem: .exporting)
-
-        // for incremental: find which buckets have changes
-        let isIncremental = currentExportType == .incremental
-        let changedBuckets: Set<String>?
-        if isIncremental {
-            let changedPlaces = try await Database.pool.uncancellableRead { [snapshotLowerBound, snapshotUpperBound] db in
-                var request = Place.all()
-                if let lower = snapshotLowerBound {
-                    request = request.filter { $0.lastSaved > lower }
+        try await exportBucketed(
+            phase: .exportingPlaces,
+            directory: placesURL,
+            entityName: "places",
+            fetchChangedKeys: {
+                let changedPlaces = try await Database.pool.uncancellableRead { [snapshotLowerBound, snapshotUpperBound] db in
+                    var request = Place.all()
+                    if let lower = snapshotLowerBound {
+                        request = request.filter { $0.lastSaved > lower }
+                    }
+                    if let upper = snapshotUpperBound {
+                        request = request.filter { $0.lastSaved <= upper }
+                    }
+                    return try request.fetchAll(db)
                 }
-                if let upper = snapshotUpperBound {
-                    request = request.filter { $0.lastSaved <= upper }
+                return Set(changedPlaces.map { String($0.id.prefix(1)).uppercased() })
+            },
+            fetchAll: {
+                try await Database.pool.uncancellableRead { db in
+                    try Place.fetchAll(db)
                 }
-                return try request.fetchAll(db)
+            },
+            bucketKey: { place in
+                String(place.id.prefix(1)).uppercased()
             }
-            changedBuckets = Set(changedPlaces.map { String($0.id.prefix(1)).uppercased() })
-            if changedBuckets!.isEmpty {
-                logger.info("ExportManager: No place changes to export", subsystem: .exporting)
-                return
-            }
-        } else {
-            changedBuckets = nil
-        }
-
-        // get all places, grouped by uuid prefix
-        let places = try await Database.pool.uncancellableRead { db in
-            try Place.fetchAll(db)
-        }
-
-        var bucketedPlaces: [String: [Place]] = [:]
-        for place in places {
-            let prefix = String(place.id.prefix(1)).uppercased()
-            bucketedPlaces[prefix, default: []].append(place)
-        }
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
-
-        // filter to only changed buckets for incremental
-        let bucketsToWrite = isIncremental
-            ? bucketedPlaces.filter { changedBuckets!.contains($0.key) }
-            : bucketedPlaces
-
-        let totalBuckets = bucketsToWrite.count
-        var completedBuckets = 0
-
-        for (prefix, bucketPlaces) in bucketsToWrite {
-            try Task.checkCancellation()
-
-            let bucketURL = placesURL.appendingPathComponent("\(prefix).json")
-            let data = try encoder.encode(bucketPlaces)
-            try iCloudCoordinator.writeCoordinated(data: data, to: bucketURL)
-
-            completedBuckets += 1
-            progress = (Double(completedBuckets) / Double(totalBuckets)).clamped(min: 0, max: 1)
-        }
-
-        logger.info("ExportManager: Places export completed (\(places.count) places in \(bucketedPlaces.count) buckets)", subsystem: .exporting)
+        )
     }
 
     // MARK: - Items
@@ -351,83 +356,79 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
 
-        currentPhase = .exportingItems
-        progress = 0
-
-        logger.info("ExportManager: Starting timeline items export", subsystem: .exporting)
-
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM"
 
-        // for incremental: find which months have changes
-        let isIncremental = currentExportType == .incremental
-        let changedMonths: Set<String>?
-        if isIncremental {
-            let changedItems = try await Database.pool.uncancellableRead { [snapshotLowerBound, snapshotUpperBound] db in
-                var request = TimelineItem
-                    .itemBaseRequest(includeSamples: false, includePlaces: false)
-                if let lower = snapshotLowerBound {
-                    request = request.filter { $0.lastSaved > lower }
+        try await exportBucketed(
+            phase: .exportingItems,
+            directory: itemsURL,
+            entityName: "timeline items",
+            fetchChangedKeys: {
+                let changedItems = try await Database.pool.uncancellableRead { [snapshotLowerBound, snapshotUpperBound] db in
+                    var request = TimelineItem
+                        .itemBaseRequest(includeSamples: false, includePlaces: false)
+                    if let lower = snapshotLowerBound {
+                        request = request.filter { $0.lastSaved > lower }
+                    }
+                    if let upper = snapshotUpperBound {
+                        request = request.filter { $0.lastSaved <= upper }
+                    }
+                    return try request.asRequest(of: TimelineItem.self).fetchAll(db)
                 }
-                if let upper = snapshotUpperBound {
-                    request = request.filter { $0.lastSaved <= upper }
+                return Set(changedItems.compactMap { item in
+                    guard let startDate = item.dateRange?.start else { return nil }
+                    return formatter.string(from: startDate)
+                })
+            },
+            fetchAll: {
+                try await Database.pool.uncancellableRead { db in
+                    try TimelineItem
+                        .itemBaseRequest(includeSamples: false, includePlaces: false)
+                        .order(\.startDate.asc)
+                        .asRequest(of: TimelineItem.self)
+                        .fetchAll(db)
                 }
-                return try request.asRequest(of: TimelineItem.self).fetchAll(db)
-            }
-            changedMonths = Set(changedItems.compactMap { item in
+            },
+            bucketKey: { item in
                 guard let startDate = item.dateRange?.start else { return nil }
                 return formatter.string(from: startDate)
-            })
-            if changedMonths!.isEmpty {
-                logger.info("ExportManager: No item changes to export", subsystem: .exporting)
-                return
             }
-        } else {
-            changedMonths = nil
-        }
-
-        // get all items, grouped by month
-        let items = try await Database.pool.uncancellableRead { db in
-            try TimelineItem
-                .itemBaseRequest(includeSamples: false, includePlaces: false)
-                .order(\.startDate.asc)
-                .asRequest(of: TimelineItem.self)
-                .fetchAll(db)
-        }
-
-        var monthlyItems: [String: [TimelineItem]] = [:]
-        for item in items {
-            guard let startDate = item.dateRange?.start else { continue }
-            let monthKey = formatter.string(from: startDate)
-            monthlyItems[monthKey, default: []].append(item)
-        }
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
-
-        // filter to only changed months for incremental
-        let monthsToWrite = isIncremental
-            ? monthlyItems.filter { changedMonths!.contains($0.key) }
-            : monthlyItems
-
-        let totalMonths = monthsToWrite.count
-        var completedMonths = 0
-
-        for (monthKey, bucketItems) in monthsToWrite {
-            try Task.checkCancellation()
-
-            let monthURL = itemsURL.appendingPathComponent("\(monthKey).json")
-            let data = try encoder.encode(bucketItems)
-            try iCloudCoordinator.writeCoordinated(data: data, to: monthURL)
-
-            completedMonths += 1
-            progress = (Double(completedMonths) / Double(totalMonths)).clamped(min: 0, max: 1)
-        }
-
-        logger.info("ExportManager: Timeline items export completed (\(items.count) items in \(monthlyItems.count) months)", subsystem: .exporting)
+        )
     }
 
     // MARK: - Samples
+
+    private static func exportSamplesWithCatchUp(startTime: Date) async throws {
+        if catchUpDateRange != nil {
+            // catch-up mode: loop through chunks until complete
+            while catchUpDateRange != nil {
+                try Task.checkCancellation()
+                try await exportSamples()
+
+                try finaliseMetadata(
+                    placesCompleted: true,
+                    itemsCompleted: true,
+                    samplesCompleted: false,
+                    startTime: startTime
+                )
+
+                // check if caught up, calculate next chunk if not
+                if let manifest = try? loadManifest() {
+                    if manifest.lastBackupDate != nil {
+                        catchUpDateRange = nil
+                    } else if let progressDate = manifest.backupProgressDate {
+                        let nextEnd = min(progressDate.addingTimeInterval(catchUpChunkSize), startTime)
+                        catchUpDateRange = DateInterval(start: progressDate, end: nextEnd)
+                    }
+                }
+            }
+
+        } else {
+            // normal mode: single export pass
+            try Task.checkCancellation()
+            try await exportSamples()
+        }
+    }
 
     private static func exportSamples() async throws {
         guard let samplesURL else {
