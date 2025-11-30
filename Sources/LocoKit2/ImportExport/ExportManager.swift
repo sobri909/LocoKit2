@@ -135,6 +135,7 @@ public enum ExportManager {
             try await exportSamples()
 
             // run extension handlers
+            var extensionStates: [String: ExtensionState] = [:]
             for handler in extensions {
                 try Task.checkCancellation()
                 let count = try await handler.export(
@@ -142,11 +143,12 @@ public enum ExportManager {
                     type: type,
                     lastBackupDate: snapshotLowerBound
                 )
+                extensionStates[handler.identifier] = ExtensionState(recordCount: count)
                 logger.info("ExportManager: Extension '\(handler.identifier)' exported \(count) records", subsystem: .exporting)
             }
 
             // finalize
-            try finaliseMetadata(completed: true, startTime: startTime)
+            try finaliseMetadata(completed: true, startTime: startTime, extensions: extensionStates)
             exportInProgress = false
 
             let duration = Date().timeIntervalSince(startTime)
@@ -460,7 +462,11 @@ public enum ExportManager {
 
     // MARK: - Metadata Finalization
 
-    private static func finaliseMetadata(completed: Bool, startTime: Date) throws {
+    private static func finaliseMetadata(
+        completed: Bool,
+        startTime: Date,
+        extensions: [String: ExtensionState] = [:]
+    ) throws {
         guard let metadataURL else {
             throw ImportExportError.exportNotInitialised
         }
@@ -476,6 +482,12 @@ public enum ExportManager {
             metadata.lastBackupDate = startTime
         }
 
+        // merge new extension states with existing
+        var mergedExtensions = metadata.extensions ?? [:]
+        for (key, value) in extensions {
+            mergedExtensions[key] = value
+        }
+
         let updatedMetadata = ExportMetadata(
             schemaVersion: metadata.schemaVersion,
             exportMode: metadata.exportMode,
@@ -487,7 +499,7 @@ public enum ExportManager {
             samplesCompleted: completed,
             stats: metadata.stats,
             lastBackupDate: metadata.lastBackupDate,
-            extensions: metadata.extensions
+            extensions: mergedExtensions.isEmpty ? nil : mergedExtensions
         )
 
         let updatedData = try encoder.encode(updatedMetadata)
