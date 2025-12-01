@@ -17,8 +17,11 @@ public enum BackgroundTasksManager {
     // MARK: - Task Management
     
     public static func add(task: BackgroundTaskDefinition) {
+        let alreadyRegistered = taskDefinitions[task.identifier] != nil
         taskDefinitions[task.identifier] = task
-        registerTask(identifier: task.identifier)
+        if !alreadyRegistered {
+            registerTask(identifier: task.identifier)
+        }
         updateTaskStateFor(identifier: task.identifier, to: .registered)
     }
 

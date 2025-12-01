@@ -31,9 +31,9 @@ public struct ExportMetadata: Codable, Sendable {
     let stats: ExportStats
 
     // incremental backup tracking
-    var lastBackupDate: Date?
-    var backupProgressDate: Date?  // for first-run catch-up (tracks how far we've gotten)
-    var extensions: [String: ExtensionState]?
+    public var lastBackupDate: Date?
+    public var backupProgressDate: Date?  // for first-run catch-up (tracks how far we've gotten)
+    public var extensions: [String: ExtensionState]?
 }
 
 public struct ExtensionState: Codable, Sendable {
