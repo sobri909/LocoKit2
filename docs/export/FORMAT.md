@@ -1,11 +1,15 @@
 # LocoKit2 Export Format Specification
 
 ## Version
-- Current schema version: 2.0.0
+- Current schema version: 2.1.0
 - Uses semantic versioning (major.minor.patch)
 - Major version changes indicate breaking format changes
 - Minor versions add features in a backward-compatible way
 - Patch versions make backward-compatible fixes
+
+### Version History
+- **2.1.0**: Changed date encoding from numeric (seconds since reference date) to ISO8601 strings
+- **2.0.0**: Initial LocoKit2 export format
 
 ## Export Formats
 
@@ -38,17 +42,17 @@ export-YYYY-MM-DD-HHmmss/
 metadata.json:
 ```json
 {
-  "schemaVersion": "2.0.0",     // Semantic version of export format
+  "schemaVersion": "2.1.0",     // Semantic version of export format
   "exportMode": "bucketed",     // "bucketed" or "singleFile"
   "exportType": "full",         // "full" or "incremental"
 
-  // Export session timing (numeric: seconds since reference date)
-  "sessionStartDate": 786072997.381,   // When this export session began
-  "sessionFinishDate": 786073162.480,  // When session completed
+  // Export session timing (ISO8601 strings)
+  "sessionStartDate": "2025-12-02T10:30:00Z",   // When this export session began
+  "sessionFinishDate": "2025-12-02T10:32:45Z",  // When session completed
 
   // For incremental backups
-  "lastBackupDate": 786072997.381,     // Timestamp for next incremental query
-  "backupProgressDate": null,          // Catch-up progress (nil when complete)
+  "lastBackupDate": "2025-12-02T10:30:00Z",     // Timestamp for next incremental query
+  "backupProgressDate": null,                   // Catch-up progress (nil when complete)
 
   // Session completion status
   "itemsCompleted": true,   // All qualifying items were exported
@@ -76,15 +80,15 @@ Designed for sharing specific date ranges. All data contained in one file. Not y
 ```
 2025-01-05.json[.gz]   # Contents:
 {
-  "schemaVersion": "2.0.0",
+  "schemaVersion": "2.1.0",
   "exportMode": "singleFile",
   "exportType": "partial",
   "exportRange": {
-    "start": 786000000.0,
-    "end": 786086400.0
+    "start": "2025-01-05T00:00:00Z",
+    "end": "2025-01-06T00:00:00Z"
   },
-  "sessionStartDate": 786072997.381,
-  "sessionFinishDate": 786073162.480,
+  "sessionStartDate": "2025-12-02T10:30:00Z",
+  "sessionFinishDate": "2025-12-02T10:32:45Z",
   "itemsCompleted": true,
   "placesCompleted": true,
   "samplesCompleted": true,
@@ -175,7 +179,7 @@ Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying
   isStale: boolean
   visitCount: number
   visitDays: number
-  lastSaved: number   // seconds since reference date
+  lastSaved: string   // ISO8601 date string
   source: string      // eg "LocoKit2"
   rtreeId: number | null
 
@@ -197,13 +201,13 @@ Base fields common to all timeline items:
   base: {
     id: string               // UUID
     isVisit: boolean        // Type discriminator
-    startDate: number       // seconds since reference date
-    endDate: number         // seconds since reference date
+    startDate: string       // ISO8601 date string
+    endDate: string         // ISO8601 date string
     source: string
     sourceVersion: string
     disabled: boolean
     deleted: boolean
-    lastSaved: number       // seconds since reference date
+    lastSaved: string       // ISO8601 date string
     previousItemId: string | null
     nextItemId: string | null
     samplesChanged: boolean
@@ -234,7 +238,7 @@ Additional fields for visit items:
     placeId: string | null
     confirmedPlace: boolean
     uncertainPlace: boolean
-    lastSaved: number        // seconds since reference date
+    lastSaved: string        // ISO8601 date string
   }
 }
 ```
@@ -250,7 +254,7 @@ Additional fields for trip items:
     classifiedActivityType: number | null
     confirmedActivityType: number | null
     uncertainActivityType: boolean
-    lastSaved: number        // seconds since reference date
+    lastSaved: string        // ISO8601 date string
   }
 }
 ```
@@ -259,14 +263,14 @@ Additional fields for trip items:
 ```typescript
 {
   id: string                // UUID
-  date: number             // seconds since reference date
+  date: string             // ISO8601 date string
   source: string
   sourceVersion: string
   secondsFromGMT: number
   movingState: number      // Maps to MovingState enum
   recordingState: number   // Maps to RecordingState enum
   disabled: boolean
-  lastSaved: number        // seconds since reference date
+  lastSaved: string        // ISO8601 date string
   timelineItemId: string | null
   
   // Location data
@@ -291,8 +295,14 @@ Additional fields for trip items:
 
 ## Notes
 
-- All dates are numeric (seconds since reference date, ie Foundation Date)
+### Date Encoding
+- All dates use ISO8601 format (eg "2025-12-02T10:30:00Z")
+- Import decoder also handles legacy numeric formats for backwards compatibility:
+  - Apple reference date (seconds since 2001-01-01) - detected by magnitude < 978307200
+  - Unix timestamp (seconds since 1970-01-01) - detected by magnitude >= 978307200
 - Timezone offsets (secondsFromGMT) stored separately for local time reconstruction
+
+### General
 - UUIDs are string format without curly braces
 - Empty/null fields may be omitted from JSON
 - Compression (.gz) planned but not yet implemented (see BIG-118)

@@ -19,7 +19,7 @@ public protocol ExportExtensionHandler: Sendable {
 
 @ImportExportActor
 public enum ExportManager {
-    public static let schemaVersion = "2.0.0"
+    public static let schemaVersion = "2.1.0"
 
     // MARK: - Export state
 
@@ -211,8 +211,7 @@ public enum ExportManager {
             ? bucketed.filter { changedKeys!.contains($0.key) }
             : bucketed
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
+        let encoder = JSONEncoder.iso8601Encoder()
 
         let totalBuckets = bucketsToWrite.count
         var completedBuckets = 0
@@ -266,7 +265,7 @@ public enum ExportManager {
             return nil
         }
         let data = try Data(contentsOf: metadataURL)
-        return try JSONDecoder().decode(ExportMetadata.self, from: data)
+        return try JSONDecoder.flexibleDateDecoder().decode(ExportMetadata.self, from: data)
     }
 
     private static func getEarliestDataDate() async -> Date? {
@@ -308,8 +307,7 @@ public enum ExportManager {
             stats: stats
         )
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
+        let encoder = JSONEncoder.iso8601Encoder()
         let data = try encoder.encode(metadata)
         try iCloudCoordinator.writeCoordinated(data: data, to: metadataURL)
     }
@@ -480,8 +478,7 @@ public enum ExportManager {
         calendar.timeZone = TimeZone(identifier: "UTC")!
         calendar.firstWeekday = 2
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
+        let encoder = JSONEncoder.iso8601Encoder()
 
         var totalExported = 0
         var weekCount = 0
@@ -558,9 +555,8 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
 
-        let decoder = JSONDecoder()
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
+        let decoder = JSONDecoder.flexibleDateDecoder()
+        let encoder = JSONEncoder.iso8601Encoder()
 
         let data = try Data(contentsOf: metadataURL)
         let metadata = try decoder.decode(ExportMetadata.self, from: data)

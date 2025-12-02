@@ -124,7 +124,7 @@ public enum ImportManager {
         coordinator.coordinate(readingItemAt: metadataURL, error: &coordError) { url in
             do {
                 let data = try Data(contentsOf: url)
-                metadata = try JSONDecoder().decode(ExportMetadata.self, from: data)
+                metadata = try JSONDecoder.flexibleDateDecoder().decode(ExportMetadata.self, from: data)
             } catch {
                 logger.error("Failed to read metadata", subsystem: .importing)
                 logger.error(error, subsystem: .importing)
@@ -171,7 +171,7 @@ public enum ImportManager {
         for fileURL in placeFiles {
             do {
                 let fileData = try Data(contentsOf: fileURL)
-                let places = try JSONDecoder().decode([Place].self, from: fileData)
+                let places = try JSONDecoder.flexibleDateDecoder().decode([Place].self, from: fileData)
                 print("Loaded \(places.count) places from \(fileURL.lastPathComponent)")
                 
                 try await Database.pool.uncancellableWrite { db in
@@ -225,7 +225,7 @@ public enum ImportManager {
         for fileURL in itemFiles {
             do {
                 let fileData = try Data(contentsOf: fileURL)
-                let items = try JSONDecoder().decode([TimelineItem].self, from: fileData)
+                let items = try JSONDecoder.flexibleDateDecoder().decode([TimelineItem].self, from: fileData)
                 print("Loaded \(items.count) items from \(fileURL.lastPathComponent)")
                 totalItems += items.count
 
@@ -357,7 +357,7 @@ public enum ImportManager {
         for fileURL in sampleFiles {
             do {
                 let fileData = try Data(contentsOf: fileURL)
-                let samples = try JSONDecoder().decode([LocomotionSample].self, from: fileData)
+                let samples = try JSONDecoder.flexibleDateDecoder().decode([LocomotionSample].self, from: fileData)
                 print("Loaded \(samples.count) samples from \(fileURL.lastPathComponent)")
                 totalSamples += samples.count
 
