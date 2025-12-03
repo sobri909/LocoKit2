@@ -19,7 +19,7 @@ public protocol ExportExtensionHandler: Sendable {
 
 @ImportExportActor
 public enum ExportManager {
-    public static let schemaVersion = "2.1.0"
+    public static let schemaVersion = "2.2.0"
 
     // MARK: - Export state
 
@@ -522,9 +522,10 @@ public enum ExportManager {
                 let year = calendar.component(.year, from: currentWeekStart)
                 let weekId = String(format: "%4d-W%02d", year, weekOfYear)
 
-                let weekURL = samplesURL.appendingPathComponent("\(weekId).json")
-                let data = try encoder.encode(weekSamples)
-                try iCloudCoordinator.writeCoordinated(data: data, to: weekURL)
+                let weekURL = samplesURL.appendingPathComponent("\(weekId).json.gz")
+                let jsonData = try encoder.encode(weekSamples)
+                let compressedData = try jsonData.gzipCompressed()
+                try iCloudCoordinator.writeCoordinated(data: compressedData, to: weekURL)
 
                 totalExported += weekSamples.count
                 weekCount += 1

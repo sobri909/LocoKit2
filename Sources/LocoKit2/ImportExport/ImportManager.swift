@@ -8,6 +8,15 @@
 import Foundation
 import GRDB
 
+// MARK: - Extension Protocol
+
+public protocol ImportExtensionHandler: Sendable {
+    var identifier: String { get }
+    func `import`(from directory: URL) async throws -> Int
+}
+
+// MARK: -
+
 @ImportExportActor
 public enum ImportManager {
 
@@ -32,7 +41,10 @@ public enum ImportManager {
     
     // MARK: - Import process
     
-    public static func startImport(withBookmark bookmark: Data) async throws {
+    public static func startImport(
+        withBookmark bookmark: Data,
+        extensions: [ImportExtensionHandler] = []
+    ) async throws {
         guard !importInProgress else {
             throw ImportExportError.importInProgress
         }
@@ -69,7 +81,13 @@ public enum ImportManager {
             let edgeManager = EdgeRecordManager()
             let (itemsCount, timelineItemIds, itemDisabledStates) = try await importTimelineItems(edgeManager: edgeManager)
             let (samplesCount, orphansProcessed) = try await importSamples(timelineItemIds: timelineItemIds, itemDisabledStates: itemDisabledStates)
-            
+
+            // run extension handlers
+            for handler in extensions {
+                let count = try await handler.import(from: importURL!)
+                logger.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
+            }
+
             // Log import summary
             let duration = Date().timeIntervalSince(startTime)
             let durationString = String(format: "%.1f", duration)
@@ -330,13 +348,14 @@ public enum ImportManager {
         let samplesURL = importURL.appendingPathComponent("samples")
 
         // get the weekly sample files in chronological order
+        // supports both .json.gz (compressed) and .json (legacy) formats
         let sampleFiles = try FileManager.default
             .contentsOfDirectory(
                 at: samplesURL,
                 includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles]
             )
-            .filter { $0.pathExtension == "json" }
+            .filter { $0.pathExtension == "gz" || $0.pathExtension == "json" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
         currentPhase = .importingSamples
@@ -356,7 +375,10 @@ public enum ImportManager {
         // process each week's file
         for fileURL in sampleFiles {
             do {
-                let fileData = try Data(contentsOf: fileURL)
+                let rawData = try Data(contentsOf: fileURL)
+                let fileData = fileURL.pathExtension == "gz"
+                    ? try rawData.gzipDecompressed()
+                    : rawData
                 let samples = try JSONDecoder.flexibleDateDecoder().decode([LocomotionSample].self, from: fileData)
                 print("Loaded \(samples.count) samples from \(fileURL.lastPathComponent)")
                 totalSamples += samples.count

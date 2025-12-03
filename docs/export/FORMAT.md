@@ -1,13 +1,14 @@
 # LocoKit2 Export Format Specification
 
 ## Version
-- Current schema version: 2.1.0
+- Current schema version: 2.2.0
 - Uses semantic versioning (major.minor.patch)
 - Major version changes indicate breaking format changes
 - Minor versions add features in a backward-compatible way
 - Patch versions make backward-compatible fixes
 
 ### Version History
+- **2.2.0**: Added gzip compression for sample files (samples/*.json.gz)
 - **2.1.0**: Changed date encoding from numeric (seconds since reference date) to ISO8601 strings
 - **2.0.0**: Initial LocoKit2 export format
 
@@ -305,7 +306,8 @@ Additional fields for trip items:
 ### General
 - UUIDs are string format without curly braces
 - Empty/null fields may be omitted from JSON
-- Compression (.gz) planned but not yet implemented (see BIG-118)
+- Sample files use gzip compression (.json.gz), compatible with standard gunzip/zcat tools
+- Import supports both compressed (.json.gz) and uncompressed (.json) sample files for backwards compatibility
 - Week numbers use ISO week date system, UTC-based
 - Week files use YYYY-Www format (eg "2025-W01")
 - Place buckets use first character of UUID (0-9, A-F)
