@@ -34,6 +34,9 @@ public struct ExportMetadata: Codable, Sendable {
     public var lastBackupDate: Date?
     public var backupProgressDate: Date?  // for first-run catch-up (tracks how far we've gotten)
     public var extensions: [String: ExtensionState]?
+
+    // app-specific metadata (passthrough from app layer)
+    public var appMetadata: [String: String]?
 }
 
 public struct ExtensionState: Codable, Sendable {

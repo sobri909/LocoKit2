@@ -36,6 +36,9 @@ public enum ExportManager {
     private static var catchUpDateRange: DateInterval?  // nil = normal mode, set = catch-up chunk
     private static let catchUpChunkSize: TimeInterval = .months(6)
 
+    // app-specific metadata passthrough
+    private static var currentAppMetadata: [String: String]?
+
     public enum ExportPhase: Sendable {
         case connecting
         case exportingPlaces
@@ -72,7 +75,8 @@ public enum ExportManager {
     public static func export(
         to baseURL: URL,
         type: ExportType = .full,
-        extensions: [ExportExtensionHandler] = []
+        extensions: [ExportExtensionHandler] = [],
+        appMetadata: [String: String]? = nil
     ) async throws {
         guard !exportInProgress else {
             throw ImportExportError.exportInProgress
@@ -82,6 +86,7 @@ public enum ExportManager {
         exportInProgress = true
         currentPhase = .connecting
         progress = 0
+        currentAppMetadata = appMetadata
 
         logger.info("ExportManager: Starting \(type) export", subsystem: .exporting)
 
@@ -134,7 +139,8 @@ public enum ExportManager {
         } catch {
             logger.error("Export failed: \(error.localizedDescription)", subsystem: .exporting)
             logger.error(error, subsystem: .exporting)
-            cleanupFailedExport()
+            currentExportURL = nil
+            exportInProgress = false
             throw error
         }
     }
@@ -304,7 +310,8 @@ public enum ExportManager {
             itemsCompleted: false,
             placesCompleted: false,
             samplesCompleted: false,
-            stats: stats
+            stats: stats,
+            appMetadata: currentAppMetadata
         )
 
         let encoder = JSONEncoder.iso8601Encoder()
@@ -602,19 +609,13 @@ public enum ExportManager {
             stats: metadata.stats,
             lastBackupDate: newLastBackupDate,
             backupProgressDate: newBackupProgressDate,
-            extensions: mergedExtensions.isEmpty ? nil : mergedExtensions
+            extensions: mergedExtensions.isEmpty ? nil : mergedExtensions,
+            appMetadata: metadata.appMetadata
         )
 
         let updatedData = try encoder.encode(updatedMetadata)
         try iCloudCoordinator.writeCoordinated(data: updatedData, to: metadataURL)
     }
 
-    private static func cleanupFailedExport() {
-        if let currentExportURL {
-            try? FileManager.default.removeItem(at: currentExportURL)
-        }
-        currentExportURL = nil
-        exportInProgress = false
-    }
 }
 

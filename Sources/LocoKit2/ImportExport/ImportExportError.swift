@@ -40,9 +40,10 @@ public enum ImportExportError: Error {
     case validationFailed
     
     // MARK: - iCloud errors
-    
+
     case iCloudNotAvailable
-    
+    case deviceIdentifierUnavailable
+
     // MARK: - Edge restoration errors
     
     case missingEdgeRecords
