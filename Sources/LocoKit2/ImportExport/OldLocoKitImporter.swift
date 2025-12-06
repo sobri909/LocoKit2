@@ -530,7 +530,7 @@ public enum OldLocoKitImporter {
         // restore observation/recording to initial states
         TimelineObserver.highlander.enabled = wasObserving
         if wasRecording {
-            Task { await TimelineRecorder.startRecording() }
+            Task { try? await TimelineRecorder.startRecording() }
         }
 
         arcAppDatabase = nil

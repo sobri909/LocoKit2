@@ -15,12 +15,14 @@ public enum TimelineRecorder {
         Database.pool.add(transactionObserver: TimelineObserver.highlander)
     }
 
-    public static func startRecording() {
-        startWatchingLoco()
-        Task {
-            await loco.startRecording()
-            await startFallbackSampleTimer()
+    public static func startRecording() async throws {
+        if await ImportState.hasPartialImport {
+            logger.info("TimelineRecorder.startRecording() blocked by partial import", subsystem: .timeline)
+            throw ImportExportError.partialImportInProgress
         }
+        startWatchingLoco()
+        await loco.startRecording()
+        await startFallbackSampleTimer()
     }
 
     public static func stopRecording() async {

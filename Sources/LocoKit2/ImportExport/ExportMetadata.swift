@@ -17,6 +17,7 @@ public enum ExportType: String, Codable, Sendable {
 }
 
 public struct ExportMetadata: Codable, Sendable {
+    let exportId: String?  // unique identifier for this export (nil for legacy exports)
     let schemaVersion: String
     let exportMode: ExportMode
     let exportType: ExportType

@@ -47,4 +47,9 @@ public enum ImportExportError: Error {
     // MARK: - Edge restoration errors
     
     case missingEdgeRecords
+
+    // MARK: - Partial import blocking
+
+    case partialImportInProgress
+    case exportIdMismatch
 }

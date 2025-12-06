@@ -96,12 +96,19 @@ struct EdgeRecordManager {
                         validNextId = nil
                     }
 
-                    try TimelineItemBase
-                        .filter { $0.id == record.itemId }
-                        .updateAll(db) { [
-                            $0.previousItemId.set(to: validPreviousId),
-                            $0.nextItemId.set(to: validNextId)
-                        ] }
+                    // edge restoration can fail due to constraint violations (eg item deleted)
+                    // this is non-fatal - timeline will heal its own edges during processing
+                    do {
+                        try TimelineItemBase
+                            .filter { $0.id == record.itemId }
+                            .updateAll(db) { [
+                                $0.previousItemId.set(to: validPreviousId),
+                                $0.nextItemId.set(to: validNextId)
+                            ] }
+                    } catch {
+                        // log but continue - edge healing will fix it later
+                        logger.info("Edge restoration skipped for \(record.itemId): \(error.localizedDescription)", subsystem: .importing)
+                    }
                 }
             }
             

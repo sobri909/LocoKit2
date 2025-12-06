@@ -199,6 +199,18 @@ extension Database {
                 table.column("lastExpired", .datetime)
                 table.column("lastCompleted", .datetime)
             }
+
+            // MARK: - ImportState
+
+            try db.create(table: "ImportState") { table in
+                table.primaryKey("id", .integer)
+                    .check { $0 == 1 }  // singleton
+                table.column("exportId", .text)
+                table.column("startedAt", .datetime).notNull()
+                table.column("phase", .text).notNull()
+                table.column("processedSampleFiles", .text)  // JSON array
+                table.column("localCopyPath", .text)
+            }
         }
     }
 

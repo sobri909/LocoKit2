@@ -27,6 +27,7 @@ public enum ImportManager {
     public private(set) static var progress: Double = 0
 
     public enum ImportPhase: Sendable {
+        case copying
         case validating
         case importingPlaces
         case importingItems
@@ -35,54 +36,69 @@ public enum ImportManager {
     }
 
     private static var importURL: URL?
-    private static var bookmarkData: Data?
     private static var wasObserving: Bool = true
     private static var wasRecording: Bool = false
-    
+
     // MARK: - Import process
-    
+
+    /// Start a new import from a source URL (copies to local first)
     public static func startImport(
-        withBookmark bookmark: Data,
+        from sourceURL: URL,
         extensions: [ImportExtensionHandler] = []
     ) async throws {
         guard !importInProgress else {
             throw ImportExportError.importInProgress
         }
-        
+
         let startTime = Date()
         importInProgress = true
-        currentPhase = .validating
+        currentPhase = .copying
         progress = 0
-        bookmarkData = bookmark
 
         // save initial states and disable observation/recording during import
         wasObserving = TimelineObserver.highlander.enabled
         wasRecording = await TimelineRecorder.isRecording
         TimelineObserver.highlander.enabled = false
         await TimelineRecorder.stopRecording()
-        
-        var isStale = false
-        guard let url = try? URL(resolvingBookmarkData: bookmark, bookmarkDataIsStale: &isStale) else {
-            cleanupFailedImport()
-            throw ImportExportError.invalidBookmark
-        }
-        
-        guard url.startAccessingSecurityScopedResource() else {
-            cleanupFailedImport()
-            throw ImportExportError.securityScopeAccessDenied
-        }
-        
-        importURL = url
-        
+
+        // copy source to local container (this may trigger iCloud downloads)
+        let localURL: URL
         do {
-            try await validateImportDirectory()
+            localURL = try await copyToLocal(from: sourceURL)
+        } catch {
+            cleanupFailedCopy()
+            throw error
+        }
+
+        // stop accessing source - we now have local copy
+        sourceURL.stopAccessingSecurityScopedResource()
+
+        importURL = localURL
+
+        do {
+            currentPhase = .validating
+            let metadata = try await validateImportDirectory()
+
+            // save import state for resume capability (copy is complete)
+            let relativePath = localURL.lastPathComponent
+            let state = ImportState(
+                exportId: metadata.exportId,
+                startedAt: startTime,
+                phase: .places,
+                localCopyPath: relativePath
+            )
+            try await ImportState.save(state)
             let placesCount = try await importPlaces()
-            
+
+            try await ImportState.updatePhase(.items)
             let edgeManager = EdgeRecordManager()
             let (itemsCount, timelineItemIds, itemDisabledStates) = try await importTimelineItems(edgeManager: edgeManager)
+
+            try await ImportState.updatePhase(.samples)
             let (samplesCount, orphansProcessed) = try await importSamples(timelineItemIds: timelineItemIds, itemDisabledStates: itemDisabledStates)
 
             // run extension handlers
+            try await ImportState.updatePhase(.extensions)
             for handler in extensions {
                 let count = try await handler.import(from: importURL!)
                 logger.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
@@ -98,8 +114,8 @@ public enum ImportManager {
             }
             logger.info(summary, subsystem: .importing)
             
-            // Clear import state
-            cleanupSuccessfulImport()
+            // clear import state
+            await cleanupSuccessfulImport()
             
         } catch {
             cleanupFailedImport()
@@ -107,7 +123,7 @@ public enum ImportManager {
         }
     }
     
-    private static func validateImportDirectory() async throws {
+    private static func validateImportDirectory() async throws -> ExportMetadata {
         guard let importURL else {
             throw ImportExportError.importNotInitialised
         }
@@ -132,6 +148,8 @@ public enum ImportManager {
         guard FileManager.default.fileExists(atPath: samplesURL.path) else {
             throw ImportExportError.missingSamplesDirectory
         }
+
+        return metadata
     }
 
     private static func readImportMetadata(from metadataURL: URL) async throws -> ExportMetadata {
@@ -361,19 +379,27 @@ public enum ImportManager {
         currentPhase = .importingSamples
         progress = 0
 
-        logger.info("ImportManager: Starting samples import (\(sampleFiles.count) files)", subsystem: .importing)
+        // get already-processed files from ImportState (for resume efficiency)
+        let alreadyProcessed: Set<String>
+        if let state = try? await ImportState.current(), let files = state.processedSampleFiles {
+            alreadyProcessed = Set(files)
+        } else {
+            alreadyProcessed = []
+        }
+
+        let filesToProcess = sampleFiles.filter { !alreadyProcessed.contains($0.lastPathComponent) }
+        logger.info("ImportManager: Starting samples import (\(filesToProcess.count) files, \(alreadyProcessed.count) already processed)", subsystem: .importing)
 
         var totalSamples = 0
         var processedFiles = 0
-        let totalFiles = sampleFiles.count
-        // track orphaned samples by their original parent timeline item ID
-        var orphanedSamples: [String: [LocomotionSample]] = [:]
-
-        // track disabled samples from enabled parents (scenario 2) for preserved parent creation
-        var disabledSamplesFromEnabledParents: [String: [LocomotionSample]] = [:]
+        let totalFiles = filesToProcess.count
 
         // process each week's file
-        for fileURL in sampleFiles {
+        for fileURL in filesToProcess {
+            // track per-file orphans for persistence
+            var fileOrphans: [String: [LocomotionSample]] = [:]
+            var fileScenario2: [String: [LocomotionSample]] = [:]
+
             do {
                 let rawData = try Data(contentsOf: fileURL)
                 let fileData = fileURL.pathExtension == "gz"
@@ -440,23 +466,31 @@ public enum ImportManager {
                         return (batchOrphans, batchScenario2, orphanedCount, scenario1Count, scenario2Count)
                     }
 
-                    // merge batch orphans into the main collection
+                    // merge batch orphans into per-file collection (persisted after file completes)
                     for (itemId, samples) in batchOrphans {
-                        orphanedSamples[itemId, default: []].append(contentsOf: samples)
+                        fileOrphans[itemId, default: []].append(contentsOf: samples)
                     }
 
-                    // merge batch scenario 2 mismatches into the main collection
+                    // merge batch scenario 2 mismatches into per-file collection
                     for (itemId, samples) in batchScenario2 {
-                        disabledSamplesFromEnabledParents[itemId, default: []].append(contentsOf: samples)
+                        fileScenario2[itemId, default: []].append(contentsOf: samples)
                     }
                 }
-                
+
+                // persist orphans for resume
+                if !fileOrphans.isEmpty || !fileScenario2.isEmpty {
+                    appendOrphanMappings(orphans: fileOrphans, scenario2: fileScenario2)
+                }
+
                 processedFiles += 1
                 progress = Double(processedFiles) / Double(totalFiles)
 
-                // Log progress every 50 files
+                // mark file as processed for resume efficiency
+                try await ImportState.markFileProcessed(fileURL.lastPathComponent)
+
+                // log progress every 50 files
                 if processedFiles % 50 == 0 {
-                    logger.info("ImportManager: Samples import progress - processed \(processedFiles)/\(sampleFiles.count) files, \(totalSamples) samples", subsystem: .importing)
+                    logger.info("ImportManager: Samples import progress - processed \(processedFiles)/\(totalFiles) files, \(totalSamples) samples", subsystem: .importing)
                 }
 
             } catch {
@@ -465,9 +499,21 @@ public enum ImportManager {
             }
         }
 
-        // Create preserved parent items for scenario 2 mismatches
-        if !disabledSamplesFromEnabledParents.isEmpty {
-            try await ImportHelpers.createPreservedParentItems(for: disabledSamplesFromEnabledParents)
+        // load all orphan mappings from file (source of truth across all runs)
+        let persistedMappings = loadOrphanMappings()
+        var finalOrphans: [String: [LocomotionSample]] = [:]
+        var finalScenario2: [String: [LocomotionSample]] = [:]
+
+        if !persistedMappings.orphans.isEmpty || !persistedMappings.scenario2.isEmpty {
+            let (restoredOrphans, restoredScenario2) = try await reconstructOrphansFromMappings(persistedMappings)
+            finalOrphans = restoredOrphans
+            finalScenario2 = restoredScenario2
+            logger.info("Loaded \(persistedMappings.orphans.count) orphan groups and \(persistedMappings.scenario2.count) scenario2 groups from persisted mappings", subsystem: .importing)
+        }
+
+        // create preserved parent items for scenario 2 mismatches
+        if !finalScenario2.isEmpty {
+            try await ImportHelpers.createPreservedParentItems(for: finalScenario2)
         }
 
         // process orphaned samples after all imports complete
@@ -475,10 +521,10 @@ public enum ImportManager {
         progress = 0
 
         var totalOrphansProcessed = 0
-        if !orphanedSamples.isEmpty {
-            let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
-            logger.info("ImportManager found orphaned samples for \(orphanedSamples.count) missing items (\(totalOrphans) samples total)", subsystem: .importing)
-            let (recreated, individual) = try await OrphanedSampleProcessor.processOrphanedSamples(orphanedSamples)
+        if !finalOrphans.isEmpty {
+            let totalOrphans = finalOrphans.values.reduce(0) { $0 + $1.count }
+            logger.info("ImportManager found orphaned samples for \(finalOrphans.count) missing items (\(totalOrphans) samples total)", subsystem: .importing)
+            let (recreated, individual) = try await OrphanedSampleProcessor.processOrphanedSamples(finalOrphans)
             logger.info("ImportManager orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .importing)
             totalOrphansProcessed = totalOrphans
         }
@@ -487,42 +533,288 @@ public enum ImportManager {
         return (totalSamples, totalOrphansProcessed)
     }
     
+    // MARK: - Copy to Local
+
+    private static func copyToLocal(from sourceURL: URL) async throws -> URL {
+        let copyDir = ImportState.localCopyDirectory
+        let destURL = copyDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        // remove any existing copy directory
+        if FileManager.default.fileExists(atPath: copyDir.path) {
+            try FileManager.default.removeItem(at: copyDir)
+        }
+
+        // create destination directory
+        try FileManager.default.createDirectory(at: destURL, withIntermediateDirectories: true)
+
+        logger.info("ImportManager: Copying backup to local container", subsystem: .importing)
+
+        // enumerate all files in source directory (must collect before async loop)
+        guard let enumerator = FileManager.default.enumerator(
+            at: sourceURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            throw ImportExportError.importNotInitialised
+        }
+
+        var filesToCopy: [URL] = []
+        while let fileURL = enumerator.nextObject() as? URL {
+            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            if resourceValues.isRegularFile == true {
+                filesToCopy.append(fileURL)
+            }
+        }
+
+        let totalFiles = filesToCopy.count
+        logger.info("ImportManager: Found \(totalFiles) files to copy", subsystem: .importing)
+
+        // copy each file with progress updates
+        for (index, fileURL) in filesToCopy.enumerated() {
+            // get relative path from source
+            let relativePath = fileURL.path.replacingOccurrences(of: sourceURL.path + "/", with: "")
+            let destFileURL = destURL.appendingPathComponent(relativePath)
+
+            // create parent directory if needed
+            let destParent = destFileURL.deletingLastPathComponent()
+            if !FileManager.default.fileExists(atPath: destParent.path) {
+                try FileManager.default.createDirectory(at: destParent, withIntermediateDirectories: true)
+            }
+
+            // copy file
+            try FileManager.default.copyItem(at: fileURL, to: destFileURL)
+
+            // update progress and yield to allow actor access
+            progress = Double(index + 1) / Double(totalFiles)
+            await Task.yield()
+        }
+
+        logger.info("ImportManager: Copy complete", subsystem: .importing)
+
+        return destURL
+    }
+
+    // MARK: - Resume Import
+
+    /// Resume an interrupted import from local copy
+    public static func resumeImport(
+        extensions: [ImportExtensionHandler] = []
+    ) async throws {
+        guard !importInProgress else {
+            throw ImportExportError.importInProgress
+        }
+
+        guard let state = try await ImportState.current(),
+              let localURL = ImportState.localCopyURL(for: state) else {
+            throw ImportExportError.importNotInitialised
+        }
+
+        // verify local copy still exists
+        guard FileManager.default.fileExists(atPath: localURL.path) else {
+            try await ImportState.clear()
+            throw ImportExportError.importNotInitialised
+        }
+
+        let startTime = Date()
+        importInProgress = true
+        currentPhase = .validating
+        progress = 0
+        importURL = localURL
+
+        // disable observation/recording during import
+        wasObserving = TimelineObserver.highlander.enabled
+        wasRecording = await TimelineRecorder.isRecording
+        TimelineObserver.highlander.enabled = false
+        await TimelineRecorder.stopRecording()
+
+        do {
+            let metadata = try await validateImportDirectory()
+
+            // validate exportId matches
+            if let storedExportId = state.exportId, let metadataExportId = metadata.exportId {
+                guard storedExportId == metadataExportId else {
+                    throw ImportExportError.exportIdMismatch
+                }
+            }
+
+            // resume from the stored phase
+            // for now, restart from beginning (resume efficiency can be added later)
+            let placesCount = try await importPlaces()
+
+            try await ImportState.updatePhase(.items)
+            let edgeManager = EdgeRecordManager()
+            let (itemsCount, timelineItemIds, itemDisabledStates) = try await importTimelineItems(edgeManager: edgeManager)
+
+            try await ImportState.updatePhase(.samples)
+            let (samplesCount, orphansProcessed) = try await importSamples(timelineItemIds: timelineItemIds, itemDisabledStates: itemDisabledStates)
+
+            // run extension handlers
+            try await ImportState.updatePhase(.extensions)
+            for handler in extensions {
+                let count = try await handler.import(from: importURL!)
+                logger.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
+            }
+
+            // log import summary
+            let duration = Date().timeIntervalSince(startTime)
+            let durationString = String(format: "%.1f", duration)
+            var summary = "ImportManager (resumed) completed in \(durationString)s: "
+            summary += "\(placesCount) places, \(itemsCount) items, \(samplesCount) samples"
+            if orphansProcessed > 0 {
+                summary += " (processed \(orphansProcessed) orphaned samples)"
+            }
+            logger.info(summary, subsystem: .importing)
+
+            await cleanupSuccessfulImport()
+
+        } catch {
+            cleanupFailedImport()
+            throw error
+        }
+    }
+
+    // MARK: - Orphan Mappings Persistence
+
+    private static var orphanMappingsURL: URL? {
+        importURL?.appendingPathComponent("orphan_mappings.json")
+    }
+
+    private struct PersistedMappings: Codable {
+        var orphans: [String: [String]] = [:]      // originalItemId -> [sampleId]
+        var scenario2: [String: [String]] = [:]    // originalItemId -> [sampleId] (disabled samples from enabled parents)
+    }
+
+    private static func loadOrphanMappings() -> PersistedMappings {
+        guard let url = orphanMappingsURL,
+              FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let mappings = try? JSONDecoder().decode(PersistedMappings.self, from: data) else {
+            return PersistedMappings()
+        }
+        return mappings
+    }
+
+    private static func saveOrphanMappings(_ mappings: PersistedMappings) {
+        guard let url = orphanMappingsURL else { return }
+        do {
+            let data = try JSONEncoder().encode(mappings)
+            try data.write(to: url)
+        } catch {
+            logger.error(error, subsystem: .importing)
+        }
+    }
+
+    /// Append batch mappings to persistent file
+    private static func appendOrphanMappings(
+        orphans: [String: [LocomotionSample]],
+        scenario2: [String: [LocomotionSample]]
+    ) {
+        var mappings = loadOrphanMappings()
+
+        // append orphan sample IDs
+        for (itemId, samples) in orphans {
+            let sampleIds = samples.map { $0.id }
+            mappings.orphans[itemId, default: []].append(contentsOf: sampleIds)
+        }
+
+        // append scenario2 sample IDs
+        for (itemId, samples) in scenario2 {
+            let sampleIds = samples.map { $0.id }
+            mappings.scenario2[itemId, default: []].append(contentsOf: sampleIds)
+        }
+
+        saveOrphanMappings(mappings)
+    }
+
+    /// Reconstruct orphanedSamples dictionary from persisted mappings by fetching samples from DB
+    private static func reconstructOrphansFromMappings(_ mappings: PersistedMappings) async throws -> (
+        orphans: [String: [LocomotionSample]],
+        scenario2: [String: [LocomotionSample]]
+    ) {
+        var orphans: [String: [LocomotionSample]] = [:]
+        var scenario2: [String: [LocomotionSample]] = [:]
+
+        // collect all sample IDs we need to fetch
+        let allOrphanIds = Set(mappings.orphans.values.flatMap { $0 })
+        let allScenario2Ids = Set(mappings.scenario2.values.flatMap { $0 })
+        let allIds = allOrphanIds.union(allScenario2Ids)
+
+        guard !allIds.isEmpty else { return (orphans, scenario2) }
+
+        // fetch samples from DB
+        let samples = try await Database.pool.read { db in
+            try LocomotionSample
+                .filter(allIds.contains(Column("id")))
+                .fetchAll(db)
+        }
+
+        // build lookup by ID
+        let sampleById = Dictionary(uniqueKeysWithValues: samples.map { ($0.id, $0) })
+
+        // reconstruct orphans dictionary
+        for (itemId, sampleIds) in mappings.orphans {
+            let itemSamples = sampleIds.compactMap { sampleById[$0] }
+            if !itemSamples.isEmpty {
+                orphans[itemId] = itemSamples
+            }
+        }
+
+        // reconstruct scenario2 dictionary
+        for (itemId, sampleIds) in mappings.scenario2 {
+            let itemSamples = sampleIds.compactMap { sampleById[$0] }
+            if !itemSamples.isEmpty {
+                scenario2[itemId] = itemSamples
+            }
+        }
+
+        return (orphans, scenario2)
+    }
+
     // MARK: - Cleanup
 
-    private static func cleanupSuccessfulImport() {
-        if let importURL {
-            importURL.stopAccessingSecurityScopedResource()
-        }
+    private static func cleanupSuccessfulImport() async {
+        // clear import state and delete local copy
+        try? await ImportState.clear()
+        ImportState.deleteLocalCopy()
 
         // restore observation/recording to initial states
         TimelineObserver.highlander.enabled = wasObserving
         if wasRecording {
-            Task { await TimelineRecorder.startRecording() }
+            try? await TimelineRecorder.startRecording()
         }
 
         importInProgress = false
         importURL = nil
-        bookmarkData = nil
     }
 
     private static func cleanupFailedImport() {
         if let importURL {
-            importURL.stopAccessingSecurityScopedResource()
-            
-            // Clean up edge records file if it exists
+            // clean up edge records file if it exists
             let edgesURL = importURL.appendingPathComponent("edge_records.jsonl")
             try? FileManager.default.removeItem(at: edgesURL)
         }
 
+        // don't restore recording - partial import blocks it until resolved
+        // don't delete local copy - it's needed for resume
+        TimelineObserver.highlander.enabled = wasObserving
+
+        importInProgress = false
+        self.importURL = nil
+    }
+
+    private static func cleanupFailedCopy() {
+        // copy failed before ImportState was created
+        // delete any partial copy
+        ImportState.deleteLocalCopy()
+
         // restore observation/recording to initial states
         TimelineObserver.highlander.enabled = wasObserving
         if wasRecording {
-            Task { await TimelineRecorder.startRecording() }
+            Task { try? await TimelineRecorder.startRecording() }
         }
 
         importInProgress = false
         importURL = nil
-        bookmarkData = nil
     }
 }
 

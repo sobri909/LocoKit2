@@ -39,6 +39,9 @@ public enum ExportManager {
     // app-specific metadata passthrough
     private static var currentAppMetadata: [String: String]?
 
+    // unique identifier for this export session
+    private static var currentExportId: String?
+
     public enum ExportPhase: Sendable {
         case connecting
         case exportingPlaces
@@ -87,6 +90,7 @@ public enum ExportManager {
         currentPhase = .connecting
         progress = 0
         currentAppMetadata = appMetadata
+        currentExportId = UUID().uuidString
 
         logger.info("ExportManager: Starting \(type) export", subsystem: .exporting)
 
@@ -105,9 +109,21 @@ public enum ExportManager {
             // sequential export phases with cancellation checks
             try Task.checkCancellation()
             try await exportPlaces()
+            try finaliseMetadata(
+                placesCompleted: true,
+                itemsCompleted: false,
+                samplesCompleted: false,
+                startTime: startTime
+            )
 
             try Task.checkCancellation()
             try await exportItems()
+            try finaliseMetadata(
+                placesCompleted: true,
+                itemsCompleted: true,
+                samplesCompleted: false,
+                startTime: startTime
+            )
 
             try await exportSamplesWithCatchUp(startTime: startTime)
 
@@ -285,6 +301,9 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
 
+        // preserve critical state from existing manifest (if any)
+        let existingManifest = try? loadManifest()
+
         // gather stats
         let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
             let places = try Place.fetchCount(db)
@@ -302,6 +321,7 @@ public enum ExportManager {
         )
 
         let metadata = ExportMetadata(
+            exportId: currentExportId,
             schemaVersion: ExportManager.schemaVersion,
             exportMode: .bucketed,
             exportType: type,
@@ -311,6 +331,9 @@ public enum ExportManager {
             placesCompleted: false,
             samplesCompleted: false,
             stats: stats,
+            lastBackupDate: existingManifest?.lastBackupDate,
+            backupProgressDate: existingManifest?.backupProgressDate,
+            extensions: nil,
             appMetadata: currentAppMetadata
         )
 
@@ -598,6 +621,7 @@ public enum ExportManager {
         let allCompleted = placesCompleted && itemsCompleted && samplesCompleted
 
         let updatedMetadata = ExportMetadata(
+            exportId: metadata.exportId,
             schemaVersion: metadata.schemaVersion,
             exportMode: metadata.exportMode,
             exportType: metadata.exportType,

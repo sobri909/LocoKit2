@@ -37,6 +37,14 @@ public enum TimelineProcessor {
     }
 
     public static func process(_ list: TimelineLinkedList) async {
+        // block processing during partial import to prevent corruption
+        do {
+            try await ImportState.guardNotPartialImport()
+        } catch {
+            logger.info("TimelineProcessor blocked by partial import", subsystem: .timeline)
+            return
+        }
+
         let itemIds = await list.itemIds
         let objectKey = Set(itemIds).hashValue.description
         

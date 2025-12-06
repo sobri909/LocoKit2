@@ -74,6 +74,12 @@ internal final class Merge: Hashable, Sendable {
 
     @discardableResult
     func doIt() async -> MergeResult? {
+        // block merges during partial import to prevent corruption
+        if await ImportState.hasPartialImport {
+            logger.info("Merge blocked by partial import", subsystem: .timeline)
+            return nil
+        }
+
         if TimelineProcessor.debugLogging {
             if let description = try? description {
                 logger.info("Doing merge: \(description)", subsystem: .timeline)

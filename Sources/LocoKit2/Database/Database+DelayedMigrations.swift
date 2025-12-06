@@ -137,5 +137,19 @@ extension Database {
                 columns: ["lastSaved"]
             )
         }
+
+        migrator.registerMigration("ImportState") { db in
+            // singleton table for tracking partial import state
+            // presence of row = partial import in progress, blocks other modifications
+            try? db.create(table: "ImportState") { table in
+                table.primaryKey("id", .integer)
+                    .check { $0 == 1 }  // singleton
+                table.column("exportId", .text)
+                table.column("startedAt", .datetime).notNull()
+                table.column("phase", .text).notNull()
+                table.column("processedSampleFiles", .text)  // JSON array
+                table.column("localCopyPath", .text)
+            }
+        }
     }
 }

@@ -15,6 +15,9 @@ extension TimelineProcessor {
     // MARK: - Data Gap Creation
     
     static func createDataGapItem(between firstItem: TimelineItem, and secondItem: TimelineItem) async throws {
+        // block data gap creation during partial import to prevent corruption
+        try await ImportState.guardNotPartialImport()
+
         guard let firstDateRange = firstItem.dateRange,
               let secondDateRange = secondItem.dateRange else {
             throw TimelineError.invalidItem("Missing date range")
