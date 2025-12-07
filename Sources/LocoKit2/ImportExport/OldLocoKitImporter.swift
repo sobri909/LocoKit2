@@ -445,85 +445,28 @@ public enum OldLocoKitImporter {
         orphanedSamples: inout [String: [LocomotionSample]],
         disabledSamplesFromEnabledParents: inout [String: [LocomotionSample]]
     ) async throws {
-        // Skip empty batches
         if batch.isEmpty { return }
-        
-        // Get all timeline item IDs referenced in this batch
-        let itemIds = Set(batch.compactMap(\.timelineItemId))
-        if itemIds.isEmpty {
-            print("Skipping batch with no timeline item references")
-            return
-        }
-        
-        // Process the batch and collect orphans / mismatches
-        let (batchOrphans, batchScenario2, orphanCount, scenario1Count, scenario2Count) = try await Database.pool.write { db in
-            var localOrphans: [String: [LocomotionSample]] = [:]
-            var localScenario2: [String: [LocomotionSample]] = [:]
-            var localOrphanCount = 0
-            var localScenario1Count = 0
-            var localScenario2Count = 0
 
-            for legacySample in batch {
-                // Create new LocomotionSample from legacy data
-                var sample = LocomotionSample(from: legacySample)
+        // convert legacy samples to LocomotionSamples
+        let samples = batch.map { LocomotionSample(from: $0) }
 
-                // Check for disabled state mismatches
-                if let itemId = sample.timelineItemId, let itemDisabled = itemDisabledStates[itemId] {
-                    if itemDisabled && !sample.disabled {
-                        // scenario 1: item disabled, sample enabled → force sample to disabled
-                        sample.disabled = true
-                        localScenario1Count += 1
-
-                    } else if !itemDisabled && sample.disabled {
-                        // scenario 2: item enabled, sample disabled → collect for preserved parent creation
-                        localScenario2[itemId, default: []].append(sample)
-                        localScenario2Count += 1
-                        // orphan from current parent (will be reassigned to preserved parent later)
-                        sample.timelineItemId = nil
-                    }
-                }
-
-                // Check for references to missing TimelineItems
-                if let originalItemId = legacySample.timelineItemId, !importedItemIds.contains(originalItemId) {
-                    // Only treat as orphan if not disabled
-                    if !legacySample.disabled {
-                        localOrphans[originalItemId, default: []].append(sample)
-                        localOrphanCount += 1
-                    }
-                    sample.timelineItemId = nil
-                }
-                
-                // Insert the new sample with conflict handling for race conditions
-                try sample.insert(db, onConflict: .ignore)
-            }
-
-            return (localOrphans, localScenario2, localOrphanCount, localScenario1Count, localScenario2Count)
-        }
-        
-        // Log orphans if found
-        if orphanCount > 0 {
-            print("Found \(orphanCount) orphaned samples in current batch")
+        let batchResult = try await Database.pool.write { db in
+            try SampleImportProcessor.processBatch(
+                samples: samples,
+                validItemIds: importedItemIds,
+                itemDisabledStates: itemDisabledStates,
+                orphanOnlyIfEnabled: true,  // legacy import only orphans enabled samples
+                db: db
+            )
         }
 
-        // Log disabled state mismatches
-        if scenario1Count > 0 {
-            logger.info("Normalized \(scenario1Count) samples (scenario 1: item.disabled=true, sample.disabled=false)", subsystem: .importing)
+        // log results (uses print for orphans in legacy import)
+        if batchResult.orphanCount > 0 {
+            print("Found \(batchResult.orphanCount) orphaned samples in current batch")
         }
-        if scenario2Count > 0 {
-            logger.info("Collected \(scenario2Count) samples for preserved parent creation (scenario 2: item.disabled=false, sample.disabled=true)", subsystem: .importing)
-        }
+        SampleImportProcessor.logBatchResults(batchResult)
 
-        if !batchOrphans.isEmpty {
-            for (itemId, samples) in batchOrphans {
-                orphanedSamples[itemId, default: []].append(contentsOf: samples)
-            }
-        }
-
-        if !batchScenario2.isEmpty {
-            for (itemId, samples) in batchScenario2 {
-                disabledSamplesFromEnabledParents[itemId, default: []].append(contentsOf: samples)
-            }
-        }
+        SampleImportProcessor.mergeResults(batchResult, into: &orphanedSamples, scenario2: &disabledSamplesFromEnabledParents)
     }
 
     private static func cleanupAndReset() {

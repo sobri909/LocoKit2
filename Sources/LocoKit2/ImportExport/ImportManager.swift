@@ -88,35 +88,9 @@ public enum ImportManager {
                 localCopyPath: relativePath
             )
             try await ImportState.save(state)
-            let placesCount = try await importPlaces()
 
-            try await ImportState.updatePhase(.items)
-            let edgeManager = EdgeRecordManager()
-            let (itemsCount, timelineItemIds, itemDisabledStates) = try await importTimelineItems(edgeManager: edgeManager)
+            try await performImportPhases(extensions: extensions, startTime: startTime, isResume: false)
 
-            try await ImportState.updatePhase(.samples)
-            let (samplesCount, orphansProcessed) = try await importSamples(timelineItemIds: timelineItemIds, itemDisabledStates: itemDisabledStates)
-
-            // run extension handlers
-            try await ImportState.updatePhase(.extensions)
-            for handler in extensions {
-                let count = try await handler.import(from: importURL!)
-                logger.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
-            }
-
-            // Log import summary
-            let duration = Date().timeIntervalSince(startTime)
-            let durationString = String(format: "%.1f", duration)
-            var summary = "ImportManager completed successfully in \(durationString)s: "
-            summary += "\(placesCount) places, \(itemsCount) items, \(samplesCount) samples"
-            if orphansProcessed > 0 {
-                summary += " (processed \(orphansProcessed) orphaned samples)"
-            }
-            logger.info(summary, subsystem: .importing)
-            
-            // clear import state
-            await cleanupSuccessfulImport()
-            
         } catch {
             cleanupFailedImport()
             throw error
@@ -178,6 +152,43 @@ public enum ImportManager {
         }
 
         return metadata
+    }
+
+    // MARK: - Import phases
+
+    private static func performImportPhases(
+        extensions: [ImportExtensionHandler],
+        startTime: Date,
+        isResume: Bool
+    ) async throws {
+        let placesCount = try await importPlaces()
+
+        try await ImportState.updatePhase(.items)
+        let edgeManager = EdgeRecordManager()
+        let (itemsCount, timelineItemIds, itemDisabledStates) = try await importTimelineItems(edgeManager: edgeManager)
+
+        try await ImportState.updatePhase(.samples)
+        let (samplesCount, orphansProcessed) = try await importSamples(timelineItemIds: timelineItemIds, itemDisabledStates: itemDisabledStates)
+
+        // run extension handlers
+        try await ImportState.updatePhase(.extensions)
+        for handler in extensions {
+            let count = try await handler.import(from: importURL!)
+            logger.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
+        }
+
+        // log import summary
+        let duration = Date().timeIntervalSince(startTime)
+        let durationString = String(format: "%.1f", duration)
+        let prefix = isResume ? "ImportManager (resumed) completed in" : "ImportManager completed successfully in"
+        var summary = "\(prefix) \(durationString)s: "
+        summary += "\(placesCount) places, \(itemsCount) items, \(samplesCount) samples"
+        if orphansProcessed > 0 {
+            summary += " (processed \(orphansProcessed) orphaned samples)"
+        }
+        logger.info(summary, subsystem: .importing)
+
+        await cleanupSuccessfulImport()
     }
 
     // MARK: - Places
@@ -270,61 +281,9 @@ public enum ImportManager {
                 
                 // Process in batches of 500 (matching OldLocoKitImporter)
                 for batch in items.chunked(into: 500) {
-                    let batchDisabledStates = try await Database.pool.uncancellableWrite { db -> [String: Bool] in
-                        var localStates: [String: Bool] = [:]
-
-                        // collect all placeIds referenced by Visits in this batch
-                        let placeIds = Set(batch.compactMap { $0.visit?.placeId }).filter { !$0.isEmpty }
-
-                        // check which ones exist in the database
-                        let validPlaceIds = try String.fetchSet(db, Place
-                            .select(\.id)
-                            .filter { placeIds.contains($0.id) })
-
-                        for item in batch {
-                            // Store edge record before nulling the relationships
-                            let record = EdgeRecordManager.EdgeRecord(
-                                itemId: item.id,
-                                previousId: item.base.previousItemId,
-                                nextId: item.base.nextItemId
-                            )
-
-                            // Save edge record using EdgeRecordManager
-                            try edgeManager.saveRecord(record)
-
-                            // Clear edges for initial import
-                            var mutableBase = item.base
-                            mutableBase.previousItemId = nil
-                            mutableBase.nextItemId = nil
-
-                            try mutableBase.insert(db, onConflict: .ignore)
-
-                            // track disabled state for sample import
-                            localStates[item.id] = item.base.disabled
-
-                            // handle Visits with missing Places
-                            if var visit = item.visit {
-                                if let placeId = visit.placeId, !validPlaceIds.contains(placeId) {
-                                    logger.error("Detached visit with missing place: \(placeId)", subsystem: .database)
-                                    visit.placeId = nil
-                                    visit.confirmedPlace = false
-                                    visit.uncertainPlace = true
-                                }
-                                try visit.insert(db, onConflict: .ignore)
-
-                            } else if let visit = item.visit {
-                                try visit.insert(db, onConflict: .ignore)
-                            }
-
-                            if let trip = item.trip {
-                                try trip.insert(db, onConflict: .ignore)
-                            }
-                        }
-
-                        return localStates
+                    let batchDisabledStates = try await Database.pool.uncancellableWrite { db in
+                        try processTimelineItemBatch(batch, edgeManager: edgeManager, db: db)
                     }
-
-                    // merge batch disabled states into main collection
                     itemDisabledStates.merge(batchDisabledStates) { (_, new) in new }
                 }
 
@@ -341,6 +300,66 @@ public enum ImportManager {
 
         logger.info("ImportManager: Timeline items import complete (\(totalItems) items)", subsystem: .importing)
         return (totalItems, allTimelineItemIds, itemDisabledStates)
+    }
+
+    private nonisolated static func processTimelineItemBatch(
+        _ batch: [TimelineItem],
+        edgeManager: EdgeRecordManager,
+        db: GRDB.Database
+    ) throws -> [String: Bool] {
+        var disabledStates: [String: Bool] = [:]
+
+        // collect all placeIds referenced by Visits in this batch
+        let placeIds = Set(batch.compactMap { $0.visit?.placeId }).filter { !$0.isEmpty }
+
+        // check which ones exist in the database
+        let validPlaceIds = try String.fetchSet(db, Place
+            .select(\.id)
+            .filter { placeIds.contains($0.id) })
+
+        for item in batch {
+            try processTimelineItem(item, validPlaceIds: validPlaceIds, edgeManager: edgeManager, db: db)
+            disabledStates[item.id] = item.base.disabled
+        }
+
+        return disabledStates
+    }
+
+    private nonisolated static func processTimelineItem(
+        _ item: TimelineItem,
+        validPlaceIds: Set<String>,
+        edgeManager: EdgeRecordManager,
+        db: GRDB.Database
+    ) throws {
+        // save edge record before nulling the relationships
+        let record = EdgeRecordManager.EdgeRecord(
+            itemId: item.id,
+            previousId: item.base.previousItemId,
+            nextId: item.base.nextItemId
+        )
+        try edgeManager.saveRecord(record)
+
+        // clear edges and insert base
+        var mutableBase = item.base
+        mutableBase.previousItemId = nil
+        mutableBase.nextItemId = nil
+        try mutableBase.insert(db, onConflict: .ignore)
+
+        // insert visit (handling missing places)
+        if var visit = item.visit {
+            if let placeId = visit.placeId, !validPlaceIds.contains(placeId) {
+                logger.error("Detached visit with missing place: \(placeId)", subsystem: .database)
+                visit.placeId = nil
+                visit.confirmedPlace = false
+                visit.uncertainPlace = true
+            }
+            try visit.insert(db, onConflict: .ignore)
+        }
+
+        // insert trip
+        if let trip = item.trip {
+            try trip.insert(db, onConflict: .ignore)
+        }
     }
 
     private static func restoreEdgeRelationships(using edgeManager: EdgeRecordManager) async throws {
@@ -409,77 +428,24 @@ public enum ImportManager {
                 print("Loaded \(samples.count) samples from \(fileURL.lastPathComponent)")
                 totalSamples += samples.count
 
-                // process in batches of 1000 (matching OldLocoKitImporter)
+                // process in batches of 1000
                 for batch in samples.chunked(into: 1000) {
-                    // process batch and collect orphaned samples / mismatches
-                    let (batchOrphans, batchScenario2, _, _, _) = try await Database.pool.uncancellableWrite { [timelineItemIds, itemDisabledStates] db in
-                        // collect orphans and scenario 2 mismatches within transaction scope
-                        var batchOrphans: [String: [LocomotionSample]] = [:]
-                        var batchScenario2: [String: [LocomotionSample]] = [:]
-                        var orphanedCount = 0
-                        var scenario1Count = 0
-                        var scenario2Count = 0
-
-                        for var sample in batch {
-                            // check for disabled state mismatches
-                            if let itemId = sample.timelineItemId, let itemDisabled = itemDisabledStates[itemId] {
-                                if itemDisabled && !sample.disabled {
-                                    // scenario 1: item disabled, sample enabled → force sample to disabled
-                                    sample.disabled = true
-                                    scenario1Count += 1
-
-                                } else if !itemDisabled && sample.disabled {
-                                    // scenario 2: item enabled, sample disabled → collect for preserved parent creation
-                                    batchScenario2[itemId, default: []].append(sample)
-                                    scenario2Count += 1
-                                    // orphan from current parent (will be reassigned to preserved parent later)
-                                    sample.timelineItemId = nil
-                                }
-                            }
-
-                            // check and fix invalid references using pre-collected IDs
-                            if let originalItemId = sample.timelineItemId, !timelineItemIds.contains(originalItemId) {
-                                // preserve sample with its original itemId for later recreation
-                                batchOrphans[originalItemId, default: []].append(sample)
-
-                                // null the reference for database compliance
-                                sample.timelineItemId = nil
-                                orphanedCount += 1
-                            }
-
-                            try sample.insert(db, onConflict: .ignore)
-                        }
-
-                        if orphanedCount > 0 {
-                            logger.error("Orphaned \(orphanedCount) samples with missing parent items", subsystem: .importing)
-                        }
-
-                        // log disabled state mismatches
-                        if scenario1Count > 0 {
-                            logger.info("Normalized \(scenario1Count) samples (scenario 1: item.disabled=true, sample.disabled=false)", subsystem: .importing)
-                        }
-                        if scenario2Count > 0 {
-                            logger.info("Collected \(scenario2Count) samples for preserved parent creation (scenario 2: item.disabled=false, sample.disabled=true)", subsystem: .importing)
-                        }
-
-                        // return the orphans and mismatches so they can be merged outside the transaction
-                        return (batchOrphans, batchScenario2, orphanedCount, scenario1Count, scenario2Count)
+                    let batchResult = try await Database.pool.uncancellableWrite { [timelineItemIds, itemDisabledStates] db in
+                        try SampleImportProcessor.processBatch(
+                            samples: batch,
+                            validItemIds: timelineItemIds,
+                            itemDisabledStates: itemDisabledStates,
+                            db: db
+                        )
                     }
 
-                    // merge batch orphans into per-file collection (persisted after file completes)
-                    for (itemId, samples) in batchOrphans {
-                        fileOrphans[itemId, default: []].append(contentsOf: samples)
-                    }
-
-                    // merge batch scenario 2 mismatches into per-file collection
-                    for (itemId, samples) in batchScenario2 {
-                        fileScenario2[itemId, default: []].append(contentsOf: samples)
-                    }
+                    SampleImportProcessor.logBatchResults(batchResult)
+                    SampleImportProcessor.mergeResults(batchResult, into: &fileOrphans, scenario2: &fileScenario2)
                 }
 
                 // persist orphans for resume
                 if !fileOrphans.isEmpty || !fileScenario2.isEmpty {
-                    appendOrphanMappings(orphans: fileOrphans, scenario2: fileScenario2)
+                    OrphanMappingsManager.appendMappings(orphans: fileOrphans, scenario2: fileScenario2, to: importURL)
                 }
 
                 processedFiles += 1
@@ -500,12 +466,12 @@ public enum ImportManager {
         }
 
         // load all orphan mappings from file (source of truth across all runs)
-        let persistedMappings = loadOrphanMappings()
+        let persistedMappings = OrphanMappingsManager.loadMappings(from: importURL)
         var finalOrphans: [String: [LocomotionSample]] = [:]
         var finalScenario2: [String: [LocomotionSample]] = [:]
 
         if !persistedMappings.orphans.isEmpty || !persistedMappings.scenario2.isEmpty {
-            let (restoredOrphans, restoredScenario2) = try await reconstructOrphansFromMappings(persistedMappings)
+            let (restoredOrphans, restoredScenario2) = try await OrphanMappingsManager.reconstructOrphans(from: persistedMappings)
             finalOrphans = restoredOrphans
             finalScenario2 = restoredScenario2
             logger.info("Loaded \(persistedMappings.orphans.count) orphan groups and \(persistedMappings.scenario2.count) scenario2 groups from persisted mappings", subsystem: .importing)
@@ -637,137 +603,12 @@ public enum ImportManager {
                 }
             }
 
-            // resume from the stored phase
-            // for now, restart from beginning (resume efficiency can be added later)
-            let placesCount = try await importPlaces()
-
-            try await ImportState.updatePhase(.items)
-            let edgeManager = EdgeRecordManager()
-            let (itemsCount, timelineItemIds, itemDisabledStates) = try await importTimelineItems(edgeManager: edgeManager)
-
-            try await ImportState.updatePhase(.samples)
-            let (samplesCount, orphansProcessed) = try await importSamples(timelineItemIds: timelineItemIds, itemDisabledStates: itemDisabledStates)
-
-            // run extension handlers
-            try await ImportState.updatePhase(.extensions)
-            for handler in extensions {
-                let count = try await handler.import(from: importURL!)
-                logger.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
-            }
-
-            // log import summary
-            let duration = Date().timeIntervalSince(startTime)
-            let durationString = String(format: "%.1f", duration)
-            var summary = "ImportManager (resumed) completed in \(durationString)s: "
-            summary += "\(placesCount) places, \(itemsCount) items, \(samplesCount) samples"
-            if orphansProcessed > 0 {
-                summary += " (processed \(orphansProcessed) orphaned samples)"
-            }
-            logger.info(summary, subsystem: .importing)
-
-            await cleanupSuccessfulImport()
+            try await performImportPhases(extensions: extensions, startTime: startTime, isResume: true)
 
         } catch {
             cleanupFailedImport()
             throw error
         }
-    }
-
-    // MARK: - Orphan Mappings Persistence
-
-    private static var orphanMappingsURL: URL? {
-        importURL?.appendingPathComponent("orphan_mappings.json")
-    }
-
-    private struct PersistedMappings: Codable {
-        var orphans: [String: [String]] = [:]      // originalItemId -> [sampleId]
-        var scenario2: [String: [String]] = [:]    // originalItemId -> [sampleId] (disabled samples from enabled parents)
-    }
-
-    private static func loadOrphanMappings() -> PersistedMappings {
-        guard let url = orphanMappingsURL,
-              FileManager.default.fileExists(atPath: url.path),
-              let data = try? Data(contentsOf: url),
-              let mappings = try? JSONDecoder().decode(PersistedMappings.self, from: data) else {
-            return PersistedMappings()
-        }
-        return mappings
-    }
-
-    private static func saveOrphanMappings(_ mappings: PersistedMappings) {
-        guard let url = orphanMappingsURL else { return }
-        do {
-            let data = try JSONEncoder().encode(mappings)
-            try data.write(to: url)
-        } catch {
-            logger.error(error, subsystem: .importing)
-        }
-    }
-
-    /// Append batch mappings to persistent file
-    private static func appendOrphanMappings(
-        orphans: [String: [LocomotionSample]],
-        scenario2: [String: [LocomotionSample]]
-    ) {
-        var mappings = loadOrphanMappings()
-
-        // append orphan sample IDs
-        for (itemId, samples) in orphans {
-            let sampleIds = samples.map { $0.id }
-            mappings.orphans[itemId, default: []].append(contentsOf: sampleIds)
-        }
-
-        // append scenario2 sample IDs
-        for (itemId, samples) in scenario2 {
-            let sampleIds = samples.map { $0.id }
-            mappings.scenario2[itemId, default: []].append(contentsOf: sampleIds)
-        }
-
-        saveOrphanMappings(mappings)
-    }
-
-    /// Reconstruct orphanedSamples dictionary from persisted mappings by fetching samples from DB
-    private static func reconstructOrphansFromMappings(_ mappings: PersistedMappings) async throws -> (
-        orphans: [String: [LocomotionSample]],
-        scenario2: [String: [LocomotionSample]]
-    ) {
-        var orphans: [String: [LocomotionSample]] = [:]
-        var scenario2: [String: [LocomotionSample]] = [:]
-
-        // collect all sample IDs we need to fetch
-        let allOrphanIds = Set(mappings.orphans.values.flatMap { $0 })
-        let allScenario2Ids = Set(mappings.scenario2.values.flatMap { $0 })
-        let allIds = allOrphanIds.union(allScenario2Ids)
-
-        guard !allIds.isEmpty else { return (orphans, scenario2) }
-
-        // fetch samples from DB
-        let samples = try await Database.pool.read { db in
-            try LocomotionSample
-                .filter(allIds.contains(Column("id")))
-                .fetchAll(db)
-        }
-
-        // build lookup by ID
-        let sampleById = Dictionary(uniqueKeysWithValues: samples.map { ($0.id, $0) })
-
-        // reconstruct orphans dictionary
-        for (itemId, sampleIds) in mappings.orphans {
-            let itemSamples = sampleIds.compactMap { sampleById[$0] }
-            if !itemSamples.isEmpty {
-                orphans[itemId] = itemSamples
-            }
-        }
-
-        // reconstruct scenario2 dictionary
-        for (itemId, sampleIds) in mappings.scenario2 {
-            let itemSamples = sampleIds.compactMap { sampleById[$0] }
-            if !itemSamples.isEmpty {
-                scenario2[itemId] = itemSamples
-            }
-        }
-
-        return (orphans, scenario2)
     }
 
     // MARK: - Cleanup
@@ -817,5 +658,3 @@ public enum ImportManager {
         importURL = nil
     }
 }
-
-// MARK: -
