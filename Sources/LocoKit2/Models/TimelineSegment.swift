@@ -23,7 +23,7 @@ public final class TimelineSegment: Sendable {
     public let dateRange: DateInterval
     public var shouldReprocessOnUpdate: Bool
 
-    public private(set) var timelineItems: [TimelineItem] = []
+    public private(set) var timelineItems: [TimelineItem]?
 
     @ObservationIgnored
     nonisolated(unsafe)
@@ -45,6 +45,7 @@ public final class TimelineSegment: Sendable {
     // MARK: -
 
     public func pruneSamples() async {
+        guard let timelineItems else { return }
         for item in timelineItems {
             do {
                 try await item.pruneSamples()
@@ -110,7 +111,7 @@ public final class TimelineSegment: Sendable {
         guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.update(from:)", objectKey: dateRange.description) else { return }
         defer { Task { await OperationRegistry.endOperation(handle) } }
         
-        let oldItems = timelineItems
+        let oldItems = timelineItems ?? []
         var newItems = updatedItems
 
         // load/copy samples
