@@ -139,7 +139,8 @@ extension Place {
         calendar.timeZone = localTimeZone ?? .current
         let timeOfDay = date.sinceStartOfDay(in: calendar)
 
-        guard let timeBasedProbability = leavingTimes.probability(for: timeOfDay) else { return nil }
+        // if time of day is outside histogram range, treat as very low probability ("never seen this time")
+        let timeBasedProbability = leavingTimes.probability(for: timeOfDay) ?? 0.01
 
         // if duration is below histogram range, treat as very low probability ("never seen this short")
         let durationBasedProbability = visitDurations.probability(for: duration) ?? 0.01
