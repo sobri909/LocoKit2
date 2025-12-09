@@ -17,7 +17,12 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.1.0")
     ],
     targets: [
-        .target(name: "LocoKit2", dependencies: ["Surge", "GRDB", "Logging", "LoggingFormatAndPipe"]),
+        .target(name: "LocoKit2", dependencies: [
+            "Surge",
+            .product(name: "GRDB", package: "GRDB.swift"),
+            .product(name: "Logging", package: "swift-log"),
+            .product(name: "LoggingFormatAndPipe", package: "swift-log-format-and-pipe")
+        ]),
         .testTarget(name: "LocoKit2Tests", dependencies: ["LocoKit2"])
     ]
 )
