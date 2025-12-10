@@ -20,35 +20,45 @@ extension TimelineItem {
 
     /// A descriptive title for the timeline item.
     /// - Returns: The item's title string.
-    /// - Note: Will return "Error" if called on an item without loaded samples.
+    /// - Note: Returns "Error" if samples are required but not loaded (trips only).
     public var title: String {
+        // visits with customTitle or place don't need samples
+        if isVisit {
+            if let visit, let customTitle = visit.customTitle {
+                return customTitle
+            }
+            if let place {
+                return place.name
+            }
+            // no place - need samples for isWorthKeeping distinction
+            // but if samples aren't loaded, return generic title instead of error
+            guard let samples, !samples.isEmpty else {
+                return "Visit"
+            }
+            do {
+                if try isWorthKeeping {
+                    return "Unknown Place"
+                }
+                return "Brief Stop"
+
+            } catch {
+                logger.error(error, subsystem: .timeline)
+                return "Visit"
+            }
+        }
+
+        // trips require samples for isDataGap check
         do {
             if try isDataGap {
                 return "Data Gap"
             }
 
-            if let trip {
-                if let activityType = trip.activityType {
-                    return activityType.displayName.capitalized
-                }
-                return "Transport"
+            if let trip, let activityType = trip.activityType {
+                return activityType.displayName.capitalized
             }
 
-            // must be a visit
-            if let visit, let customTitle = visit.customTitle {
-                return customTitle
-            }
-            
-            if let place {
-                return place.name
-            }
+            return "Transport"
 
-            if try isWorthKeeping {
-                return "Unknown Place"
-            }
-
-            return "Brief Stop"
-            
         } catch {
             logger.error(error, subsystem: .timeline)
             return "Error"
