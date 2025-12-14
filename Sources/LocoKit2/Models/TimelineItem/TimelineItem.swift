@@ -276,7 +276,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     public static func itemBaseRequest(includeSamples: Bool, includePlaces: Bool = false) -> QueryInterfaceRequest<TimelineItemBase> {
         var request = TimelineItemBase
-            .including(optional: TimelineItemBase.trip)
+            .including(optional: TimelineItemBase.trip.aliased(TableAlias(name: "trip")))
 
         if includePlaces {
             request = request.including(
