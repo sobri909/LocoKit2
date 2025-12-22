@@ -259,6 +259,15 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         public static let leavingTimes = Column("leavingTimes")
         public static let visitDurations = Column("visitDurations")
         public static let occupancyTimes = Column("occupancyTimes")
+
+        // all columns except histograms (for efficient bulk loading)
+        public static let columnsExcludingHistograms: [Column] = [
+            id, lastSaved, source, latitude, longitude, radiusMean, radiusSD,
+            secondsFromGMT, name, streetAddress, countryCode, locality, isStale,
+            rtreeId, mapboxPlaceId, mapboxCategory, mapboxMakiIcon, googlePlaceId,
+            googlePrimaryType, foursquarePlaceId, foursquareCategoryId,
+            visitCount, visitDays, lastVisitDate
+        ]
     }
 
     // MARK: - Custom Decoder

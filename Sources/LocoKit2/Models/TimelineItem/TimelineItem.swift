@@ -274,19 +274,28 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         }
     }
 
-    public static func itemBaseRequest(includeSamples: Bool, includePlaces: Bool = false) -> QueryInterfaceRequest<TimelineItemBase> {
+    public static func itemBaseRequest(
+        includeSamples: Bool,
+        includePlaces: Bool = false,
+        includeHistograms: Bool = true
+    ) -> QueryInterfaceRequest<TimelineItemBase> {
         var request = TimelineItemBase
             .including(optional: TimelineItemBase.trip.aliased(TableAlias(name: "trip")))
 
         if includePlaces {
+            var placeAssociation = TimelineItemVisit.place.aliased(TableAlias(name: "place"))
+
+            // exclude histogram blobs for more efficient bulk loading
+            if !includeHistograms {
+                placeAssociation = placeAssociation.select(Place.Columns.columnsExcludingHistograms)
+            }
+
             request = request.including(
                 optional: TimelineItemBase.visit
                     .aliased(TableAlias(name: "visit"))
-                    .including(
-                        optional: TimelineItemVisit.place
-                            .aliased(TableAlias(name: "place"))
-                    )
+                    .including(optional: placeAssociation)
             )
+
         } else {
             request = request.including(optional: TimelineItemBase.visit.aliased(TableAlias(name: "visit")))
         }
@@ -298,9 +307,16 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         return request
     }
 
-    public static func itemRequest(includeSamples: Bool, includePlaces: Bool = false) -> QueryInterfaceRequest<TimelineItem> {
-        return itemBaseRequest(includeSamples: includeSamples, includePlaces: includePlaces)
-            .asRequest(of: TimelineItem.self)
+    public static func itemRequest(
+        includeSamples: Bool,
+        includePlaces: Bool = false,
+        includeHistograms: Bool = true
+    ) -> QueryInterfaceRequest<TimelineItem> {
+        return itemBaseRequest(
+            includeSamples: includeSamples,
+            includePlaces: includePlaces,
+            includeHistograms: includeHistograms
+        ).asRequest(of: TimelineItem.self)
     }
 
     // MARK: - Sample fetching
