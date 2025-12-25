@@ -333,7 +333,7 @@ public enum TimelineRecorder {
     // MARK: - Fallback sample recording
 
     @MainActor
-    private static let fallbackSampleDuration: TimeInterval = 60
+    private static let fallbackSampleDuration: TimeInterval = 10
 
     @MainActor
     private static var fallbackSampleTimer: Timer?
