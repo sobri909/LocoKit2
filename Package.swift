@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "LocoKit2",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v18)
     ],
