@@ -33,35 +33,35 @@ extension TimelineItem {
             // no place - need samples for isWorthKeeping distinction
             // but if samples aren't loaded, return generic title instead of error
             guard let samples, !samples.isEmpty else {
-                return "Visit"
+                return String(localized: "Visit", bundle: .module)
             }
             do {
                 if try isWorthKeeping {
-                    return "Unknown Place"
+                    return String(localized: "Unknown Place", bundle: .module)
                 }
-                return "Brief Stop"
+                return String(localized: "Brief Stop", bundle: .module)
 
             } catch {
                 logger.error(error, subsystem: .timeline)
-                return "Visit"
+                return String(localized: "Visit", bundle: .module)
             }
         }
 
         // trips require samples for isDataGap check
         do {
             if try isDataGap {
-                return "Data Gap"
+                return String(localized: "Data Gap", bundle: .module)
             }
 
             if let trip, let activityType = trip.activityType {
                 return activityType.displayName.capitalized
             }
 
-            return "Transport"
+            return String(localized: "Transport", bundle: .module)
 
         } catch {
             logger.error(error, subsystem: .timeline)
-            return "Error"
+            return String(localized: "Error", bundle: .module)
         }
     }
 

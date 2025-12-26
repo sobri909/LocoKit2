@@ -23,6 +23,24 @@ public enum RecordingState: Int, Codable, Sendable {
     public var isSleeping: Bool { return Self.sleepStates.contains(self) }
     public var isCurrentRecorder: Bool { return Self.activeRecorderStates.contains(self) }
 
+    public var displayName: String {
+        switch self {
+        case .off:
+            return String(localized: "off", bundle: .module)
+        case .recording:
+            return String(localized: "recording", bundle: .module)
+        case .sleeping:
+            return String(localized: "sleeping", bundle: .module)
+        case .deepSleeping:
+            return String(localized: "deep sleeping", bundle: .module)
+        case .wakeup:
+            return String(localized: "wakeup", bundle: .module)
+        case .standby:
+            return String(localized: "standby", bundle: .module)
+        }
+    }
+
+    // internal serialization value
     public var stringValue: String {
         switch self {
         case .off:          return "off"

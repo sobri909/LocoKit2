@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "LocoKit2",
     platforms: [
-        .iOS(.v17)
+        .iOS(.v18)
     ],
     products: [
         .library(name: "LocoKit2", targets: ["LocoKit2"])
@@ -17,12 +17,18 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.1.0")
     ],
     targets: [
-        .target(name: "LocoKit2", dependencies: [
-            "Surge",
-            .product(name: "GRDB", package: "GRDB.swift"),
-            .product(name: "Logging", package: "swift-log"),
-            .product(name: "LoggingFormatAndPipe", package: "swift-log-format-and-pipe")
-        ]),
+        .target(
+            name: "LocoKit2",
+            dependencies: [
+                "Surge",
+                .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "LoggingFormatAndPipe", package: "swift-log-format-and-pipe")
+            ],
+            resources: [
+                .process("Resources")
+            ]
+        ),
         .testTarget(name: "LocoKit2Tests", dependencies: ["LocoKit2"])
     ]
 )

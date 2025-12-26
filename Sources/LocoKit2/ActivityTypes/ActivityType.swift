@@ -64,18 +64,78 @@ public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
 
     public var displayName: String {
         switch self {
+        case .unknown:
+            return String(localized: "unknown", bundle: .module)
+        case .bogus:
+            return String(localized: "bogus", bundle: .module)
+        case .stationary:
+            return String(localized: "stationary", bundle: .module)
+        case .walking:
+            return String(localized: "walking", bundle: .module)
+        case .running:
+            return String(localized: "running", bundle: .module)
+        case .cycling:
+            return String(localized: "cycling", bundle: .module)
+        case .car:
+            return String(localized: "car", bundle: .module)
+        case .airplane:
+            return String(localized: "airplane", bundle: .module)
+        case .train:
+            return String(localized: "train", bundle: .module)
+        case .bus:
+            return String(localized: "bus", bundle: .module)
+        case .motorcycle:
+            return String(localized: "motorcycle", bundle: .module)
+        case .boat:
+            return String(localized: "boat", bundle: .module)
+        case .tram:
+            return String(localized: "tram", bundle: .module)
+        case .tractor:
+            return String(localized: "tractor", bundle: .module)
         case .tuktuk:
-            return "tuk-tuk"
-        case .inlineSkating:
-            return "inline skating"
+            return String(localized: "tuk-tuk", bundle: .module)
+        case .songthaew:
+            return String(localized: "songthaew", bundle: .module)
+        case .scooter:
+            return String(localized: "scooter", bundle: .module)
+        case .metro:
+            return String(localized: "metro", bundle: .module)
         case .cableCar:
-            return "cable car"
+            return String(localized: "cable car", bundle: .module)
+        case .funicular:
+            return String(localized: "funicular", bundle: .module)
+        case .chairlift:
+            return String(localized: "chairlift", bundle: .module)
         case .skiLift:
-            return "ski lift"
+            return String(localized: "ski lift", bundle: .module)
+        case .taxi:
+            return String(localized: "taxi", bundle: .module)
         case .hotAirBalloon:
-            return "hot air balloon"
-        default:
-            return String(describing: self)
+            return String(localized: "hot air balloon", bundle: .module)
+        case .skateboarding:
+            return String(localized: "skateboarding", bundle: .module)
+        case .inlineSkating:
+            return String(localized: "inline skating", bundle: .module)
+        case .snowboarding:
+            return String(localized: "snowboarding", bundle: .module)
+        case .skiing:
+            return String(localized: "skiing", bundle: .module)
+        case .horseback:
+            return String(localized: "horseback", bundle: .module)
+        case .swimming:
+            return String(localized: "swimming", bundle: .module)
+        case .golf:
+            return String(localized: "golf", bundle: .module)
+        case .wheelchair:
+            return String(localized: "wheelchair", bundle: .module)
+        case .rowing:
+            return String(localized: "rowing", bundle: .module)
+        case .kayaking:
+            return String(localized: "kayaking", bundle: .module)
+        case .surfing:
+            return String(localized: "surfing", bundle: .module)
+        case .hiking:
+            return String(localized: "hiking", bundle: .module)
         }
     }
 

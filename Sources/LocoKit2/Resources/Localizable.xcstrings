@@ -1,0 +1,582 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "airplane" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Flugzeug" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "avión" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "avion" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "飛行機" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "เครื่องบิน" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "飞机" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "飛機" } }
+      }
+    },
+    "boat" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Boot" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "barco" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "bateau" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "船" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "เรือ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "船" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "船" } }
+      }
+    },
+    "bogus" : {
+      "comment" : "ActivityType display name - invalid/rejected data",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "ungültig" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "inválido" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "invalide" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "無効" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ไม่ถูกต้อง" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无效" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無效" } }
+      }
+    },
+    "Brief Stop" : {
+      "comment" : "TimelineItem title - a visit too short to be significant",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kurzer Halt" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Parada breve" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Arrêt bref" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "短い滞在" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "แวะสั้นๆ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "短暂停留" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "短暫停留" } }
+      }
+    },
+    "bus" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bus" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "autobús" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "bus" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バス" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถบัส" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "公交车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "公車" } }
+      }
+    },
+    "cable car" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Seilbahn" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "teleférico" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "téléphérique" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ロープウェイ" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "กระเช้าลอยฟ้า" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缆车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "纜車" } }
+      }
+    },
+    "car" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Auto" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "coche" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "voiture" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "車" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถยนต์" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "汽车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "汽車" } }
+      }
+    },
+    "chairlift" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sessellift" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "telesilla" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "télésiège" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "チェアリフト" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ลิฟต์เก้าอี้" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "吊椅" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "吊椅" } }
+      }
+    },
+    "cycling" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Radfahren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "ciclismo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "vélo" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "自転車" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ปั่นจักรยาน" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "骑行" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "騎車" } }
+      }
+    },
+    "Data Gap" : {
+      "comment" : "TimelineItem title - period where no data was recorded",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Datenlücke" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Sin datos" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Données manquantes" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "データなし" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ไม่มีข้อมูล" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "数据缺失" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "資料缺失" } }
+      }
+    },
+    "deep sleeping" : {
+      "comment" : "RecordingState display name - deep sleep mode (not currently in use)",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Tiefschlaf" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "sueño profundo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "sommeil profond" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "深い休止" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "พักลึก" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深度休眠" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "深度休眠" } }
+      }
+    },
+    "Error" : {
+      "comment" : "TimelineItem title - fallback when item data couldn't be loaded",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fehler" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Error" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Erreur" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "エラー" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ข้อผิดพลาด" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "错误" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "錯誤" } }
+      }
+    },
+    "funicular" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Standseilbahn" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "funicular" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "funiculaire" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ケーブルカー" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถรางไต่เขา" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缆索铁路" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "纜索鐵路" } }
+      }
+    },
+    "golf" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Golf" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "golf" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "golf" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ゴルフ" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "กอล์ฟ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高尔夫" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "高爾夫" } }
+      }
+    },
+    "hiking" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wandern" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "senderismo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "randonnée" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ハイキング" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "เดินป่า" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "徒步" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "健行" } }
+      }
+    },
+    "horseback" : {
+      "comment" : "ActivityType display name - horseback riding",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Reiten" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "equitación" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "équitation" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "乗馬" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ขี่ม้า" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "骑马" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "騎馬" } }
+      }
+    },
+    "hot air balloon" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Heißluftballon" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "globo aerostático" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "montgolfière" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "熱気球" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "บอลลูน" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "热气球" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "熱氣球" } }
+      }
+    },
+    "inline skating" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Inlineskaten" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "patinaje en línea" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "roller" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "インラインスケート" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "อินไลน์สเก็ต" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轮滑" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "直排輪" } }
+      }
+    },
+    "kayaking" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kajakfahren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "kayak" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "kayak" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カヤック" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "พายเรือคายัค" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "皮划艇" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "划獨木舟" } }
+      }
+    },
+    "metro" : {
+      "comment" : "ActivityType display name - subway/underground train",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "U-Bahn" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "metro" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "métro" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "地下鉄" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถไฟใต้ดิน" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "地铁" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "捷運" } }
+      }
+    },
+    "motorcycle" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Motorrad" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "motocicleta" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "moto" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バイク" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "มอเตอร์ไซค์" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "摩托车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "機車" } }
+      }
+    },
+    "off" : {
+      "comment" : "RecordingState display name - recording is off",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "aus" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "apagado" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "désactivé" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "オフ" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ปิด" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "關閉" } }
+      }
+    },
+    "recording" : {
+      "comment" : "RecordingState display name - actively recording location",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufnahme" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "grabando" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "enregistrement" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "記録中" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "กำลังบันทึก" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "记录中" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "記錄中" } }
+      }
+    },
+    "rowing" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rudern" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "remo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "aviron" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ボート" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "พายเรือ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "划船" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "划船" } }
+      }
+    },
+    "running" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Laufen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "correr" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "course" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ランニング" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "วิ่ง" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跑步" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "跑步" } }
+      }
+    },
+    "scooter" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Roller" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "scooter" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "scooter" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スクーター" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "สกู๊ตเตอร์" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "滑板车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "滑板車" } }
+      }
+    },
+    "skateboarding" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Skateboarden" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "skateboard" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "skateboard" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スケートボード" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "สเก็ตบอร์ด" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "滑板" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "滑板" } }
+      }
+    },
+    "ski lift" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Skilift" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "telesquí" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "téléski" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スキーリフト" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ลิฟต์สกี" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "滑雪缆车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "滑雪纜車" } }
+      }
+    },
+    "skiing" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Skifahren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "esquí" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "ski" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スキー" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "สกี" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "滑雪" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "滑雪" } }
+      }
+    },
+    "sleeping" : {
+      "comment" : "RecordingState display name - low power sleep mode between location updates",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ruhemodus" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "en reposo" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "en veille" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "休止中" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "พักอยู่" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "休眠中" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "休眠中" } }
+      }
+    },
+    "snowboarding" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Snowboarden" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "snowboard" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "snowboard" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スノーボード" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "สโนว์บอร์ด" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "单板滑雪" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "單板滑雪" } }
+      }
+    },
+    "songthaew" : {
+      "comment" : "ActivityType display name - Thai shared taxi truck",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Songthaew" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "songthaew" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "songthaew" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ソンテウ" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "สองแถว" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "双条车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "雙條車" } }
+      }
+    },
+    "standby" : {
+      "comment" : "RecordingState display name - recorder is on standby",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bereitschaft" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "en espera" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "en attente" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "スタンバイ" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "พร้อม" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "待机" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "待機" } }
+      }
+    },
+    "stationary" : {
+      "comment" : "ActivityType display name - not moving",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "stationär" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "estacionario" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "stationnaire" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "静止" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "หยุดนิ่ง" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "静止" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "靜止" } }
+      }
+    },
+    "surfing" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Surfen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "surf" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "surf" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サーフィン" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "เซิร์ฟ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "冲浪" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "衝浪" } }
+      }
+    },
+    "swimming" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schwimmen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "natación" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "natation" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "水泳" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ว่ายน้ำ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "游泳" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "游泳" } }
+      }
+    },
+    "taxi" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Taxi" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "taxi" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "taxi" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タクシー" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "แท็กซี่" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "出租车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "計程車" } }
+      }
+    },
+    "tractor" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Traktor" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "tractor" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "tracteur" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "トラクター" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถแทรกเตอร์" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拖拉机" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "拖拉機" } }
+      }
+    },
+    "train" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zug" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "tren" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "train" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "電車" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถไฟ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "火车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "火車" } }
+      }
+    },
+    "tram" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Straßenbahn" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "tranvía" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "tramway" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "路面電車" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถราง" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "有轨电车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "有軌電車" } }
+      }
+    },
+    "Transport" : {
+      "comment" : "TimelineItem title - generic transport when activity type unknown",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Transport" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Transporte" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Transport" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "移動" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "เดินทาง" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交通" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "交通" } }
+      }
+    },
+    "tuk-tuk" : {
+      "comment" : "ActivityType display name - Thai three-wheeled taxi",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Tuk-Tuk" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "tuk-tuk" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "tuk-tuk" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "トゥクトゥク" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ตุ๊กตุ๊ก" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "嘟嘟车" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "嘟嘟車" } }
+      }
+    },
+    "unknown" : {
+      "comment" : "ActivityType display name - activity type not determined",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "unbekannt" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "desconocido" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "inconnu" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "不明" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ไม่ทราบ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未知" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "未知" } }
+      }
+    },
+    "Unknown Place" : {
+      "comment" : "TimelineItem title - a visit at a location without a saved Place",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unbekannter Ort" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Lugar desconocido" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lieu inconnu" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "不明な場所" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "สถานที่ไม่ทราบ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未知地点" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "未知地點" } }
+      }
+    },
+    "Visit" : {
+      "comment" : "TimelineItem title - generic visit",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Besuch" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Visita" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Visite" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "滞在" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "แวะ" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "访问" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "造訪" } }
+      }
+    },
+    "wakeup" : {
+      "comment" : "RecordingState display name - transitioning from sleep to active recording",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufwachen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "despertar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "réveil" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "起動" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "ตื่น" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "唤醒" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "喚醒" } }
+      }
+    },
+    "walking" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gehen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "caminar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "marche" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "徒歩" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "เดิน" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "步行" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "步行" } }
+      }
+    },
+    "wheelchair" : {
+      "comment" : "ActivityType display name",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rollstuhl" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "silla de ruedas" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "fauteuil roulant" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "車椅子" } },
+        "th" : { "stringUnit" : { "state" : "translated", "value" : "รถเข็น" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "轮椅" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "輪椅" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
