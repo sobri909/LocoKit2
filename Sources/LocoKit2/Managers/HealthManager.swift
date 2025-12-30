@@ -48,7 +48,7 @@ public enum HealthManager {
             try await healthStore.requestAuthorization(toShare: [], read: healthDataTypes)
 
         } catch {
-            logger.error(error, subsystem: .healthkit)
+            Log.error(error, subsystem: .healthkit)
         }
     }
 
@@ -155,7 +155,7 @@ public enum HealthManager {
                 }
             }
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
         
         lastHealthUpdateTimes[item.id] = .now
@@ -172,7 +172,7 @@ public enum HealthManager {
             return nil
             
         } catch {
-            logger.error(error, subsystem: .healthkit)
+            Log.error(error, subsystem: .healthkit)
             return nil
         }
     }
@@ -188,7 +188,7 @@ public enum HealthManager {
             return nil
             
         } catch {
-            logger.error(error, subsystem: .healthkit)
+            Log.error(error, subsystem: .healthkit)
             return nil
         }
     }
@@ -204,7 +204,7 @@ public enum HealthManager {
             return nil
             
         } catch {
-            logger.error(error, subsystem: .healthkit)
+            Log.error(error, subsystem: .healthkit)
             return nil
         }
     }
@@ -248,7 +248,7 @@ public enum HealthManager {
             return (average: average, max: max)
             
         } catch {
-            logger.error(error, subsystem: .healthkit)
+            Log.error(error, subsystem: .healthkit)
             return (average: nil, max: nil)
         }
     }
@@ -280,7 +280,7 @@ public enum HealthManager {
             await matchHeartRateToSamples(heartRateSamples: heartRateSamples, locomotionSamples: samples)
 
         } catch {
-            logger.error(error, subsystem: .healthkit)
+            Log.error(error, subsystem: .healthkit)
         }
     }
 
@@ -346,7 +346,7 @@ public enum HealthManager {
                 }
                 
             } catch {
-                logger.error(error, subsystem: .database)
+                Log.error(error, subsystem: .database)
             }
         }
     }

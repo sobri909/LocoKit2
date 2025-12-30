@@ -1,152 +1,168 @@
 //
 //  DebugLogger.swift
 //
-//  Created by Matt Greenfield on 8/4/20.
+//  Created by Matt Greenfield on 2020-04-08
 //
 
 import Foundation
-import os.log
-import Logging
-import LoggingFormatAndPipe
+import os
 
-internal let logger = DebugLogger.logger
+public enum Log {
 
-@Observable
-public final class DebugLogger: LoggingFormatAndPipe.Pipe, @unchecked Sendable {
-
-    public static let highlander = DebugLogger()
-
-    public enum Subsystem: String, CaseIterable {
-        case misc, lifecycle, locomotion, database, appgroup, tasks, timeline, activitytypes, places, healthkit, ui, importing, exporting
+    public enum Subsystem: String, CaseIterable, Sendable {
+        case misc, lifecycle, locomotion, database, appgroup, tasks, timeline, activitytypes, places, healthkit, ui,
+             importing, exporting
     }
 
-    public static let logger = Logger(label: "com.bigpaua.LocoKit.main") { _ in
-        return LoggingFormatAndPipe.Handler(
-            formatter: DebugLogger.LogDateFormatter(),
-            pipe: DebugLogger.highlander
-        )
+    // MARK: - Public API
+
+    public static func info(_ message: String, subsystem: Subsystem) {
+        let isMarker = message.hasPrefix("--")
+        let line = isMarker ? format(message) : format(message, subsystem: subsystem)
+
+        Task { @MainActor in
+            State.shared.osLogger(for: subsystem).info("\(message, privacy: .public)")
+
+            if isMarker {
+                State.shared.incrementFib()
+            } else {
+                State.shared.resetFib()
+            }
+
+            State.shared.writeToFile(line)
+
+            if !isMarker {
+                State.shared.resetFibTimer()
+            }
+        }
     }
 
-    private var fibMarkerTimer: Timer?
-    private var fibn = 1
+    public static func error(_ message: String, subsystem: Subsystem) {
+        let line = format(message, subsystem: subsystem, level: "ERROR")
 
-    private init() {
+        Task { @MainActor in
+            State.shared.osLogger(for: subsystem).error("\(message, privacy: .public)")
+            State.shared.resetFib()
+            State.shared.writeToFile(line)
+            State.shared.resetFibTimer()
+        }
+    }
+
+    public static func error(_ error: Error, subsystem: Subsystem) {
+        self.error("\(error)", subsystem: subsystem)
+    }
+
+    /// console only - no file write, for high-volume debug output
+    public static func debug(_ message: String, subsystem: Subsystem) {
+        Task { @MainActor in
+            State.shared.osLogger(for: subsystem).debug("\(message, privacy: .public)")
+        }
+    }
+
+    // MARK: - File management
+
+    public static func delete(_ url: URL) throws {
+        try FileManager.default.removeItem(at: url)
+    }
+
+    public static func logFileURLs() -> [URL] {
         do {
-            try FileManager.default.createDirectory(at: Self.logsDir, withIntermediateDirectories: true, attributes: nil)
+            let files = try FileManager.default
+                .contentsOfDirectory(at: logsDir, includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey])
+            return files
+                .filter { !$0.hasDirectoryPath && $0.pathExtension.lowercased() == "log" }
+                .sorted { $0.path > $1.path }
         } catch {
-            os_log("Couldn't create logs dir", type: .error)
+            os_log("Couldn't read logs directory: %{public}@", type: .error, error.localizedDescription)
+            return []
+        }
+    }
+
+    // MARK: - MainActor-isolated state
+
+    @MainActor
+    private final class State {
+        static let shared = State()
+
+        var fibMarkerTimer: Timer?
+        var fibn = 1
+        var osLoggers: [Subsystem: os.Logger] = [:]
+
+        func osLogger(for subsystem: Subsystem) -> os.Logger {
+            if let cached = osLoggers[subsystem] { return cached }
+            let newLogger = os.Logger(subsystem: "com.bigpaua.LocoKit", category: subsystem.rawValue)
+            osLoggers[subsystem] = newLogger
+            return newLogger
         }
 
-        let filename = ISO8601DateFormatter.string(
-            from: .now, timeZone: TimeZone.current,
-            formatOptions: [.withFullDate, .withTime, .withColonSeparatorInTime, .withSpaceBetweenDateAndTime]
-        )
-        self.sessionLogFileURL = Self.logsDir.appendingPathComponent("\(filename).log")
-        
-        updateLogFileURLs()
-    }
-
-    public func handle(_ formattedLogLine: String) {
-        Task { @MainActor in
+        func writeToFile(_ line: String) {
             do {
-                try formattedLogLine.appendLineTo(self.sessionLogFileURL)
+                try line.appendLineTo(Log.sessionLogFileURL)
             } catch {
                 os_log("Couldn't write to log file", type: .error)
             }
+        }
 
-            print(formattedLogLine)
-
-            self.fibMarkerTimer?.invalidate()
-            self.fibMarkerTimer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(self.fibn)), repeats: false) { _ in
-                Self.logger.info("--\(self.fibn)--")
+        func resetFibTimer() {
+            fibMarkerTimer?.invalidate()
+            let currentFibn = fibn
+            fibMarkerTimer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(currentFibn)), repeats: false) { _ in
+                Log.info("--\(currentFibn)--", subsystem: .misc)
             }
+        }
+
+        func incrementFib() {
+            fibn += 1
+        }
+
+        func resetFib() {
+            fibn = 1
+        }
+
+        func fib(_ n: Int) -> Int {
+            guard n > 1 else { return n }
+            return fib(n - 1) + fib(n - 2)
         }
     }
 
-    public func delete(_ url: URL) throws {
-        try FileManager.default.removeItem(at: url)
-        updateLogFileURLs()
-    }
+    // MARK: - File logging
 
-    // MARK: -
-
-    static var logsDir: URL {
-        try! FileManager.default
+    public static let logsDir: URL = {
+        let dir = try! FileManager.default
             .url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("Logs", isDirectory: true)
-    }
-
-    public let sessionLogFileURL: URL
-
-    private func createSessionLogURL(inDir: URL) -> URL {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH.mm"
-        let filename = formatter.string(from: Date())
-        return inDir.appendingPathComponent(filename + ".log")
-    }
-
-    public var logFileURLs: [URL]?
-
-    public func updateLogFileURLs() {
         do {
-            let files = try FileManager.default
-                .contentsOfDirectory(at: Self.logsDir, includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey])
-            logFileURLs = files
-                .filter { !$0.hasDirectoryPath && $0.pathExtension.lowercased() == "log" }
-                .sorted { $0.path > $1.path }
-
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
         } catch {
-            print(error)
+            os_log("Couldn't create logs dir", type: .error)
         }
-    }
+        return dir
+    }()
 
-    class LogDateFormatter: LoggingFormatAndPipe.Formatter {
-        var timestampFormatter: DateFormatter = {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm:ss.SSS"
-            return formatter
-        }()
+    public static let sessionLogFileURL: URL = {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone.current
+        formatter.formatOptions = [.withFullDate, .withTime, .withColonSeparatorInTime]
+        let timestamp = formatter.string(from: .now)
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: " ", with: "_")
+        return logsDir.appendingPathComponent("\(timestamp).log")
+    }()
 
-        func processLog(level: Logging.Logger.Level, message: Logging.Logger.Message, prettyMetadata: String?, file: String, function: String, line: UInt) -> String {
-            if message.description.hasPrefix("--") {
-                DebugLogger.highlander.fibn += 1
-            } else {
-                DebugLogger.highlander.fibn = 1
-            }
-            let timestamp = self.timestampFormatter.string(from: .now)
-            if level == .error {
-                return "[\(timestamp)] [ERROR] \(message)"
-            }
-            return "[\(timestamp)] \(message)"
-        }
-    }
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
 
-}
+    // MARK: - Private
 
-func fib (_ n: Int) -> Int {
-    guard n > 1 else {return n}
-    return fib(n - 1) + fib(n - 2)
-}
-
-extension Logging.Logger {
-    @inlinable
-    public func info(_ message: String, subsystem: DebugLogger.Subsystem, source: @autoclosure () -> String? = nil,
-                     file: String = #file, function: String = #function, line: UInt = #line) {
-        self.info("[\(subsystem.rawValue.uppercased())] \(message)", source: source(), file: file, function: function, line: line)
-    }
-    
-    @inlinable
-    public func error(_ message: String, subsystem: DebugLogger.Subsystem, source: @autoclosure () -> String? = nil,
-                      file: String = #file, function: String = #function, line: UInt = #line) {
-        self.error("[\(subsystem.rawValue.uppercased())] \(message)", source: source(), file: file, function: function, line: line)
-    }
-    
-    @inlinable
-    public func error(_ error: Error, subsystem: DebugLogger.Subsystem, source: @autoclosure () -> String? = nil,
-                      file: String = #file, function: String = #function, line: UInt = #line) {
-        if subsystem == .database, (error is CancellationError) {
-            print("hmm")
-        }
-        self.error("[\(subsystem.rawValue.uppercased())] \(error)", source: source(), file: file, function: function, line: line)
+    private static func format(_ message: String, subsystem: Subsystem? = nil, level: String? = nil) -> String {
+        let timestamp = timestampFormatter.string(from: .now)
+        var parts = ["[\(timestamp)]"]
+        if let level { parts.append("[\(level)]") }
+        if let subsystem { parts.append("[\(subsystem.rawValue.uppercased())]") }
+        parts.append(message)
+        return parts.joined(separator: " ")
     }
 }

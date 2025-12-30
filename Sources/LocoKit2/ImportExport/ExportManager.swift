@@ -92,7 +92,7 @@ public enum ExportManager {
         currentAppMetadata = appMetadata
         currentExportId = UUID().uuidString
 
-        logger.info("ExportManager: Starting \(type) export", subsystem: .exporting)
+        Log.info("ExportManager: Starting \(type) export", subsystem: .exporting)
 
         do {
             try setupExportDirectory(type: type, baseURL: baseURL)
@@ -137,7 +137,7 @@ public enum ExportManager {
                     lastBackupDate: snapshotLowerBound
                 )
                 extensionStates[handler.identifier] = ExtensionState(recordCount: count)
-                logger.info("ExportManager: Extension '\(handler.identifier)' exported \(count) records", subsystem: .exporting)
+                Log.info("ExportManager: Extension '\(handler.identifier)' exported \(count) records", subsystem: .exporting)
             }
 
             // finalize
@@ -150,11 +150,11 @@ public enum ExportManager {
             )
             exportInProgress = false
 
-            logger.info("ExportManager: \(type) export completed in \(String(format: "%.1f", startTime.age))s", subsystem: .exporting)
+            Log.info("ExportManager: \(type) export completed in \(String(format: "%.1f", startTime.age))s", subsystem: .exporting)
 
         } catch {
-            logger.error("Export failed: \(error.localizedDescription)", subsystem: .exporting)
-            logger.error(error, subsystem: .exporting)
+            Log.error("Export failed: \(error.localizedDescription)", subsystem: .exporting)
+            Log.error(error, subsystem: .exporting)
             currentExportURL = nil
             exportInProgress = false
             throw error
@@ -170,7 +170,7 @@ public enum ExportManager {
             if let lastBackup = existingManifest.lastBackupDate {
                 // normal incremental: export changes since last backup
                 snapshotLowerBound = lastBackup
-                logger.info("ExportManager: Incremental from \(lastBackup)", subsystem: .exporting)
+                Log.info("ExportManager: Incremental from \(lastBackup)", subsystem: .exporting)
 
             } else {
                 // catch-up mode: resuming incomplete first backup
@@ -179,7 +179,7 @@ public enum ExportManager {
                 let chunkStart = progressDate ?? earliestDate ?? startTime
                 let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
                 catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
-                logger.info("ExportManager: Catch-up mode from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
+                Log.info("ExportManager: Catch-up mode from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
             }
 
         } else {
@@ -188,7 +188,7 @@ public enum ExportManager {
             let chunkStart = earliestDate ?? startTime
             let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
             catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
-            logger.info("ExportManager: Catch-up mode (first run) from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
+            Log.info("ExportManager: Catch-up mode (first run) from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
         }
     }
 
@@ -203,7 +203,7 @@ public enum ExportManager {
         currentPhase = phase
         progress = 0
 
-        logger.info("ExportManager: Starting \(entityName) export", subsystem: .exporting)
+        Log.info("ExportManager: Starting \(entityName) export", subsystem: .exporting)
 
         // for incremental: find which buckets have changes
         let isIncremental = currentExportType == .incremental
@@ -212,7 +212,7 @@ public enum ExportManager {
         if isIncremental {
             changedKeys = try await fetchChangedKeys()
             if changedKeys!.isEmpty {
-                logger.info("ExportManager: No \(entityName) changes to export", subsystem: .exporting)
+                Log.info("ExportManager: No \(entityName) changes to export", subsystem: .exporting)
                 return
             }
         } else {
@@ -249,7 +249,7 @@ public enum ExportManager {
             progress = (Double(completedBuckets) / Double(totalBuckets)).clamped(min: 0, max: 1)
         }
 
-        logger.info("ExportManager: \(entityName) export completed (\(allItems.count) in \(bucketed.count) buckets)", subsystem: .exporting)
+        Log.info("ExportManager: \(entityName) export completed (\(allItems.count) in \(bucketed.count) buckets)", subsystem: .exporting)
     }
 
     private static func setupExportDirectory(type: ExportType, baseURL: URL) throws {
@@ -466,7 +466,7 @@ public enum ExportManager {
         currentPhase = .exportingSamples
         progress = 0
 
-        logger.info("ExportManager: Starting samples export", subsystem: .exporting)
+        Log.info("ExportManager: Starting samples export", subsystem: .exporting)
 
         // determine date range to export
         let exportStart: Date
@@ -482,7 +482,7 @@ public enum ExportManager {
                     .filter { $0.date >= exportStart && $0.date < exportEnd }
                     .fetchCount(db)
             }
-            logger.info("ExportManager: Catch-up chunk with \(totalCount) samples from \(exportStart) to \(exportEnd)", subsystem: .exporting)
+            Log.info("ExportManager: Catch-up chunk with \(totalCount) samples from \(exportStart) to \(exportEnd)", subsystem: .exporting)
 
         } else {
             // full or normal incremental: use full data range
@@ -494,14 +494,14 @@ public enum ExportManager {
             }
 
             guard let minDate, let maxDate else {
-                logger.info("ExportManager: No samples to export", subsystem: .exporting)
+                Log.info("ExportManager: No samples to export", subsystem: .exporting)
                 return
             }
 
             exportStart = minDate
             exportEnd = maxDate
             totalCount = count
-            logger.info("ExportManager: Found \(totalCount) samples from \(exportStart) to \(exportEnd)", subsystem: .exporting)
+            Log.info("ExportManager: Found \(totalCount) samples from \(exportStart) to \(exportEnd)", subsystem: .exporting)
         }
 
         var calendar = Calendar.current
@@ -562,14 +562,14 @@ public enum ExportManager {
                 progress = (Double(totalExported) / Double(totalCount)).clamped(min: 0, max: 1)
 
                 if weekCount % 10 == 0 {
-                    logger.info("ExportManager: Samples progress - \(totalExported)/\(totalCount) in \(weekCount) weeks", subsystem: .exporting)
+                    Log.info("ExportManager: Samples progress - \(totalExported)/\(totalCount) in \(weekCount) weeks", subsystem: .exporting)
                 }
             }
 
             currentWeekStart = weekEnd
         }
 
-        logger.info("ExportManager: Samples export completed (\(totalExported) samples in \(weekCount) weeks)", subsystem: .exporting)
+        Log.info("ExportManager: Samples export completed (\(totalExported) samples in \(weekCount) weeks)", subsystem: .exporting)
     }
 
 
@@ -604,7 +604,7 @@ public enum ExportManager {
             if catchUpRange.end >= startTime {
                 newLastBackupDate = startTime
                 newBackupProgressDate = nil  // clear progress, we're done catching up
-                logger.info("ExportManager: Catch-up complete, switching to normal incremental mode", subsystem: .exporting)
+                Log.info("ExportManager: Catch-up complete, switching to normal incremental mode", subsystem: .exporting)
             }
 
         } else if samplesCompleted {

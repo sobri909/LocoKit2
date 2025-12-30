@@ -35,7 +35,7 @@ public enum OrphanMappingsManager {
             let data = try JSONEncoder().encode(mappings)
             try data.write(to: url)
         } catch {
-            logger.error(error, subsystem: .importing)
+            Log.error(error, subsystem: .importing)
         }
     }
 

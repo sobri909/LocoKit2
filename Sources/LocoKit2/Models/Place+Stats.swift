@@ -13,7 +13,7 @@ extension Place {
     @PlacesActor
     public func updateVisitStats() async {
         do {
-            logger.info("UPDATING: \(name)", subsystem: .places)
+            Log.info("UPDATING: \(name)", subsystem: .places)
 
             let currentItemId = await TimelineRecorder.currentItemId
 
@@ -40,7 +40,7 @@ extension Place {
                         $0.visitDurations = nil
                     }
                 }
-                logger.info("UPDATED: \(name)", subsystem: .places)
+                Log.info("UPDATED: \(name)", subsystem: .places)
                 return
             }
 
@@ -118,13 +118,13 @@ extension Place {
                 }
             }
 
-            logger.info("UPDATED: \(name)\(locationData == nil ? " (no valid samples)" : "")", subsystem: .places)
+            Log.info("UPDATED: \(name)\(locationData == nil ? " (no valid samples)" : "")", subsystem: .places)
             
         } catch is CancellationError {
             // CancellationError is fine here; can ignore
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 

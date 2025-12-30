@@ -50,7 +50,7 @@ public final class TimelineSegment: Sendable {
             do {
                 try await item.pruneSamples()
             } catch {
-                logger.error(error, subsystem: .timeline)
+                Log.error(error, subsystem: .timeline)
             }
         }
     }
@@ -77,7 +77,7 @@ public final class TimelineSegment: Sendable {
             objectKey: dateRange.description,
             rejectDuplicates: true
         ) else {
-            logger.info("Skipping duplicate TimelineSegment.fetchItems()", subsystem: .timeline)
+            Log.info("Skipping duplicate TimelineSegment.fetchItems()", subsystem: .timeline)
             return
         }
         defer { Task { await OperationRegistry.endOperation(handle) } }
@@ -99,7 +99,7 @@ public final class TimelineSegment: Sendable {
             // CancellationError is fine here; can ignore
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -154,7 +154,7 @@ public final class TimelineSegment: Sendable {
             objectKey: dateRange.description,
             rejectDuplicates: true
         ) else {
-            logger.info("Skipping duplicate TimelineSegment.classify(items:)", subsystem: .timeline)
+            Log.info("Skipping duplicate TimelineSegment.classify(items:)", subsystem: .timeline)
             return
         }
 
@@ -177,7 +177,7 @@ public final class TimelineSegment: Sendable {
             do {
                 if try !currentItem.isWorthKeeping { return }
             } catch {
-                logger.error(error, subsystem: .timeline)
+                Log.error(error, subsystem: .timeline)
                 return
             }
         }

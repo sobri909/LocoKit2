@@ -12,7 +12,7 @@ extension TimelineProcessor {
 
     public static func safeDeleteVisit(_ deadman: TimelineItem) async {
         guard deadman.isVisit else {
-            logger.error("safeDeleteVisit() called on non-Visit item", subsystem: .timeline)
+            Log.error("safeDeleteVisit() called on non-Visit item", subsystem: .timeline)
             return
         }
 
@@ -22,7 +22,7 @@ extension TimelineProcessor {
             objectKey: deadman.id,
             rejectDuplicates: true
         ) else {
-            logger.info("Skipping duplicate TimelineProcessor.safeDeleteVisit(_:)", subsystem: .timeline)
+            Log.info("Skipping duplicate TimelineProcessor.safeDeleteVisit(_:)", subsystem: .timeline)
             return
         }
 

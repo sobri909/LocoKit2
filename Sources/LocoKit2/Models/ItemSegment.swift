@@ -100,7 +100,7 @@ public struct ItemSegment: Hashable, Identifiable, Sendable {
             await ActivityTypesManager.queueUpdatesForModelsContaining(changedSamples)
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 

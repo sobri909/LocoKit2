@@ -43,7 +43,7 @@ extension TimelineItem {
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -95,7 +95,7 @@ extension TimelineItem {
                 await ActivityTypesManager.queueUpdatesForModelsContaining(changedSamples)
 
             } catch {
-                logger.error(error, subsystem: .database)
+                Log.error(error, subsystem: .database)
                 return
             }
 
@@ -152,7 +152,7 @@ extension TimelineItem {
             }
 
         } catch {
-            logger.error(error, subsystem: .activitytypes)
+            Log.error(error, subsystem: .activitytypes)
         }
     }
 
@@ -192,7 +192,7 @@ extension TimelineItem {
             }
 
         } catch {
-            logger.error(error, subsystem: .timeline)
+            Log.error(error, subsystem: .timeline)
         }
     }
 
@@ -205,7 +205,7 @@ extension TimelineItem {
                     return try await !tripSamplesForCleanup.isEmpty
                 }
             } catch {
-                logger.error(error, subsystem: .timeline)
+                Log.error(error, subsystem: .timeline)
                 return false
             }
         }

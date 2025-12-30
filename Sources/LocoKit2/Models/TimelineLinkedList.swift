@@ -25,7 +25,7 @@ public final class TimelineLinkedList: AsyncSequence {
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
             return nil
         }
     }
@@ -58,7 +58,7 @@ public final class TimelineLinkedList: AsyncSequence {
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
             return nil
         }
     }
@@ -117,7 +117,7 @@ public final class TimelineLinkedList: AsyncSequence {
             .removeDuplicates()
             .shared(in: Database.pool)
             .start { error in
-                logger.error(error, subsystem: .database)
+                Log.error(error, subsystem: .database)
 
             } onChange: { [weak self] item in
                 if let self, let item {

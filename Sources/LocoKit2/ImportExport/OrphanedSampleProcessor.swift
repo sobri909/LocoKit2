@@ -21,13 +21,13 @@ public enum OrphanedSampleProcessor {
         var individualItems = 0
         
         let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
-        logger.info("Starting orphan processing: \(orphanedSamples.count) groups, \(totalOrphans) total samples", subsystem: .database)
+        Log.info("Starting orphan processing: \(orphanedSamples.count) groups, \(totalOrphans) total samples", subsystem: .database)
         
         // process each group of samples that belonged to the same original item
         for (originalItemId, samples) in orphanedSamples {
             // not enough samples to create a valid item
             if samples.count < TimelineItemTrip.minimumValidSamples {
-                logger.info("Group \(originalItemId): \(samples.count) samples (below threshold) → creating individual items", subsystem: .database)
+                Log.info("Group \(originalItemId): \(samples.count) samples (below threshold) → creating individual items", subsystem: .database)
                 try await createIndividualItems(for: samples)
                 individualItems += samples.count
                 continue
@@ -40,7 +40,7 @@ public enum OrphanedSampleProcessor {
             
             // high confidence for Visit (>80% stationary)
             if stationaryRatio > 0.8 {
-                logger.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Visit", subsystem: .database)
+                Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Visit", subsystem: .database)
                 try await Database.pool.write { db in
                     _ = try TimelineItem.createItem(from: samples, isVisit: true, db: db)
                 }
@@ -48,7 +48,7 @@ public enum OrphanedSampleProcessor {
                 
             // high confidence for Trip (<20% stationary)
             } else if stationaryRatio < 0.2 {
-                logger.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Trip", subsystem: .database)
+                Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Trip", subsystem: .database)
                 try await Database.pool.write { db in
                     _ = try TimelineItem.createItem(from: samples, isVisit: false, db: db)
                 }
@@ -56,13 +56,13 @@ public enum OrphanedSampleProcessor {
                 
             // mixed moving states, create individual items
             } else {
-                logger.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary, mixed) → creating individual items", subsystem: .database)
+                Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary, mixed) → creating individual items", subsystem: .database)
                 try await createIndividualItems(for: samples)
                 individualItems += samples.count
             }
         }
         
-        logger.info("Processed orphaned samples: created \(recreatedItems) items and \(individualItems) individual samples", subsystem: .database)
+        Log.info("Processed orphaned samples: created \(recreatedItems) items and \(individualItems) individual samples", subsystem: .database)
         return (recreatedItems, individualItems)
     }
     
@@ -70,7 +70,7 @@ public enum OrphanedSampleProcessor {
     private static func createIndividualItems(for samples: [LocomotionSample]) async throws {
         let visitCount = samples.filter { $0.movingState == .stationary }.count
         let tripCount = samples.count - visitCount
-        logger.info("Creating \(samples.count) individual items: \(visitCount) visits, \(tripCount) trips", subsystem: .database)
+        Log.info("Creating \(samples.count) individual items: \(visitCount) visits, \(tripCount) trips", subsystem: .database)
         
         // create one item per sample based on its moving state
         for sample in samples {

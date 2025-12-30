@@ -54,7 +54,7 @@ public enum ActivityTypesManager {
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -117,7 +117,7 @@ public enum ActivityTypesManager {
             }
             
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
             return nil
         }
     }
@@ -151,7 +151,7 @@ public enum ActivityTypesManager {
             }
         }
         
-        logger.info("Deleted all ActivityTypesModels", subsystem: .activitytypes)
+        Log.info("Deleted all ActivityTypesModels", subsystem: .activitytypes)
     }
 
     public static func updateModel(geoKey: String) async {
@@ -166,7 +166,7 @@ public enum ActivityTypesManager {
                     objectKey: model.geoKey,
                     rejectDuplicates: true
                 ) else {
-                    logger.info("Skipping duplicate ActivityTypesManager.updateModel(geoKey:) for \(model.geoKey)", subsystem: .activitytypes)
+                    Log.info("Skipping duplicate ActivityTypesManager.updateModel(geoKey:) for \(model.geoKey)", subsystem: .activitytypes)
                     return
                 }
                 defer { Task { await OperationRegistry.endOperation(handle) } }
@@ -175,7 +175,7 @@ public enum ActivityTypesManager {
             }
             
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
     
@@ -269,7 +269,7 @@ public enum ActivityTypesManager {
             }
 
             guard let csvFile else {
-                logger.error("Missing CSV file for model build", subsystem: .activitytypes)
+                Log.error("Missing CSV file for model build", subsystem: .activitytypes)
                 return
             }
 
@@ -282,7 +282,7 @@ public enum ActivityTypesManager {
             do {
                 try FileManager.default.createDirectory(at: MLModelCache.modelsDir, withIntermediateDirectories: true, attributes: nil)
             } catch {
-                logger.error("Couldn't create MLModels directory", subsystem: .activitytypes)
+                Log.error("Couldn't create MLModels directory", subsystem: .activitytypes)
             }
 
             // write model to temp file
@@ -307,14 +307,14 @@ public enum ActivityTypesManager {
             }
 
             let completeness = min(1.0, Double(samplesCount) / Double(ActivityTypesModel.modelMinTrainingSamples[model.depth]!))
-            logger.info("UPDATED: \(model.geoKey) (samples: \(samplesCount), accuracy: \(String(format: "%.2f", accuracy)), completeness: \(String(format: "%.2f", completeness)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
+            Log.info("UPDATED: \(model.geoKey) (samples: \(samplesCount), accuracy: \(String(format: "%.2f", accuracy)), completeness: \(String(format: "%.2f", completeness)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
 
             try model.reloadModel()
 
             ActivityClassifier.invalidateModel(geoKey: model.geoKey)
 
         } catch {
-            logger.error(error, subsystem: .activitytypes)
+            Log.error(error, subsystem: .activitytypes)
         }
     }
 #endif

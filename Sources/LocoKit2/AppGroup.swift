@@ -151,7 +151,7 @@ public final class AppGroup: @unchecked Sendable {
         guard let messageInfo = try? decoder.decode(MessageInfo.self, from: data) else { return }
         guard messageInfo.appName != thisApp else { return }
         guard messageInfo.message == message else {
-            logger.debug("LASTMESSAGE MISMATCH (expected: \(message.rawValue), got: \(messageInfo.message.rawValue))")
+            Log.debug("LASTMESSAGE MISMATCH (expected: \(message.rawValue), got: \(messageInfo.message.rawValue))", subsystem: .appgroup)
             return
         }
 
@@ -168,14 +168,14 @@ public final class AppGroup: @unchecked Sendable {
     }
     
     private func appStateUpdated(by: AppName) async {
-        logger.debug("RECEIVED: .updatedState, from: \(by.rawValue)")
+        Log.debug("RECEIVED: .updatedState, from: \(by.rawValue)", subsystem: .appgroup)
 
         if currentRecorder?.currentItemId == nil {
-            logger.error("No AppGroup.currentItemId", subsystem: .appgroup)
+            Log.error("No AppGroup.currentItemId", subsystem: .appgroup)
         }
 
         if currentRecorder == nil {
-            logger.error("No AppGroup.currentRecorder", subsystem: .appgroup)
+            Log.error("No AppGroup.currentRecorder", subsystem: .appgroup)
         }
 
         if await isAnActiveRecorder {
@@ -185,7 +185,7 @@ public final class AppGroup: @unchecked Sendable {
 
         } else if let currentItemId = currentRecorder?.currentItemId, await currentAppState.currentItemId != currentItemId {
             let appState = await currentAppState
-            logger.debug("Local currentItemId is stale (mine: \(appState.currentItemId ?? "nil"), theirs: \(currentItemId))")
+            Log.debug("Local currentItemId is stale (mine: \(appState.currentItemId ?? "nil"), theirs: \(currentItemId))", subsystem: .appgroup)
             await TimelineRecorder.updateCurrentItemId()
         }
     }
@@ -196,9 +196,9 @@ public final class AppGroup: @unchecked Sendable {
         await LocomotionManager.highlander.startStandby()
 
         if let activeRecorder {
-            logger.info("concededRecording to \(activeRecorder)", subsystem: .timeline)
+            Log.info("concededRecording to \(activeRecorder)", subsystem: .timeline)
         } else {
-            logger.info("concededRecording", subsystem: .timeline)
+            Log.info("concededRecording", subsystem: .timeline)
         }
     }
 

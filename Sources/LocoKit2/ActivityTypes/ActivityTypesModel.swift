@@ -150,7 +150,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
 
         // create if missing
         let model = ActivityTypesModel(coordinate: coordinate, depth: depth)
-        logger.info("NEW MODEL: [\(model.geoKey)]", subsystem: .activitytypes)
+        Log.info("NEW MODEL: [\(model.geoKey)]", subsystem: .activitytypes)
         
         // save the new model
         do {
@@ -158,7 +158,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
                 try model.insert(db)
             }
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
 
         // process update for new model (which by definition has no file yet)
@@ -186,7 +186,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
             await ActivityTypesManager.processModelUpdate(model: self, fileMissing: fileMissing)
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -217,7 +217,7 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
             return results(for: output)
 
         } catch {
-            logger.error(error, subsystem: .activitytypes)
+            Log.error(error, subsystem: .activitytypes)
             return ClassifierResults(resultItems: [])
         }
     }

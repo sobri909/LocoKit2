@@ -88,7 +88,7 @@ extension ImportState {
                     try ImportState.fetchOne(db) != nil
                 }
             } catch {
-                logger.error("hasPartialImport check failed: \(error)", subsystem: .importing)
+                Log.error("hasPartialImport check failed: \(error)", subsystem: .importing)
                 return false
             }
         }
@@ -113,7 +113,7 @@ extension ImportState {
         try await Database.pool.uncancellableWrite { db in
             try state.save(db)
         }
-        logger.info("ImportState saved: phase=\(state.phase.rawValue), exportId=\(state.exportId ?? "nil")", subsystem: .importing)
+        Log.info("ImportState saved: phase=\(state.phase.rawValue), exportId=\(state.exportId ?? "nil")", subsystem: .importing)
     }
 
     /// clear import state (on completion or abandon)
@@ -121,7 +121,7 @@ extension ImportState {
         _ = try await Database.pool.uncancellableWrite { db in
             try ImportState.deleteAll(db)
         }
-        logger.info("ImportState cleared", subsystem: .importing)
+        Log.info("ImportState cleared", subsystem: .importing)
     }
 
     /// mark a sample file as processed (for resume efficiency)
@@ -142,7 +142,7 @@ extension ImportState {
             state.phase = phase
             try state.update(db)
         }
-        logger.info("ImportState phase updated: \(phase.rawValue)", subsystem: .importing)
+        Log.info("ImportState phase updated: \(phase.rawValue)", subsystem: .importing)
     }
 
     /// get the local copy directory for imports
@@ -168,9 +168,9 @@ extension ImportState {
         // no ImportState but copy exists - it's orphaned
         do {
             try FileManager.default.removeItem(at: copyDir)
-            logger.info("Deleted orphaned import copy", subsystem: .importing)
+            Log.info("Deleted orphaned import copy", subsystem: .importing)
         } catch {
-            logger.error(error, subsystem: .importing)
+            Log.error(error, subsystem: .importing)
         }
     }
 
@@ -180,9 +180,9 @@ extension ImportState {
         guard FileManager.default.fileExists(atPath: copyDir.path) else { return }
         do {
             try FileManager.default.removeItem(at: copyDir)
-            logger.info("Deleted local import copy", subsystem: .importing)
+            Log.info("Deleted local import copy", subsystem: .importing)
         } catch {
-            logger.error(error, subsystem: .importing)
+            Log.error(error, subsystem: .importing)
         }
     }
 }

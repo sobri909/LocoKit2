@@ -147,7 +147,7 @@ extension TimelineProcessor {
             do {
                 try await healEdges(itemId: itemId)
             } catch {
-                logger.error(error, subsystem: .database)
+                Log.error(error, subsystem: .database)
             }
         }
 

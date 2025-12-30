@@ -52,9 +52,9 @@ public enum OldLocoKitImporter {
         do {
             // Log import details
             if let dateRange = importDateRange {
-                logger.info("Starting import with date range: \(dateRange.start) to \(dateRange.end)", subsystem: .importing)
+                Log.info("Starting import with date range: \(dateRange.start) to \(dateRange.end)", subsystem: .importing)
             } else {
-                logger.info("Starting import with no date restrictions", subsystem: .importing)
+                Log.info("Starting import with no date restrictions", subsystem: .importing)
             }
             
             // Connect to databases
@@ -83,12 +83,12 @@ public enum OldLocoKitImporter {
             if orphansProcessed > 0 {
                 summary += " (processed \(orphansProcessed) orphaned samples)"
             }
-            logger.info(summary, subsystem: .importing)
+            Log.info(summary, subsystem: .importing)
             
             cleanupAndReset()
             
         } catch {
-            logger.error("Database import failed: \(error)", subsystem: .importing)
+            Log.error("Database import failed: \(error)", subsystem: .importing)
             cleanupAndReset()
             throw error
         }
@@ -122,7 +122,7 @@ public enum OldLocoKitImporter {
     // MARK: - Places Importing
     
     private static func importPlaces() async throws -> Int {
-        logger.info("Starting Places import", subsystem: .importing)
+        Log.info("Starting Places import", subsystem: .importing)
         progress = 0
         
         guard let arcAppDatabase else {
@@ -169,14 +169,14 @@ public enum OldLocoKitImporter {
         }
         
         progress = 1.0
-        logger.info("Places import completed", subsystem: .importing)
+        Log.info("Places import completed", subsystem: .importing)
         return legacyPlaces.count
     }
     
     // MARK: - Timeline Items Importing
 
     private static func importTimelineItems() async throws -> (count: Int, itemIds: Set<String>, disabledStates: [String: Bool]) {
-        logger.info("Starting Timeline Items import", subsystem: .importing)
+        Log.info("Starting Timeline Items import", subsystem: .importing)
         progress = 0
         
         guard let legacyPool = Database.legacyPool else {
@@ -232,7 +232,7 @@ public enum OldLocoKitImporter {
                     
                     // Sanitise circular edge references
                     if let prev = previousId, let next = nextId, prev == next {
-                        logger.info("Item \(legacyItem.itemId) has circular edge reference: previousItemId == nextItemId", subsystem: .importing)
+                        Log.info("Item \(legacyItem.itemId) has circular edge reference: previousItemId == nextItemId", subsystem: .importing)
                         // Can't trust either edge - nil them both
                         previousId = nil
                         nextId = nil
@@ -263,7 +263,7 @@ public enum OldLocoKitImporter {
                         if let placeId = visit.placeId {
                             let placeExists = try Place.filter { $0.id == placeId }.fetchCount(db) > 0
                             if !placeExists {
-                                logger.warning("Visit \(visit.itemId) references non-existent place: \(placeId)")
+                                Log.info("Visit \(visit.itemId) references non-existent place: \(placeId)", subsystem: .importing)
                                 // clear the invalid placeId
                                 var mutableVisit = visit
                                 mutableVisit.placeId = nil
@@ -306,7 +306,7 @@ public enum OldLocoKitImporter {
         edgeManager.cleanup()
         
         progress = 1.0
-        logger.info("Timeline Items import completed", subsystem: .importing)
+        Log.info("Timeline Items import completed", subsystem: .importing)
 
         return (totalCount, importedItemIds, itemDisabledStates)
     }
@@ -314,7 +314,7 @@ public enum OldLocoKitImporter {
     // MARK: - Sample Importing
 
     private static func importSamples(importedItemIds: Set<String>, itemDisabledStates: [String: Bool]) async throws -> (samples: Int, orphansProcessed: Int) {
-        logger.info("Starting Samples import", subsystem: .importing)
+        Log.info("Starting Samples import", subsystem: .importing)
         progress = 0
         
         guard let legacyPool = Database.legacyPool else {
@@ -411,7 +411,7 @@ public enum OldLocoKitImporter {
         var orphansProcessed = 0
         if !orphanedSamples.isEmpty {
             let totalOrphans = orphanedSamples.values.reduce(0) { $0 + $1.count }
-            logger.info("Found \(orphanedSamples.count) orphaned timeline items with \(totalOrphans) total orphaned samples", subsystem: .importing)
+            Log.info("Found \(orphanedSamples.count) orphaned timeline items with \(totalOrphans) total orphaned samples", subsystem: .importing)
             
             // Log some details about the orphans
             print("OldLocoKitImporter orphan summary:")
@@ -425,12 +425,12 @@ public enum OldLocoKitImporter {
             
             // Process orphaned samples after main import
             let (recreated, individual) = try await OrphanedSampleProcessor.processOrphanedSamples(orphanedSamples)
-            logger.info("OldLocoKitImporter orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .importing)
+            Log.info("OldLocoKitImporter orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .importing)
             orphansProcessed = totalOrphans
         }
         
         progress = 1.0
-        logger.info("Samples import completed: processed \(processedCount) samples", subsystem: .importing)
+        Log.info("Samples import completed: processed \(processedCount) samples", subsystem: .importing)
         
         return (processedCount, orphansProcessed)
     }

@@ -90,7 +90,7 @@ struct EdgeRecordManager {
 
                     // Prevent circular references
                     if let prev = validPreviousId, let next = validNextId, prev == next {
-                        logger.info("Preventing circular edge reference during restore: itemId=\(record.itemId)", subsystem: .importing)
+                        Log.info("Preventing circular edge reference during restore: itemId=\(record.itemId)", subsystem: .importing)
                         // Can't trust either edge - nil them both
                         validPreviousId = nil
                         validNextId = nil
@@ -107,7 +107,7 @@ struct EdgeRecordManager {
                             ] }
                     } catch {
                         // log but continue - edge healing will fix it later
-                        logger.info("Edge restoration skipped for \(record.itemId): \(error.localizedDescription)", subsystem: .importing)
+                        Log.info("Edge restoration skipped for \(record.itemId): \(error.localizedDescription)", subsystem: .importing)
                     }
                 }
             }

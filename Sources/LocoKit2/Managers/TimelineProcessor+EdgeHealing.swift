@@ -27,7 +27,7 @@ extension TimelineProcessor {
         if (item.samples?.isEmpty ?? true) && item.base.previousItemId == nil && item.base.nextItemId == nil {
             // make sure it's not the current recording item
             if item.id != TimelineRecorder.currentItemId {
-                logger.info("Soft deleting zombie item: \(item.debugShortId) (no samples, no edges)", subsystem: .timeline)
+                Log.info("Soft deleting zombie item: \(item.debugShortId) (no samples, no edges)", subsystem: .timeline)
                 
                 try await Database.pool.write { db in
                     var mutableItem = item
@@ -117,7 +117,7 @@ extension TimelineProcessor {
             }
 
             if nearest.base.previousItemId == item.id {
-                logger.info("healPreviousEdge() Rejecting potential circular reference", subsystem: .timeline)
+                Log.info("healPreviousEdge() Rejecting potential circular reference", subsystem: .timeline)
                 return
             }
 
@@ -133,11 +133,11 @@ extension TimelineProcessor {
             } else {
                 // represent longer gaps with explicit data gap items
                 try await createDataGapItem(between: nearest, and: item)
-                logger.info("Created data gap between \(nearest.debugShortId) and \(item.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                Log.info("Created data gap between \(nearest.debugShortId) and \(item.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
             }
 
         } else {
-            logger.info("healPreviousEdge() No possible nearest item found", subsystem: .timeline)
+            Log.info("healPreviousEdge() No possible nearest item found", subsystem: .timeline)
         }
     }
 
@@ -178,7 +178,7 @@ extension TimelineProcessor {
             }
 
             if nearest.base.nextItemId == item.id {
-                logger.info("healNextEdge() Rejecting potential circular reference", subsystem: .timeline)
+                Log.info("healNextEdge() Rejecting potential circular reference", subsystem: .timeline)
                 return
             }
 
@@ -194,11 +194,11 @@ extension TimelineProcessor {
             } else {
                 // represent longer gaps with explicit data gap items
                 try await createDataGapItem(between: item, and: nearest)
-                logger.info("Created data gap between \(item.debugShortId) and \(nearest.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                Log.info("Created data gap between \(item.debugShortId) and \(nearest.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
             }
             
         } else {
-            logger.info("healNextEdge() No possible nearest item found", subsystem: .timeline)
+            Log.info("healNextEdge() No possible nearest item found", subsystem: .timeline)
         }
     }
 
@@ -220,12 +220,12 @@ extension TimelineProcessor {
         }
 
         if !circularItems.isEmpty {
-            logger.info("Breaking \(circularItems.count) circular edge references", subsystem: .timeline)
+            Log.info("Breaking \(circularItems.count) circular edge references", subsystem: .timeline)
 
             // break the cycles by nulling the next edge
             try await Database.pool.write { db in
                 for var item in circularItems {
-                    logger.info("Breaking circular reference on item: \(item.id) next/prev: \(item.base.nextItemId ?? "nil")", subsystem: .timeline)
+                    Log.info("Breaking circular reference on item: \(item.id) next/prev: \(item.base.nextItemId ?? "nil")", subsystem: .timeline)
                     try item.base.updateChanges(db) {
                         $0.nextItemId = nil
                     }

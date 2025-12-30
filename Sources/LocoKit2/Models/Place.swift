@@ -128,15 +128,15 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                 return true
 
             } catch {
-                logger.error(error, subsystem: .database)
+                Log.error(error, subsystem: .database)
             }
 
         } catch let error as CLError {
             if error.code == .network { throw error }
-            logger.error(error, subsystem: .places)
+            Log.error(error, subsystem: .places)
             
         } catch {
-            logger.error(error, subsystem: .places)
+            Log.error(error, subsystem: .places)
         }
         
         return false
@@ -154,7 +154,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                 }
             }
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
     

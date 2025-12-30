@@ -22,7 +22,7 @@ public enum TimelineProcessor {
                 await process(list)
             }
         } catch {
-            logger.error(error, subsystem: .timeline)
+            Log.error(error, subsystem: .timeline)
         }
     }
 
@@ -41,7 +41,7 @@ public enum TimelineProcessor {
         do {
             try await ImportState.guardNotPartialImport()
         } catch {
-            logger.info("TimelineProcessor blocked by partial import", subsystem: .timeline)
+            Log.info("TimelineProcessor blocked by partial import", subsystem: .timeline)
             return
         }
 
@@ -54,7 +54,7 @@ public enum TimelineProcessor {
             objectKey: objectKey,
             rejectDuplicates: true
         ) else {
-            logger.info("Skipping duplicate TimelineProcessor.process(list:)", subsystem: .timeline)
+            Log.info("Skipping duplicate TimelineProcessor.process(list:)", subsystem: .timeline)
             return
         }
         
@@ -75,14 +75,14 @@ public enum TimelineProcessor {
 
                 if TimelineProcessor.debugLogging {
                     if merges.isEmpty {
-                        logger.info("Considering 0 merges", subsystem: .timeline)
+                        Log.info("Considering 0 merges", subsystem: .timeline)
                     } else {
-                        logger.info("Considering \(merges.count) merges", subsystem: .timeline)
+                        Log.info("Considering \(merges.count) merges", subsystem: .timeline)
 //                        do {
 //                            let descriptions = try merges.map { try $0.description }.joined(separator: "\n")
 //                            print("Considering \(merges.count) merges:\n\(descriptions)")
 //                        } catch {
-//                            logger.error(error, subsystem: .timeline)
+//                            Log.error(error, subsystem: .timeline)
 //                        }
                     }
                 }
@@ -106,7 +106,7 @@ public enum TimelineProcessor {
             }
 
         } catch {
-            logger.error(error, subsystem: .timeline)
+            Log.error(error, subsystem: .timeline)
         }
     }
 

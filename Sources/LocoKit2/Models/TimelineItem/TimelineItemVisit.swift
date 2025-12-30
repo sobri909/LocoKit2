@@ -148,7 +148,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
                         }
 
                     } catch {
-                        logger.error(error, subsystem: .database)
+                        Log.error(error, subsystem: .database)
                     }
                 }
             }
@@ -157,7 +157,7 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
             await TimelineProcessor.processFrom(itemId: itemId)
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 

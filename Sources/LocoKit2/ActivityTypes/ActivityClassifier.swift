@@ -103,7 +103,7 @@ public enum ActivityClassifier {
 
         for sample in samples {
             if let timeout, start.age >= timeout {
-                logger.info("ActivityClassifier reached timeout limit (\(timeout) seconds)", subsystem: .activitytypes)
+                Log.info("ActivityClassifier reached timeout limit (\(timeout) seconds)", subsystem: .activitytypes)
                 return nil  // abort with nil on timeout - no partial results
             }
 

@@ -42,7 +42,7 @@ extension TimelineItem {
                 return String(localized: "Brief Stop", bundle: .module)
 
             } catch {
-                logger.error(error, subsystem: .timeline)
+                Log.error(error, subsystem: .timeline)
                 return String(localized: "Visit", bundle: .module)
             }
         }
@@ -60,7 +60,7 @@ extension TimelineItem {
             return String(localized: "Transport", bundle: .module)
 
         } catch {
-            logger.error(error, subsystem: .timeline)
+            Log.error(error, subsystem: .timeline)
             return String(localized: "Error", bundle: .module)
         }
     }

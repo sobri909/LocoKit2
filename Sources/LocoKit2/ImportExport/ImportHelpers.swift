@@ -20,7 +20,7 @@ public enum ImportHelpers {
         for disabledSamplesFromEnabledParents: [String: [LocomotionSample]]
     ) async throws {
         let totalScenario2Samples = disabledSamplesFromEnabledParents.values.reduce(0) { $0 + $1.count }
-        logger.info("Creating preserved parent items for \(disabledSamplesFromEnabledParents.count) items with \(totalScenario2Samples) disabled samples", subsystem: .importing)
+        Log.info("Creating preserved parent items for \(disabledSamplesFromEnabledParents.count) items with \(totalScenario2Samples) disabled samples", subsystem: .importing)
 
         let (visitCount, tripCount) = try await Database.pool.write { db -> (Int, Int) in
             var visits = 0
@@ -33,7 +33,7 @@ public enum ImportHelpers {
                     .filter { $0.id == originalItemId }
                     .asRequest(of: TimelineItem.self)
                 guard let originalItem = try request.fetchOne(db) else {
-                    logger.info("Could not find original item \(originalItemId) for preserved parent creation", subsystem: .importing)
+                    Log.info("Could not find original item \(originalItemId) for preserved parent creation", subsystem: .importing)
                     continue
                 }
 
@@ -101,6 +101,6 @@ public enum ImportHelpers {
             }
         }
 
-        logger.info("Created \(disabledSamplesFromEnabledParents.count) preserved parent items (\(visitCount) visits, \(tripCount) trips)", subsystem: .importing)
+        Log.info("Created \(disabledSamplesFromEnabledParents.count) preserved parent items (\(visitCount) visits, \(tripCount) trips)", subsystem: .importing)
     }
 }

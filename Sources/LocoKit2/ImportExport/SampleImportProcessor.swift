@@ -88,13 +88,13 @@ public enum SampleImportProcessor {
     /// Log batch results if there were any issues found.
     public static func logBatchResults(_ result: SampleBatchResult) {
         if result.orphanCount > 0 {
-            logger.error("Orphaned \(result.orphanCount) samples with missing parent items", subsystem: .importing)
+            Log.error("Orphaned \(result.orphanCount) samples with missing parent items", subsystem: .importing)
         }
         if result.scenario1Count > 0 {
-            logger.info("Normalized \(result.scenario1Count) samples (scenario 1: item.disabled=true, sample.disabled=false)", subsystem: .importing)
+            Log.info("Normalized \(result.scenario1Count) samples (scenario 1: item.disabled=true, sample.disabled=false)", subsystem: .importing)
         }
         if result.scenario2Count > 0 {
-            logger.info("Collected \(result.scenario2Count) samples for preserved parent creation (scenario 2: item.disabled=false, sample.disabled=true)", subsystem: .importing)
+            Log.info("Collected \(result.scenario2Count) samples for preserved parent creation (scenario 2: item.disabled=false, sample.disabled=true)", subsystem: .importing)
         }
     }
 

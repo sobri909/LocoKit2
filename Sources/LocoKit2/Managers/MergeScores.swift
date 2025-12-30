@@ -44,7 +44,7 @@ public final class MergeScores {
                     return .impossible
                 }
             } catch {
-                logger.error(error, subsystem: .timeline)
+                Log.error(error, subsystem: .timeline)
                 return .impossible
             }
         }
@@ -85,7 +85,7 @@ public final class MergeScores {
             }
 
         } catch {
-            logger.error("MergeScores.consumptionScoreFor() \(error)", subsystem: .timeline)
+            Log.error("MergeScores.consumptionScoreFor() \(error)", subsystem: .timeline)
             return .impossible
         }
     }
@@ -268,7 +268,7 @@ public final class MergeScores {
             return .impossible
 
         } catch {
-            logger.error(error, subsystem: .timeline)
+            Log.error(error, subsystem: .timeline)
             return .impossible
         }
     }

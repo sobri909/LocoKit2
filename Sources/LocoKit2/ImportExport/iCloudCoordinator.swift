@@ -96,7 +96,7 @@ public enum iCloudCoordinator {
                 || name.range(of: #" \([^)]+\)$"#, options: .regularExpression) != nil
 
             if hasConflictSuffix {
-                logger.info("Purging iCloud conflict file: \(url.lastPathComponent)", subsystem: .exporting)
+                Log.info("Purging iCloud conflict file: \(url.lastPathComponent)", subsystem: .exporting)
 
                 var coordinatorError: NSError?
                 NSFileCoordinator().coordinate(

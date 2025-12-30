@@ -341,7 +341,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -399,7 +399,7 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 

@@ -62,7 +62,7 @@ public final class Database: @unchecked Sendable {
         do {
             try migrator.migrate(pool)
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -70,7 +70,7 @@ public final class Database: @unchecked Sendable {
         do {
             try migrator.migrate(pool)
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -82,18 +82,18 @@ public final class Database: @unchecked Sendable {
             return !remaining.isEmpty
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
             return false
         }
     }
 
     public func eraseTheDb() {
-        logger.info("ERASING THE DATABASE", subsystem: .database)
+        Log.info("ERASING THE DATABASE", subsystem: .database)
         do {
             try Database.pool.erase()
             migrator = DatabaseMigrator()
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 

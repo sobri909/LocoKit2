@@ -105,7 +105,7 @@ public enum ImportManager {
         // Try coordinated read of metadata first
         let metadataURL = importURL.appendingPathComponent("metadata.json")
         let metadata = try await readImportMetadata(from: metadataURL)
-        logger.info("ImportManager: Import metadata loaded - schema: \(metadata.schemaVersion), mode: \(metadata.exportMode.rawValue)", subsystem: .importing)
+        Log.info("ImportManager: Import metadata loaded - schema: \(metadata.schemaVersion), mode: \(metadata.exportMode.rawValue)", subsystem: .importing)
 
         // Now check directory structure
         let placesURL = importURL.appendingPathComponent("places", isDirectory: true)
@@ -136,14 +136,14 @@ public enum ImportManager {
                 let data = try Data(contentsOf: url)
                 metadata = try JSONDecoder.flexibleDateDecoder().decode(ExportMetadata.self, from: data)
             } catch {
-                logger.error("Failed to read metadata", subsystem: .importing)
-                logger.error(error, subsystem: .importing)
+                Log.error("Failed to read metadata", subsystem: .importing)
+                Log.error(error, subsystem: .importing)
             }
         }
 
         if let coordError {
-            logger.error("File coordination failed", subsystem: .importing)
-            logger.error(coordError, subsystem: .importing)
+            Log.error("File coordination failed", subsystem: .importing)
+            Log.error(coordError, subsystem: .importing)
             throw ImportExportError.missingMetadata
         }
 
@@ -174,7 +174,7 @@ public enum ImportManager {
         try await ImportState.updatePhase(.extensions)
         for handler in extensions {
             let count = try await handler.import(from: importURL!)
-            logger.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
+            Log.info("ImportManager: Extension '\(handler.identifier)' imported \(count) records", subsystem: .importing)
         }
 
         // log import summary
@@ -186,7 +186,7 @@ public enum ImportManager {
         if orphansProcessed > 0 {
             summary += " (processed \(orphansProcessed) orphaned samples)"
         }
-        logger.info(summary, subsystem: .importing)
+        Log.info(summary, subsystem: .importing)
 
         await cleanupSuccessfulImport()
     }
@@ -209,7 +209,7 @@ public enum ImportManager {
         currentPhase = .importingPlaces
         progress = 0
 
-        logger.info("ImportManager: Starting places import (\(placeFiles.count) files)", subsystem: .importing)
+        Log.info("ImportManager: Starting places import (\(placeFiles.count) files)", subsystem: .importing)
 
         var totalPlaces = 0
         let totalFiles = placeFiles.count
@@ -231,12 +231,12 @@ public enum ImportManager {
                 processedFiles += 1
                 progress = Double(processedFiles) / Double(totalFiles)
             } catch {
-                logger.error(error, subsystem: .importing)
+                Log.error(error, subsystem: .importing)
                 continue
             }
         }
         
-        logger.info("ImportManager: Places import complete (\(totalPlaces) places)", subsystem: .importing)
+        Log.info("ImportManager: Places import complete (\(totalPlaces) places)", subsystem: .importing)
         return totalPlaces
     }
 
@@ -260,7 +260,7 @@ public enum ImportManager {
         currentPhase = .importingItems
         progress = 0
 
-        logger.info("ImportManager: Starting timeline items import (\(itemFiles.count) files)", subsystem: .importing)
+        Log.info("ImportManager: Starting timeline items import (\(itemFiles.count) files)", subsystem: .importing)
 
         var totalItems = 0
         var allTimelineItemIds = Set<String>()
@@ -290,7 +290,7 @@ public enum ImportManager {
                 processedFiles += 1
                 progress = Double(processedFiles) / Double(totalFiles)
             } catch {
-                logger.error(error, subsystem: .database)
+                Log.error(error, subsystem: .database)
                 continue // Log and continue on file errors
             }
         }
@@ -298,7 +298,7 @@ public enum ImportManager {
         // Now restore edge relationships using the EdgeRecordManager
         try await restoreEdgeRelationships(using: edgeManager)
 
-        logger.info("ImportManager: Timeline items import complete (\(totalItems) items)", subsystem: .importing)
+        Log.info("ImportManager: Timeline items import complete (\(totalItems) items)", subsystem: .importing)
         return (totalItems, allTimelineItemIds, itemDisabledStates)
     }
 
@@ -348,7 +348,7 @@ public enum ImportManager {
         // insert visit (handling missing places)
         if var visit = item.visit {
             if let placeId = visit.placeId, !validPlaceIds.contains(placeId) {
-                logger.error("Detached visit with missing place: \(placeId)", subsystem: .database)
+                Log.error("Detached visit with missing place: \(placeId)", subsystem: .database)
                 visit.placeId = nil
                 visit.confirmedPlace = false
                 visit.uncertainPlace = true
@@ -363,14 +363,14 @@ public enum ImportManager {
     }
 
     private static func restoreEdgeRelationships(using edgeManager: EdgeRecordManager) async throws {
-        logger.info("ImportManager: Restoring edge relationships", subsystem: .importing)
+        Log.info("ImportManager: Restoring edge relationships", subsystem: .importing)
         
         // Use the EdgeRecordManager to restore relationships with progress tracking
         try await edgeManager.restoreEdgeRelationships { progressPercentage in
             // Could handle progress updates here if needed
         }
         
-        logger.info("ImportManager: Edge restoration complete", subsystem: .importing)
+        Log.info("ImportManager: Edge restoration complete", subsystem: .importing)
         
         // Clean up temporary files
         edgeManager.cleanup()
@@ -407,7 +407,7 @@ public enum ImportManager {
         }
 
         let filesToProcess = sampleFiles.filter { !alreadyProcessed.contains($0.lastPathComponent) }
-        logger.info("ImportManager: Starting samples import (\(filesToProcess.count) files, \(alreadyProcessed.count) already processed)", subsystem: .importing)
+        Log.info("ImportManager: Starting samples import (\(filesToProcess.count) files, \(alreadyProcessed.count) already processed)", subsystem: .importing)
 
         var totalSamples = 0
         var processedFiles = 0
@@ -456,11 +456,11 @@ public enum ImportManager {
 
                 // log progress every 50 files
                 if processedFiles % 50 == 0 {
-                    logger.info("ImportManager: Samples import progress - processed \(processedFiles)/\(totalFiles) files, \(totalSamples) samples", subsystem: .importing)
+                    Log.info("ImportManager: Samples import progress - processed \(processedFiles)/\(totalFiles) files, \(totalSamples) samples", subsystem: .importing)
                 }
 
             } catch {
-                logger.error(error, subsystem: .importing)
+                Log.error(error, subsystem: .importing)
                 continue
             }
         }
@@ -474,7 +474,7 @@ public enum ImportManager {
             let (restoredOrphans, restoredScenario2) = try await OrphanMappingsManager.reconstructOrphans(from: persistedMappings)
             finalOrphans = restoredOrphans
             finalScenario2 = restoredScenario2
-            logger.info("Loaded \(persistedMappings.orphans.count) orphan groups and \(persistedMappings.scenario2.count) scenario2 groups from persisted mappings", subsystem: .importing)
+            Log.info("Loaded \(persistedMappings.orphans.count) orphan groups and \(persistedMappings.scenario2.count) scenario2 groups from persisted mappings", subsystem: .importing)
         }
 
         // create preserved parent items for scenario 2 mismatches
@@ -489,13 +489,13 @@ public enum ImportManager {
         var totalOrphansProcessed = 0
         if !finalOrphans.isEmpty {
             let totalOrphans = finalOrphans.values.reduce(0) { $0 + $1.count }
-            logger.info("ImportManager found orphaned samples for \(finalOrphans.count) missing items (\(totalOrphans) samples total)", subsystem: .importing)
+            Log.info("ImportManager found orphaned samples for \(finalOrphans.count) missing items (\(totalOrphans) samples total)", subsystem: .importing)
             let (recreated, individual) = try await OrphanedSampleProcessor.processOrphanedSamples(finalOrphans)
-            logger.info("ImportManager orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .importing)
+            Log.info("ImportManager orphan processing complete: \(recreated) items recreated, \(individual) individual items", subsystem: .importing)
             totalOrphansProcessed = totalOrphans
         }
         
-        logger.info("ImportManager: Samples import complete (\(totalSamples) samples)", subsystem: .importing)
+        Log.info("ImportManager: Samples import complete (\(totalSamples) samples)", subsystem: .importing)
         return (totalSamples, totalOrphansProcessed)
     }
     
@@ -513,7 +513,7 @@ public enum ImportManager {
         // create destination directory
         try FileManager.default.createDirectory(at: destURL, withIntermediateDirectories: true)
 
-        logger.info("ImportManager: Copying backup to local container", subsystem: .importing)
+        Log.info("ImportManager: Copying backup to local container", subsystem: .importing)
 
         // enumerate all files in source directory (must collect before async loop)
         guard let enumerator = FileManager.default.enumerator(
@@ -533,7 +533,7 @@ public enum ImportManager {
         }
 
         let totalFiles = filesToCopy.count
-        logger.info("ImportManager: Found \(totalFiles) files to copy", subsystem: .importing)
+        Log.info("ImportManager: Found \(totalFiles) files to copy", subsystem: .importing)
 
         // copy each file with progress updates
         for (index, fileURL) in filesToCopy.enumerated() {
@@ -555,7 +555,7 @@ public enum ImportManager {
             await Task.yield()
         }
 
-        logger.info("ImportManager: Copy complete", subsystem: .importing)
+        Log.info("ImportManager: Copy complete", subsystem: .importing)
 
         return destURL
     }

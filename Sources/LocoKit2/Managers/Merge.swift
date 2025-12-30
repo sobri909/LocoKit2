@@ -76,18 +76,18 @@ internal final class Merge: Hashable, Sendable {
     func doIt() async -> MergeResult? {
         // block merges during partial import to prevent corruption
         if await ImportState.hasPartialImport {
-            logger.info("Merge blocked by partial import", subsystem: .timeline)
+            Log.info("Merge blocked by partial import", subsystem: .timeline)
             return nil
         }
 
         if TimelineProcessor.debugLogging {
             if let description = try? description {
-                logger.info("Doing merge: \(description)", subsystem: .timeline)
+                Log.info("Doing merge: \(description)", subsystem: .timeline)
             }
         }
 
         guard await Self.isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
-            logger.error("Merge no longer valid", subsystem: .timeline)
+            Log.error("Merge no longer valid", subsystem: .timeline)
             return nil
         }
 
@@ -147,7 +147,7 @@ internal final class Merge: Hashable, Sendable {
             return (kept: mutableKeeper, killed: [deadman, betweener].compactMap { $0 })
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
             return nil
         }
     }

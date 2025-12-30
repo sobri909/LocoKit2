@@ -66,7 +66,7 @@ public enum BackgroundTasksManager {
             try BGTaskScheduler.shared.submit(request)
             updateTaskStateFor(identifier: identifier, to: .scheduled)
         } catch {
-            logger.error(error, subsystem: .tasks)
+            Log.error(error, subsystem: .tasks)
         }
     }
 
@@ -93,7 +93,7 @@ public enum BackgroundTasksManager {
                     updateTaskStateFor(identifier: identifier, to: .unfinished)
                     scheduleTask(identifier: identifier)
                     task.setTaskCompleted(success: false)
-                    logger.error(error, subsystem: .tasks)
+                    Log.error(error, subsystem: .tasks)
                 }
             }
         }
@@ -142,7 +142,7 @@ public enum BackgroundTasksManager {
             }
 
         } catch {
-            logger.error(error, subsystem: .tasks)
+            Log.error(error, subsystem: .tasks)
         }
     }
 
@@ -163,9 +163,9 @@ public enum BackgroundTasksManager {
 
         let taskName = status.identifier.split(separator: ".").last.map(String.init) ?? status.identifier
         if state == .unfinished {
-            logger.error("\(state.rawValue): \(taskName)", subsystem: .tasks)
+            Log.error("\(state.rawValue): \(taskName)", subsystem: .tasks)
         } else if state != .scheduled {
-            logger.info("\(state.rawValue): \(taskName)", subsystem: .tasks)
+            Log.info("\(state.rawValue): \(taskName)", subsystem: .tasks)
         }
     }
 

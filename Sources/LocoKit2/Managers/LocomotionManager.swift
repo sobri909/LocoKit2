@@ -161,7 +161,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func requestMotionAuthorization() async {
         await withCheckedContinuation { continuation in
             motionAuthPedometer.queryPedometerData(from: .now - .hours(1), to: .now) { data, error in
-                if let error { logger.error(error, subsystem: .locomotion) }
+                if let error { Log.error(error, subsystem: .locomotion) }
                 self.motionAuthorizationStatus = CMMotionActivityManager.authorizationStatus()
                 self.motionAuthPedometer.stopUpdates()
                 continuation.resume()
@@ -268,7 +268,7 @@ public final class LocomotionManager: @unchecked Sendable {
         guard let appGroup else { return }
         if await appGroup.isAnActiveRecorder { return }
         await startRecording()
-        logger.info("tookOverRecording", subsystem: .timeline)
+        Log.info("tookOverRecording", subsystem: .timeline)
         await appGroup.becameCurrentRecorder()
     }
 
@@ -472,7 +472,7 @@ public final class LocomotionManager: @unchecked Sendable {
             if let clError = error as? CLError, clError.code == .locationUnknown {
                 return
             }
-            logger.error(error, subsystem: .locomotion)
+            Log.error(error, subsystem: .locomotion)
         }
     }
 

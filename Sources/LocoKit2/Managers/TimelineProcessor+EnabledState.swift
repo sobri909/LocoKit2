@@ -15,17 +15,17 @@ extension TimelineProcessor {
     public static func enableItem(itemId: String) async throws {
         // fetch target item (the disabled item we're enabling)
         guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) else {
-            logger.error("enableItem(): Item not found: \(itemId)", subsystem: .timeline)
+            Log.error("enableItem(): Item not found: \(itemId)", subsystem: .timeline)
             return
         }
 
         guard item.disabled else {
-            logger.info("enableItem(): Item already enabled: \(item.debugShortId)", subsystem: .timeline)
+            Log.info("enableItem(): Item already enabled: \(item.debugShortId)", subsystem: .timeline)
             return
         }
 
         guard let dateRange = item.dateRange else {
-            logger.error("enableItem(): Item has no date range: \(item.debugShortId)", subsystem: .timeline)
+            Log.error("enableItem(): Item has no date range: \(item.debugShortId)", subsystem: .timeline)
             return
         }
 
@@ -48,7 +48,7 @@ extension TimelineProcessor {
                     $0.disabled = false
                 }
 
-                logger.info("enableItem(): Enabled \(item.debugShortId) (no overlaps)", subsystem: .timeline)
+                Log.info("enableItem(): Enabled \(item.debugShortId) (no overlaps)", subsystem: .timeline)
                 return
             }
 
@@ -64,7 +64,7 @@ extension TimelineProcessor {
                         $0.disabled = true
                     }
 
-                    logger.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (full cover)", subsystem: .timeline)
+                    Log.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (full cover)", subsystem: .timeline)
                     continue
                 }
 
@@ -83,10 +83,10 @@ extension TimelineProcessor {
                     let trailingSamples = overlappingSamples.filter { $0.date >= dateRange.end }
                     if !trailingSamples.isEmpty {
                         let newItemId = try createSplitItem(from: overlappingItem, withSamples: trailingSamples, db: db)
-                        logger.info("enableItem(): Created trailing split \(String(newItemId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
+                        Log.info("enableItem(): Created trailing split \(String(newItemId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
                     }
 
-                    logger.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (start overlap)", subsystem: .timeline)
+                    Log.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (start overlap)", subsystem: .timeline)
                     continue
                 }
 
@@ -102,10 +102,10 @@ extension TimelineProcessor {
                     let leadingSamples = overlappingSamples.filter { $0.date < dateRange.start }
                     if !leadingSamples.isEmpty {
                         let newItemId = try createSplitItem(from: overlappingItem, withSamples: leadingSamples, db: db)
-                        logger.info("enableItem(): Created leading split \(String(newItemId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
+                        Log.info("enableItem(): Created leading split \(String(newItemId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
                     }
 
-                    logger.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (end overlap)", subsystem: .timeline)
+                    Log.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (end overlap)", subsystem: .timeline)
                     continue
                 }
 
@@ -121,17 +121,17 @@ extension TimelineProcessor {
                     let leadingSamples = overlappingSamples.filter { $0.date < dateRange.start }
                     if !leadingSamples.isEmpty {
                         let leadingId = try createSplitItem(from: overlappingItem, withSamples: leadingSamples, db: db)
-                        logger.info("enableItem(): Created leading split \(String(leadingId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
+                        Log.info("enableItem(): Created leading split \(String(leadingId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
                     }
 
                     // create new item for trailing portion (after workout ends)
                     let trailingSamples = overlappingSamples.filter { $0.date >= dateRange.end }
                     if !trailingSamples.isEmpty {
                         let trailingId = try createSplitItem(from: overlappingItem, withSamples: trailingSamples, db: db)
-                        logger.info("enableItem(): Created trailing split \(String(trailingId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
+                        Log.info("enableItem(): Created trailing split \(String(trailingId.split(separator: "-")[0])) from \(overlappingItem.debugShortId)", subsystem: .timeline)
                     }
 
-                    logger.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (middle overlap)", subsystem: .timeline)
+                    Log.info("enableItem(): Disabled overlapping item \(overlappingItem.debugShortId) (middle overlap)", subsystem: .timeline)
                     continue
                 }
             }
@@ -142,7 +142,7 @@ extension TimelineProcessor {
                 $0.disabled = false
             }
 
-            logger.info("enableItem(): Enabled \(item.debugShortId) with overlaps handled", subsystem: .timeline)
+            Log.info("enableItem(): Enabled \(item.debugShortId) with overlaps handled", subsystem: .timeline)
         }
 
         // trigger edge healing to reconnect the timeline
@@ -153,17 +153,17 @@ extension TimelineProcessor {
     public static func disableItem(itemId: String) async throws {
         // fetch target item (the enabled item we're disabling)
         guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) else {
-            logger.error("disableItem(): Item not found: \(itemId)", subsystem: .timeline)
+            Log.error("disableItem(): Item not found: \(itemId)", subsystem: .timeline)
             return
         }
 
         guard !item.disabled else {
-            logger.info("disableItem(): Item already disabled: \(item.debugShortId)", subsystem: .timeline)
+            Log.info("disableItem(): Item already disabled: \(item.debugShortId)", subsystem: .timeline)
             return
         }
 
         guard let dateRange = item.dateRange else {
-            logger.error("disableItem(): Item has no date range: \(item.debugShortId)", subsystem: .timeline)
+            Log.error("disableItem(): Item has no date range: \(item.debugShortId)", subsystem: .timeline)
             return
         }
 
@@ -174,7 +174,7 @@ extension TimelineProcessor {
                 $0.disabled = true
             }
 
-            logger.info("disableItem(): Disabled \(item.debugShortId)", subsystem: .timeline)
+            Log.info("disableItem(): Disabled \(item.debugShortId)", subsystem: .timeline)
 
             // find overlapping disabled items that were previously hidden by this item
             let disabledRequest = TimelineItem
@@ -192,7 +192,7 @@ extension TimelineProcessor {
                     $0.disabled = false
                 }
 
-                logger.info("disableItem(): Re-enabled \(overlappingItem.debugShortId)", subsystem: .timeline)
+                Log.info("disableItem(): Re-enabled \(overlappingItem.debugShortId)", subsystem: .timeline)
                 itemIds.append(overlappingItem.id)
             }
 
