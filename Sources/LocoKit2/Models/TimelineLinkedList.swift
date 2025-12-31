@@ -98,7 +98,7 @@ public final class TimelineLinkedList: AsyncSequence {
         if mutableItem.samplesChanged, let samples = mutableItem.samples {
             await mutableItem.updateFrom(samples: samples)
         }
-        
+
         timelineItems[item.id] = mutableItem
     }
 

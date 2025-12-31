@@ -17,7 +17,7 @@ public enum TimelineRecorder {
 
     public static func startRecording() async throws {
         if await ImportState.hasPartialImport {
-            logger.info("TimelineRecorder.startRecording() blocked by partial import", subsystem: .timeline)
+            Log.info("TimelineRecorder.startRecording() blocked by partial import", subsystem: .timeline)
             throw ImportExportError.partialImportInProgress
         }
         startWatchingLoco()
@@ -62,7 +62,7 @@ public enum TimelineRecorder {
             return item
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
 
         return nil
@@ -136,6 +136,9 @@ public enum TimelineRecorder {
         if previousRecordingState == .recording, recordingState == .sleeping {
             print("recordingStateChanged() .recording -> .sleeping")
 
+            // no fallback samples while sleeping
+            await stopFallbackSampleTimer()
+
             // force a sample at state transition, to ensure currentVisit is a keeper
             // (transition to sleep only requires up-to-now duration, and distance filtered
             // location updates mean actual dateRange may not reflect that, preventing
@@ -145,6 +148,11 @@ public enum TimelineRecorder {
             if let currentItemId {
                 Task { await TimelineProcessor.processFrom(itemId: currentItemId) }
             }
+        }
+
+        // restart fallback timer when returning to active recording
+        if recordingState == .recording, previousRecordingState != .recording {
+            await startFallbackSampleTimer()
         }
 
         previousRecordingState = recordingState
@@ -257,7 +265,7 @@ public enum TimelineRecorder {
             await startFallbackSampleTimer()
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
 
         latestSampleId = sample.id
@@ -291,7 +299,7 @@ public enum TimelineRecorder {
                 }
             }
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -324,7 +332,7 @@ public enum TimelineRecorder {
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
 
         return newItem
@@ -343,6 +351,9 @@ public enum TimelineRecorder {
         fallbackSampleTimer?.invalidate()
         fallbackSampleTimer = Timer.scheduledTimer(withTimeInterval: fallbackSampleDuration, repeats: false) { _ in
             Task {
+                // don't do anything if we're not actively recording
+                guard await Self.loco.recordingState == .recording else { return }
+
                 // only record if we haven't had a sample in a while
                 if let latestSample = await Self.latestSample(),
                    await latestSample.date.age > Self.loco.fallbackUpdateDuration {

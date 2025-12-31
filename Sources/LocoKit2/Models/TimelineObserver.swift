@@ -67,10 +67,10 @@ public final class TimelineObserver: TransactionObserver, Sendable {
 
     private func processPendingChanges() {
         let rowIds = lock.withLock { changedRowIds }
-        if !rowIds.isEmpty {
-            lock.withLock { changedRowIds.removeAll() }
-            Task { await process(rowIds: rowIds) }
-        }
+        guard !rowIds.isEmpty else { return }
+
+        lock.withLock { changedRowIds.removeAll() }
+        Task { await process(rowIds: rowIds) }
     }
 
     private func process(rowIds: [String: Set<Int64>]) async {
@@ -117,7 +117,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
             }
 
         } catch {
-            logger.error(error, subsystem: .database)
+            Log.error(error, subsystem: .database)
         }
     }
 
@@ -135,8 +135,12 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     }
 
     public func databaseDidChange(with event: DatabaseEvent) {
-        let rowID = event.rowID
         let tableName = event.tableName
+
+        // filter out tables we don't observe (GRDB sends RTree events despite observes() returning false)
+        guard observedTables.contains(tableName) else { return }
+
+        let rowID = event.rowID
         lock.withLock { _ = changedRowIds[tableName, default: []].insert(rowID) }
     }
 
