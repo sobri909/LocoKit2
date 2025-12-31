@@ -226,6 +226,10 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - State changes
     @MainActor
     private func startSleeping() {
+        if recordingState != .wakeup {
+            Log.debug("LocomotionManager.startSleeping()", subsystem: .locomotion)
+        }
+
         stopCoreMotion()
 
         sleepLocationManager.startUpdatingLocation()
