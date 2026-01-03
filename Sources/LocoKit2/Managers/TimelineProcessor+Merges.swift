@@ -66,8 +66,6 @@ extension TimelineProcessor {
     private static func collectBridgeMerges(for item: TimelineItem, in list: TimelineLinkedList, into merges: inout Set<Merge>) async throws {
         guard let previous = await item.previousItem(in: list),
               let next = await item.nextItem(in: list),
-              previous.source == item.source,
-              next.source == item.source,
               try previous.keepnessScore > item.keepnessScore,
               try next.keepnessScore > item.keepnessScore,
               try !previous.isDataGap,

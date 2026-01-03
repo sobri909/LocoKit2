@@ -34,9 +34,6 @@ public final class MergeScores {
         // locked can't consume or be consumed
         if consumer.locked || consumee.locked { return .impossible }
 
-        // can't consume a different source
-        if consumer.source != consumee.source { return .impossible }
-
         // if consumee is currentItem and not a keeper, no merge allowed
         if consumee.id == TimelineRecorder.currentItemId {
             do {

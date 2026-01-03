@@ -38,6 +38,7 @@ internal final class Merge: Hashable, Sendable {
         // check 1: basic state validity
         if keeper.deleted || deadman.deleted || betweener?.deleted == true { return false }
         if keeper.disabled || deadman.disabled || betweener?.disabled == true { return false }
+        if keeper.locked || deadman.locked || betweener?.locked == true { return false }
 
         // check 2: items are in a valid merge pattern and result won't be circular
         if let betweener {
