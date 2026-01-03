@@ -200,6 +200,9 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
     }
 
     public var assignmentCertain: Bool {
+        // data gaps are certain by definition - they have no activity to classify
+        if (try? isDataGap) == true { return true }
+
         if let visit {
             if let customTitle = visit.customTitle, !customTitle.isEmpty {
                 return true
