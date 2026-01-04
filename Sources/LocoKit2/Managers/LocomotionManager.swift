@@ -110,6 +110,7 @@ public final class LocomotionManager: @unchecked Sendable {
         locationManager.startUpdatingLocation()
         locationManager.startMonitoringSignificantLocationChanges()
         sleepLocationManager.stopUpdatingLocation()
+        lastLocationManagerRestart = .now
 
         startCoreMotion()
 
@@ -316,11 +317,16 @@ public final class LocomotionManager: @unchecked Sendable {
             } else if sleepState.shouldBeSleeping {
                 if await TimelineRecorder.canStartSleeping {
                     startSleeping()
+
                 } else {
+                    // staying in recording, waiting to sleep
+                    requestLocationIfStale()
                     restartTheFallbackTimer()
                 }
-                
+
             } else {
+                // staying in recording
+                requestLocationIfStale()
                 restartTheFallbackTimer()
             }
 
@@ -341,6 +347,29 @@ public final class LocomotionManager: @unchecked Sendable {
         case .standby, .off:
             break
         }
+    }
+
+    // MARK: - Location staleness handling
+
+    private var lastLocationManagerRestart: Date?
+
+    private func requestLocationIfStale() {
+        // don't restart more than once per 60 seconds
+        if let lastRestart = lastLocationManagerRestart, lastRestart.age < 60 {
+            return
+        }
+
+        guard let lastRaw = lastRawLocation else {
+            // no location yet but we started recently - wait for natural delivery
+            return
+        }
+
+        guard lastRaw.timestamp.age > 60 else { return }
+
+        Log.debug("Restarting location manager (last raw: \(Int(lastRaw.timestamp.age))s ago)", subsystem: .locomotion)
+        locationManager.stopUpdatingLocation()
+        locationManager.startUpdatingLocation()
+        lastLocationManagerRestart = .now
     }
 
     // MARK: - Timer handling
