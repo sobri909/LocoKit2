@@ -19,13 +19,25 @@ public enum HealthManager {
     private static var lastHealthUpdateTimes: [String: Date] = [:]
     private static let healthUpdateThrottle: TimeInterval = .minutes(15)
     
+    // MARK: - Health Data Types
+
+    /// types used for activity classification (strongly recommended)
     nonisolated
-    public static let healthDataTypes: Set<HKObjectType> = [
-        HKQuantityType(.stepCount),
-        HKQuantityType(.flightsClimbed),
-        HKQuantityType(.activeEnergyBurned),
+    public static let classificationTypes: Set<HKObjectType> = [
         HKQuantityType(.heartRate)
     ]
+
+    /// types used for timeline stats display (optional)
+    nonisolated
+    public static let statsTypes: Set<HKObjectType> = [
+        HKQuantityType(.stepCount),
+        HKQuantityType(.flightsClimbed),
+        HKQuantityType(.activeEnergyBurned)
+    ]
+
+    /// all LocoKit2 health data types
+    nonisolated
+    public static let healthDataTypes: Set<HKObjectType> = classificationTypes.union(statsTypes)
 
     // MARK: - Enable / Disable
 
