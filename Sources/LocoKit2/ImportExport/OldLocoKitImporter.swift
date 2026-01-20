@@ -23,7 +23,18 @@ public enum OldLocoKitImporter {
     private static var importDateRange: DateInterval?
     private static var wasObserving: Bool = true
     private static var wasRecording: Bool = false
-    
+
+    // MARK: - Data availability
+
+    /// check if old Arc Timeline databases exist (for import availability detection)
+    nonisolated
+    public static var hasOldArcTimelineData: Bool {
+        guard let appGroupDir = Database.highlander.appGroupDbDir else { return false }
+        let locoKitExists = FileManager.default.fileExists(atPath: appGroupDir.appendingPathComponent("LocoKit.sqlite").path)
+        let arcAppExists = FileManager.default.fileExists(atPath: appGroupDir.appendingPathComponent("ArcApp.sqlite").path)
+        return locoKitExists && arcAppExists
+    }
+
     // MARK: - Public interface
     
     public static func startImport(dateRange: DateInterval? = nil) async throws {
