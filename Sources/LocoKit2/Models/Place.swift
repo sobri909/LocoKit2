@@ -84,12 +84,16 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         return TimeZone(secondsFromGMT: secondsFromGMT)
     }
 
+    public var needsReverseGeocode: Bool {
+        secondsFromGMT == nil || streetAddress == nil || countryCode == nil || locality == nil
+    }
+
     // MARK: - Reverse Geocode
 
     @PlacesActor
     @discardableResult
     public func updateFromReverseGeocode() async throws -> Bool {
-        if secondsFromGMT != nil && streetAddress != nil && countryCode != nil && locality != nil { return false }
+        if !needsReverseGeocode { return false }
 
         do {
             let placemarks = try await CLGeocoder().reverseGeocodeLocation(center.location)
@@ -105,6 +109,20 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
                     ?? placemark.postalCode
             } else {
                 placemark.name
+            }
+
+            // log missing fields for debugging (eg China reverse geocode issues)
+            if placemark.timeZone == nil {
+                Log.info("Reverse geocode missing timeZone for place: \(name)", subsystem: .places)
+            }
+            if streetAddress == nil {
+                Log.info("Reverse geocode missing streetAddress for place: \(name)", subsystem: .places)
+            }
+            if placemark.isoCountryCode == nil {
+                Log.info("Reverse geocode missing countryCode for place: \(name)", subsystem: .places)
+            }
+            if placemark.locality == nil {
+                Log.info("Reverse geocode missing locality for place: \(name)", subsystem: .places)
             }
 
             do {
