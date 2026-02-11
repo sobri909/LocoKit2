@@ -115,36 +115,29 @@ extension Data {
 
 extension FileHandle {
     func readLine() throws -> String? {
-        var line = ""
+        var lineData = Data()
         let bufferSize = 1024
 
         while true {
             guard let data = try read(upToCount: bufferSize) else {
-                return line.isEmpty ? nil : line
+                return lineData.isEmpty ? nil : String(data: lineData, encoding: .utf8) ?? String(decoding: lineData, as: UTF8.self)
             }
 
-            var foundNewline = false
-            var newlineIndex = 0
+            if let newlineIndex = data.firstIndex(of: 0x0A) {
+                lineData.append(data[data.startIndex..<newlineIndex])
 
-            for (index, byte) in data.enumerated() {
-                if byte == 0x0A { // newline char
-                    foundNewline = true
-                    newlineIndex = index
-                    break
-                }
-                line.append(Character(UnicodeScalar(byte)))
-            }
-
-            if foundNewline {
-                // Calculate position to seek to (start position + bytes up to char after newline)
+                // seek to byte after newline
                 let startPosition = try offset() - UInt64(data.count)
-                try seek(toOffset: startPosition + UInt64(newlineIndex + 1))
-                return line
+                let bytesConsumed = data.distance(from: data.startIndex, to: newlineIndex) + 1
+                try seek(toOffset: startPosition + UInt64(bytesConsumed))
+
+                return String(data: lineData, encoding: .utf8) ?? String(decoding: lineData, as: UTF8.self)
             }
 
-            // No newline found, continue reading
+            lineData.append(data)
+
             if data.count < bufferSize {
-                return line.isEmpty ? nil : line
+                return lineData.isEmpty ? nil : String(data: lineData, encoding: .utf8) ?? String(decoding: lineData, as: UTF8.self)
             }
         }
     }
