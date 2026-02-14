@@ -46,10 +46,12 @@ public enum BackgroundTasksManager {
     public static func runOverdueTasks(onTaskStarted: (@MainActor (String) -> Void)? = nil) async {
         guard LocomotionManager.highlander.recordingState != .recording else { return }
         guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return }
+        guard ProcessInfo.processInfo.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue else { return }
 
         for (identifier, definition) in taskDefinitions {
             try? Task.checkCancellation()
             guard LocomotionManager.highlander.recordingState != .recording else { break }
+            guard ProcessInfo.processInfo.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue else { break }
 
             guard let threshold = definition.foregroundThreshold else { continue }
 
