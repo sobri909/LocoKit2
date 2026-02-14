@@ -64,9 +64,11 @@ public enum ActivityTypesManager {
     public static func registerModelUpdatesTask() {
         let taskDefinition = BackgroundTaskDefinition(
             identifier: taskIdentifier,
+            displayName: "Updating activity models",
             minimumDelay: .hours(1),
             requiresNetwork: false,
             requiresPower: true,
+            foregroundThreshold: .hours(23),
             workHandler: processModelsForBackground
         )
         
@@ -171,7 +173,7 @@ public enum ActivityTypesManager {
                 }
                 defer { Task { await OperationRegistry.endOperation(handle) } }
                 
-                update(model: model)
+                await update(model: model)
             }
             
         } catch {
@@ -193,132 +195,131 @@ public enum ActivityTypesManager {
     // MARK: - Model building
 
 #if targetEnvironment(simulator)
-    static func update(model: ActivityTypesModel) {
+    static func update(model: ActivityTypesModel) async {
         print("SIMULATOR DOESN'T SUPPORT MODEL UPDATES")
     }
 #else
-    static func update(model: ActivityTypesModel) {
+    static func update(model: ActivityTypesModel) async {
         if model.geoKey.hasPrefix("B") { return }
-        
         if Task.isCancelled { return }
 
-        print("UPDATING: \(model.geoKey)")
+        // run heavy training work off-actor to avoid blocking classification
+        let trained = await Task.detached(priority: .background) { [model] () -> Bool in
+            print("UPDATING: \(model.geoKey)")
 
-        let manager = FileManager.default
-        let tempModelFile = manager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mlmodel")
+            let manager = FileManager.default
+            let tempModelFile = manager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mlmodel")
 
-        do {
-            var csvFile: URL?
-            var samplesCount = 0
-            var includedTypes: Set<ActivityType> = []
+            do {
+                var csvFile: URL?
+                var samplesCount = 0
+                var includedTypes: Set<ActivityType> = []
 
-            let start = Date()
-            let samples = try fetchTrainingSamples(for: model)
-            print("UPDATING: \(model.geoKey), SAMPLES BATCH: \(samples.count), duration: \(start.age)")
+                let start = Date()
+                let samples = try fetchTrainingSamples(for: model)
+                print("UPDATING: \(model.geoKey), SAMPLES BATCH: \(samples.count), duration: \(start.age)")
 
-            let (url, samplesAdded, typesAdded) = try exportCSV(samples: samples, appendingTo: csvFile)
-            csvFile = url
-            samplesCount += samplesAdded
-            includedTypes.formUnion(typesAdded)
-
-            // if includedTypes only has one type and it's not stationary, throw in a fake stationary sample
-            if samplesCount > 0 && includedTypes.count == 1 && !includedTypes.contains(.stationary) {
-                print("UPDATING: \(model.geoKey), ADDING FAKE STATIONARY SAMPLE")
-
-                // create a fake stationary sample
-                let fakeLocation = CLLocation(
-                    coordinate: model.centerCoordinate,
-                    altitude: 0,
-                    horizontalAccuracy: 10, // valid accuracy > 0
-                    verticalAccuracy: 10,   // valid accuracy > 0
-                    course: 0,              // valid course >= 0
-                    speed: 0,               // valid speed >= 0
-                    timestamp: .now
-                )
-
-                var fakeSample = LocomotionSample(
-                    date: .now,
-                    movingState: .stationary,
-                    recordingState: .recording,
-                    location: fakeLocation
-                )
-                fakeSample.confirmedActivityType = .stationary
-                fakeSample.xyAcceleration = 0
-                fakeSample.zAcceleration = 0
-                fakeSample.stepHz = 0
-
-                // add the fake sample to the CSV
-                let (url, samplesAdded, typesAdded) = try exportCSV(samples: [fakeSample], appendingTo: csvFile)
+                let (url, samplesAdded, typesAdded) = try exportCSV(samples: samples, appendingTo: csvFile)
                 csvFile = url
                 samplesCount += samplesAdded
                 includedTypes.formUnion(typesAdded)
-            }
 
-            guard samplesCount > 0, includedTypes.count > 1 else {
-                print("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))")
+                // if includedTypes only has one type and it's not stationary, throw in a fake stationary sample
+                if samplesCount > 0 && includedTypes.count == 1 && !includedTypes.contains(.stationary) {
+                    print("UPDATING: \(model.geoKey), ADDING FAKE STATIONARY SAMPLE")
+
+                    let fakeLocation = CLLocation(
+                        coordinate: model.centerCoordinate,
+                        altitude: 0,
+                        horizontalAccuracy: 10,
+                        verticalAccuracy: 10,
+                        course: 0,
+                        speed: 0,
+                        timestamp: .now
+                    )
+
+                    var fakeSample = LocomotionSample(
+                        date: .now,
+                        movingState: .stationary,
+                        recordingState: .recording,
+                        location: fakeLocation
+                    )
+                    fakeSample.confirmedActivityType = .stationary
+                    fakeSample.xyAcceleration = 0
+                    fakeSample.zAcceleration = 0
+                    fakeSample.stepHz = 0
+
+                    let (url, samplesAdded, typesAdded) = try exportCSV(samples: [fakeSample], appendingTo: csvFile)
+                    csvFile = url
+                    samplesCount += samplesAdded
+                    includedTypes.formUnion(typesAdded)
+                }
+
+                guard samplesCount > 0, includedTypes.count > 1 else {
+                    print("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))")
+                    try? Database.pool.write { db in
+                        var mutableModel = model
+                        try mutableModel.updateChanges(db) {
+                            $0.totalSamples = samplesCount
+                            $0.accuracyScore = nil
+                            $0.lastUpdated = .now
+                            $0.needsUpdate = false
+                        }
+                    }
+                    return false
+                }
+
+                guard let csvFile else {
+                    Log.error("Missing CSV file for model build", subsystem: .activitytypes)
+                    return false
+                }
+
+                let dataFrame = try DataFrame(contentsOfCSVFile: csvFile)
+                let classifier = try MLBoostedTreeClassifier(trainingData: dataFrame, targetColumn: "confirmedActivityType")
+
+                do {
+                    try FileManager.default.createDirectory(at: MLModelCache.modelsDir, withIntermediateDirectories: true, attributes: nil)
+                } catch {
+                    Log.error("Couldn't create MLModels directory", subsystem: .activitytypes)
+                }
+
+                try classifier.write(to: tempModelFile)
+                let compiledModelFile = try MLModel.compileModel(at: tempModelFile)
+                _ = try manager.replaceItemAt(MLModelCache.getModelURLFor(filename: model.filename), withItemAt: compiledModelFile)
+
+                let accuracy = 1.0 - classifier.validationMetrics.classificationError
                 try? Database.pool.write { db in
                     var mutableModel = model
                     try mutableModel.updateChanges(db) {
                         $0.totalSamples = samplesCount
-                        $0.accuracyScore = nil
+                        $0.accuracyScore = accuracy
                         $0.lastUpdated = .now
                         $0.needsUpdate = false
                     }
                 }
-                return
-            }
 
-            guard let csvFile else {
-                Log.error("Missing CSV file for model build", subsystem: .activitytypes)
-                return
-            }
+                let completeness = min(1.0, Double(samplesCount) / Double(ActivityTypesModel.modelMinTrainingSamples[model.depth]!))
+                Log.info("UPDATED: \(model.geoKey) (samples: \(samplesCount), accuracy: \(String(format: "%.2f", accuracy)), completeness: \(String(format: "%.2f", completeness)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
 
-            // load the csv file
-            let dataFrame = try DataFrame(contentsOfCSVFile: csvFile)
+                return true
 
-            // train the model
-            let classifier = try MLBoostedTreeClassifier(trainingData: dataFrame, targetColumn: "confirmedActivityType")
-
-            do {
-                try FileManager.default.createDirectory(at: MLModelCache.modelsDir, withIntermediateDirectories: true, attributes: nil)
             } catch {
-                Log.error("Couldn't create MLModels directory", subsystem: .activitytypes)
+                Log.error(error, subsystem: .activitytypes)
+                return false
             }
+        }.value
 
-            // write model to temp file
-            try classifier.write(to: tempModelFile)
+        if Task.isCancelled { return }
 
-            // compile the model
-            let compiledModelFile = try MLModel.compileModel(at: tempModelFile)
-
-            // save model to final dest
-            _ = try manager.replaceItemAt(MLModelCache.getModelURLFor(filename: model.filename), withItemAt: compiledModelFile)
-
-            // update metadata
-            let accuracy = 1.0 - classifier.validationMetrics.classificationError
-            try? Database.pool.write { db in
-                var mutableModel = model
-                try mutableModel.updateChanges(db) {
-                    $0.totalSamples = samplesCount
-                    $0.accuracyScore = accuracy
-                    $0.lastUpdated = .now
-                    $0.needsUpdate = false
-                }
-            }
-
-            let completeness = min(1.0, Double(samplesCount) / Double(ActivityTypesModel.modelMinTrainingSamples[model.depth]!))
-            Log.info("UPDATED: \(model.geoKey) (samples: \(samplesCount), accuracy: \(String(format: "%.2f", accuracy)), completeness: \(String(format: "%.2f", completeness)), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
-
-            try model.reloadModel()
-
+        // only cache reload and classifier invalidation need the actor
+        if trained {
+            try? model.reloadModel()
             ActivityClassifier.invalidateModel(geoKey: model.geoKey)
-
-        } catch {
-            Log.error(error, subsystem: .activitytypes)
         }
     }
 #endif
 
+    nonisolated
     private static func fetchTrainingSamples(for model: ActivityTypesModel) throws -> [LocomotionSample] {
         return try Database.pool.read { db in
             if model.depth != 0 {
@@ -362,6 +363,7 @@ public enum ActivityTypesManager {
         }
     }
 
+    nonisolated
     private static func exportCSV(samples: [LocomotionSample], appendingTo: URL? = nil) throws -> (URL, Int, Set<ActivityType>) {
         let modelFeatures = [
             "confirmedActivityType", "stepHz", "xyAcceleration", "zAcceleration", "movingState",

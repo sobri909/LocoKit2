@@ -31,6 +31,49 @@ public enum BackgroundTasksManager {
         }
     }
 
+    // MARK: - Foreground Overdue Tasks
+
+    public static func hasOverdueForegroundTasks() -> Bool {
+        for (identifier, definition) in taskDefinitions {
+            guard let threshold = definition.foregroundThreshold else { continue }
+            guard let status = try? getTaskStatusFor(identifier: identifier) else { continue }
+            guard status.state != .running else { continue }
+            if status.isForegroundOverdue(threshold: threshold) { return true }
+        }
+        return false
+    }
+
+    public static func runOverdueTasks(onTaskStarted: (@MainActor (String) -> Void)? = nil) async {
+        guard LocomotionManager.highlander.recordingState != .recording else { return }
+        guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return }
+
+        for (identifier, definition) in taskDefinitions {
+            try? Task.checkCancellation()
+            guard LocomotionManager.highlander.recordingState != .recording else { break }
+
+            guard let threshold = definition.foregroundThreshold else { continue }
+
+            guard let status = try? getTaskStatusFor(identifier: identifier) else { continue }
+            guard status.state != .running else { continue }
+            guard status.isForegroundOverdue(threshold: threshold) else { continue }
+
+            Log.info("Running overdue task in foreground: \(status.shortName)", subsystem: .tasks)
+            onTaskStarted?(definition.displayName)
+            updateTaskStateFor(identifier: identifier, to: .running)
+
+            do {
+                try await definition.workHandler()
+                updateTaskStateFor(identifier: identifier, to: .completed)
+                scheduleTask(identifier: identifier)
+
+            } catch {
+                updateTaskStateFor(identifier: identifier, to: .unfinished)
+                scheduleTask(identifier: identifier)
+                Log.error(error, subsystem: .tasks)
+            }
+        }
+    }
+
     // MARK: - Private
 
     private static func registerTask(identifier: String) {
@@ -75,7 +118,14 @@ public enum BackgroundTasksManager {
             task.setTaskCompleted(success: false)
             return
         }
-        
+
+        // don't run scheduled tasks during active recording
+        if LocomotionManager.highlander.recordingState == .recording {
+            task.setTaskCompleted(success: true)
+            scheduleTask(identifier: identifier)
+            return
+        }
+
         updateTaskStateFor(identifier: identifier, to: .running)
 
         let workTask = Task.detached {

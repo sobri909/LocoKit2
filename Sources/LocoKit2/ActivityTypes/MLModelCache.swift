@@ -12,6 +12,7 @@ import CoreML
 public enum MLModelCache {
     private static var loadedModels: [String: MLModel] = [:]
     
+    nonisolated
     public static let modelsDir: URL = {
         return try! FileManager.default
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -43,6 +44,7 @@ public enum MLModelCache {
         }
     }
     
+    nonisolated
     public static func getModelURLFor(filename: String) -> URL {
         if filename.hasPrefix("B") {
             return Bundle.main.url(forResource: filename, withExtension: nil)!

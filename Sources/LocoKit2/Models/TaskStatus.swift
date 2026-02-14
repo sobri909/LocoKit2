@@ -38,10 +38,15 @@ public struct TaskStatus: FetchableRecord, PersistableRecord, Identifiable, Coda
         guard let lastCompleted else { return 0 }
         return lastCompleted.age - minimumDelay
     }
-    
+
     public var isOverdue: Bool {
-        guard let lastCompleted else { return false }
-        return lastCompleted.age > minimumDelay
+        if lastCompleted == nil { return state == .scheduled }
+        return lastCompleted!.age > minimumDelay
+    }
+
+    public func isForegroundOverdue(threshold: TimeInterval) -> Bool {
+        if lastCompleted == nil { return state == .scheduled }
+        return lastCompleted!.age > threshold
     }
 
     public enum TaskState: String, Codable, CaseIterable, Sendable {
