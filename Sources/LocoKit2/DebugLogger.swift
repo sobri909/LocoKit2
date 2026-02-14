@@ -31,9 +31,7 @@ public enum Log {
 
             State.shared.writeToFile(line)
 
-            if !isMarker {
-                State.shared.resetFibTimer()
-            }
+            State.shared.resetFibTimer()
         }
     }
 
