@@ -28,6 +28,11 @@ public struct Histogram: Hashable, Sendable, Codable {
 
     // MARK: - Init
 
+    /// placeholder for days with no data
+    public init() {
+        bins = []
+    }
+
     public static func forTimeOfDay(dates: [Date], timeZone: TimeZone = .current) -> Histogram? {
         var calendar = Calendar.current
         calendar.timeZone = timeZone

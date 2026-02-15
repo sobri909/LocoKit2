@@ -215,14 +215,10 @@ extension Place {
         }
         
         // create Histograms in order (all days first, then each weekday)
-        var histograms: [Histogram] = []
-        for values in dayOfWeekValues where !values.isEmpty {
-            if let histogram = Histogram(values: values) {
-                histograms.append(histogram)
-            }
+        // always include all 8 entries so array indices match weekday numbers
+        return dayOfWeekValues.map { values in
+            Histogram(values: values) ?? Histogram()
         }
-
-        return histograms
     }
 
 }
