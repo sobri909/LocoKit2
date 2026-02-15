@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import GRDB
 
 typealias MergeScore = ConsumptionScore
 public typealias MergeResult = (kept: TimelineItem, killed: [TimelineItem])
@@ -142,6 +143,16 @@ internal final class Merge: Hashable, Sendable {
                     try item.base.updateChanges(db) {
                         $0.deleted = true
                     }
+                }
+
+                // mark affected places as stale so visit stats get recalculated
+                let stalePlaceIds = Set(
+                    [self.keeper.visit?.placeId, self.deadman.visit?.placeId, self.betweener?.visit?.placeId].compactMap { $0 }
+                )
+                for placeId in stalePlaceIds {
+                    try Place
+                        .filter(Place.Columns.id == placeId)
+                        .updateAll(db, Place.Columns.isStale.set(to: true))
                 }
             }
 

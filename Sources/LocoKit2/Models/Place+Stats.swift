@@ -10,6 +10,14 @@ import GRDB
 
 extension Place {
 
+    public struct DisplayHistograms: Sendable {
+        public let arrivalTimes: Histogram?
+        public let leavingTimes: Histogram?
+        public let visitDurations: Histogram?
+        public let visitCount: Int
+        public let visitDays: Int
+    }
+
     @PlacesActor
     public func updateVisitStats() async {
         do {
@@ -126,6 +134,41 @@ extension Place {
         } catch {
             Log.error(error, subsystem: .database)
         }
+    }
+
+    /// compute histograms from all visits for display, not just confirmed
+    public func computeDisplayHistograms() async throws -> DisplayHistograms {
+        let currentItemId = await TimelineRecorder.currentItemId
+
+        let visits = try await Database.pool.read { db in
+            try TimelineItem
+                .itemBaseRequest(includeSamples: false, includePlaces: false)
+                .filter(sql: "visit.placeId = ?", arguments: [id])
+                .filter { $0.deleted == false }
+                .filter { $0.disabled == false }
+                .asRequest(of: TimelineItem.self)
+                .fetchAll(db)
+        }
+
+        var calendar = Calendar.current
+        calendar.timeZone = localTimeZone ?? .current
+
+        let uniqueDays = Set<Date>(visits.compactMap {
+            $0.dateRange?.start.startOfDay(in: calendar)
+        })
+
+        let visitStarts = visits.compactMap { $0.dateRange?.start }
+        let statsVisits = visits.filter { $0.id != currentItemId }
+        let visitEnds = statsVisits.compactMap { $0.dateRange?.end }
+        let visitDurations = statsVisits.compactMap { $0.dateRange?.duration }
+
+        return DisplayHistograms(
+            arrivalTimes: Histogram.forTimeOfDay(dates: visitStarts, timeZone: localTimeZone ?? .current),
+            leavingTimes: Histogram.forTimeOfDay(dates: visitEnds, timeZone: localTimeZone ?? .current),
+            visitDurations: Histogram.forDurations(intervals: visitDurations),
+            visitCount: visits.count,
+            visitDays: uniqueDays.count
+        )
     }
 
     public func leavingProbabilityFor(duration: TimeInterval, date: Date = .now) -> Double? {
