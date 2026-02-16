@@ -94,7 +94,11 @@ internal final class Merge: Hashable, Sendable {
         }
 
         var mutableKeeper = keeper
-        guard let deadmanSamples = deadman.samples else { fatalError() }
+        guard let deadmanSamples = deadman.samples else {
+            // BIG-296: this should be impossible - samples should always be loaded for merge candidates
+            Log.error("Merge.doIt() deadman has nil samples. deadman: \(deadman.id), deleted: \(deadman.deleted), disabled: \(deadman.disabled), score: \(score)", subsystem: .timeline)
+            return nil
+        }
 
         if let betweener {
             mutableKeeper.willConsume(betweener)
