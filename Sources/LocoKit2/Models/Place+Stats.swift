@@ -21,10 +21,12 @@ extension Place {
     @PlacesActor
     public func updateVisitStats() async {
         do {
+            let totalStart = CFAbsoluteTimeGetCurrent()
             Log.info("UPDATING: \(name)", subsystem: .places)
 
             let currentItemId = await TimelineRecorder.currentItemId
 
+            var t0 = CFAbsoluteTimeGetCurrent()
             let visits = try await Database.pool.read { db in
                 try TimelineItem
                     .itemBaseRequest(includeSamples: false, includePlaces: false)
@@ -34,6 +36,8 @@ extension Place {
                     .asRequest(of: TimelineItem.self)
                     .fetchAll(db)
             }
+
+            Log.info("TIMING: visits loaded (\(visits.count)) in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - t0))s", subsystem: .places)
 
             if visits.isEmpty {
                 try await Database.pool.uncancellableWrite { [self] db in
@@ -61,8 +65,10 @@ extension Place {
             })
 
             let confirmedVisits = visits.filter { $0.visit?.confirmedPlace == true }
-            
+            Log.info("TIMING: \(confirmedVisits.count) confirmed of \(visits.count) total", subsystem: .places)
+
             // load samples only for confirmed visits to reduce memory usage
+            t0 = CFAbsoluteTimeGetCurrent()
             let samples: [LocomotionSample]
             if !confirmedVisits.isEmpty {
                 let confirmedVisitIds = confirmedVisits.map { $0.id }
@@ -80,7 +86,11 @@ extension Place {
                 samples = []
             }
 
+            Log.info("TIMING: samples loaded (\(samples.count)) in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - t0))s", subsystem: .places)
+
+            t0 = CFAbsoluteTimeGetCurrent()
             let occupancyTimes = buildOccupancyTimes(from: confirmedVisits, in: calendar)
+            Log.info("TIMING: buildOccupancyTimes in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - t0))s", subsystem: .places)
 
             // use all visits for counts, samples, and arrival times
             let visitStarts = confirmedVisits.compactMap { $0.dateRange?.start }
@@ -92,6 +102,7 @@ extension Place {
             let visitDurations = statsVisits.compactMap { $0.dateRange?.duration }
 
             // calculate location data if we have valid samples
+            t0 = CFAbsoluteTimeGetCurrent()
             let center = samples.weightedCenter()
             let locationData: (latitude: Double, longitude: Double, radiusMean: Double, radiusSD: Double)?
             
@@ -104,6 +115,15 @@ extension Place {
                 locationData = nil
             }
 
+            Log.info("TIMING: weightedCenter + radius in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - t0))s", subsystem: .places)
+
+            if visits.count != visitCount || uniqueDays.count != visitDays {
+                Log.info("STATS CHANGE: \(name) visits \(visitCount) → \(visits.count), days \(visitDays) → \(uniqueDays.count)", subsystem: .places)
+            } else {
+                Log.info("STATS UNCHANGED: \(name) visits \(visits.count), days \(uniqueDays.count)", subsystem: .places)
+            }
+
+            t0 = CFAbsoluteTimeGetCurrent()
             try await Database.pool.uncancellableWrite { [self, occupancyTimes, locationData, lastVisitDate] db in
                 var mutableSelf = self
                 try mutableSelf.updateChanges(db) {
@@ -126,7 +146,8 @@ extension Place {
                 }
             }
 
-            Log.info("UPDATED: \(name)\(locationData == nil ? " (no valid samples)" : "")", subsystem: .places)
+            Log.info("TIMING: DB write in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - t0))s", subsystem: .places)
+            Log.info("TIMING: TOTAL updateVisitStats for \(name) in \(String(format: "%.2f", CFAbsoluteTimeGetCurrent() - totalStart))s (\(visits.count) visits, \(samples.count) samples)", subsystem: .places)
             
         } catch is CancellationError {
             // CancellationError is fine here; can ignore
@@ -210,7 +231,7 @@ extension Place {
                 let weekday = calendar.component(.weekday, from: current)
                 dayOfWeekValues[weekday].append(timeOfDay)
                 
-                current += .minutes(1)
+                current += .minutes(5)
             }
         }
         
