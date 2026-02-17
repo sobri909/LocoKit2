@@ -151,5 +151,16 @@ extension Database {
                 table.column("localCopyPath", .text)
             }
         }
+
+        migrator.registerMigration("OldLocoKitImportState") { db in
+            // singleton table for tracking old LocoKit import state (for resume on interruption)
+            try? db.create(table: "OldLocoKitImportState") { table in
+                table.primaryKey("id", .integer)
+                    .check { $0 == 1 }  // singleton
+                table.column("startedAt", .datetime).notNull()
+                table.column("phase", .text).notNull()
+                table.column("lastProcessedSampleRowId", .integer)
+            }
+        }
     }
 }

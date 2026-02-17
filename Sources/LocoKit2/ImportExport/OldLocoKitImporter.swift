@@ -54,59 +54,110 @@ public enum OldLocoKitImporter {
         TimelineObserver.highlander.enabled = false
         await TimelineRecorder.stopRecording()
         
-        // Track counts for summary
-        var placesCount = 0
-        var itemsCount = 0
-        var samplesCount = 0
-        var orphansProcessed = 0
-        
         do {
-            // Log import details
             if let dateRange = importDateRange {
                 Log.info("Starting import with date range: \(dateRange.start) to \(dateRange.end)", subsystem: .importing)
             } else {
                 Log.info("Starting import with no date restrictions", subsystem: .importing)
             }
-            
-            // Connect to databases
+
             try connectToDatabases()
-            
-            // Import Places (from ArcApp.sqlite)
-            currentPhase = .importingPlaces
-            placesCount = try await importPlaces()
-            
-            // Import Timeline Items (from LocoKit.sqlite)
-            currentPhase = .importingTimelineItems
-            let (importedCount, importedItemIds, itemDisabledStates) = try await importTimelineItems()
-            itemsCount = importedCount
-            
-            // Import Samples (from LocoKit.sqlite)
-            currentPhase = .importingSamples
-            let (samples, orphans) = try await importSamples(importedItemIds: importedItemIds, itemDisabledStates: itemDisabledStates)
-            samplesCount = samples
-            orphansProcessed = orphans
-            
-            // Log summary
-            let duration = Date().timeIntervalSince(startTime)
-            let durationString = String(format: "%.1f", duration / 60.0) // minutes
-            var summary = "OldLocoKitImporter completed successfully in \(durationString) minutes: "
-            summary += "\(placesCount) places, \(itemsCount) items, \(samplesCount) samples"
-            if orphansProcessed > 0 {
-                summary += " (processed \(orphansProcessed) orphaned samples)"
-            }
-            Log.info(summary, subsystem: .importing)
-            
-            cleanupAndReset()
-            
+
+            // create import state for resume tracking
+            let importState = OldLocoKitImportState(startedAt: startTime, phase: .places)
+            try await OldLocoKitImportState.save(importState)
+
+            try await performImportPhases(startTime: startTime, isResume: false)
+
         } catch {
             Log.error("Database import failed: \(error)", subsystem: .importing)
+            // preserve import state for resume (do NOT clear)
             cleanupAndReset()
             throw error
         }
     }
     
+    public static func resumeImport(dateRange: DateInterval? = nil) async throws {
+        guard !importInProgress else {
+            throw ImportExportError.importAlreadyInProgress
+        }
+
+        guard let state = try await OldLocoKitImportState.current() else {
+            throw ImportExportError.importNotInitialised
+        }
+
+        let startTime = Date()
+        importInProgress = true
+        progress = 0
+        importDateRange = dateRange
+
+        // save initial states and disable observation/recording during import
+        wasObserving = TimelineObserver.highlander.enabled
+        wasRecording = await TimelineRecorder.isRecording
+        TimelineObserver.highlander.enabled = false
+        await TimelineRecorder.stopRecording()
+
+        do {
+            Log.info("Resuming old LocoKit import from phase: \(state.phase.rawValue)", subsystem: .importing)
+
+            try connectToDatabases()
+
+            try await performImportPhases(
+                resumeFromRowId: state.lastProcessedSampleRowId,
+                startTime: startTime,
+                isResume: true
+            )
+
+        } catch {
+            Log.error("OldLocoKitImporter resume failed: \(error)", subsystem: .importing)
+            // preserve import state for next resume attempt
+            cleanupAndReset()
+            throw error
+        }
+    }
+
     // MARK: - Private helpers
-    
+
+    private static func performImportPhases(
+        resumeFromRowId: Int? = nil,
+        startTime: Date,
+        isResume: Bool
+    ) async throws {
+        // Import Places (from ArcApp.sqlite)
+        currentPhase = .importingPlaces
+        let placesCount = try await importPlaces()
+        try await OldLocoKitImportState.updatePhase(.items)
+
+        // Import Timeline Items (from LocoKit.sqlite)
+        currentPhase = .importingTimelineItems
+        let (itemsCount, importedItemIds, itemDisabledStates) = try await importTimelineItems()
+        try await OldLocoKitImportState.updatePhase(.samples)
+
+        // Import Samples (from LocoKit.sqlite)
+        currentPhase = .importingSamples
+        let (samplesCount, orphansProcessed) = try await importSamples(
+            importedItemIds: importedItemIds,
+            itemDisabledStates: itemDisabledStates,
+            resumeFromRowId: resumeFromRowId
+        )
+
+        // log summary
+        let duration = Date().timeIntervalSince(startTime)
+        let durationString = String(format: "%.1f", duration / 60.0)
+        let prefix = isResume ? "OldLocoKitImporter (resumed) completed in" : "OldLocoKitImporter completed successfully in"
+        var summary = "\(prefix) \(durationString) minutes: "
+        summary += "\(placesCount) places, \(itemsCount) items, \(samplesCount) samples"
+        if orphansProcessed > 0 {
+            summary += " (processed \(orphansProcessed) orphaned samples)"
+        }
+        Log.info(summary, subsystem: .importing)
+
+        // clear state on success
+        try await OldLocoKitImportState.clear()
+
+        cleanupAndReset()
+    }
+
     private static func connectToDatabases() throws {
         // Check for legacy LocoKit database
         guard Database.legacyPool != nil else {
@@ -324,7 +375,7 @@ public enum OldLocoKitImporter {
     
     // MARK: - Sample Importing
 
-    private static func importSamples(importedItemIds: Set<String>, itemDisabledStates: [String: Bool]) async throws -> (samples: Int, orphansProcessed: Int) {
+    private static func importSamples(importedItemIds: Set<String>, itemDisabledStates: [String: Bool], resumeFromRowId: Int? = nil) async throws -> (samples: Int, orphansProcessed: Int) {
         Log.info("Starting Samples import", subsystem: .importing)
         progress = 0
         
@@ -368,15 +419,16 @@ public enum OldLocoKitImporter {
         }
         
         print("Found \(totalCount) non-deleted samples (rowid range: \(minRowId)-\(maxRowId))")
-        
+
         let batchSize = 1000
-        var currentRowId = minRowId
+        var currentRowId = resumeFromRowId.map { $0 + 1 } ?? minRowId
         var processedCount = 0
-        
+        var failedBatchCount = 0
+
         // Process in rowid-range batches
         while currentRowId <= maxRowId {
             let batchEndRowId = min(currentRowId + batchSize - 1, maxRowId)
-            
+
             // Only read a chunk of samples in each iteration
             let batch = try await legacyPool.read { [currentRowId, batchEndRowId, importDateRange] db in
                 var query = LegacySample
@@ -389,28 +441,39 @@ public enum OldLocoKitImporter {
 
                 return try query.order(Column("rowid")).fetchAll(db)
             }
-            
+
             if !batch.isEmpty {
-                try await processLegacySampleBatch(
-                    batch,
-                    importedItemIds: importedItemIds,
-                    itemDisabledStates: itemDisabledStates,
-                    orphanedSamples: &orphanedSamples,
-                    disabledSamplesFromEnabledParents: &disabledSamplesFromEnabledParents
-                )
-                processedCount += batch.count
-                
+                do {
+                    try await processLegacySampleBatch(
+                        batch,
+                        importedItemIds: importedItemIds,
+                        itemDisabledStates: itemDisabledStates,
+                        orphanedSamples: &orphanedSamples,
+                        disabledSamplesFromEnabledParents: &disabledSamplesFromEnabledParents
+                    )
+                    processedCount += batch.count
+                    try await OldLocoKitImportState.updateLastProcessedSampleRowId(batchEndRowId)
+
+                } catch {
+                    failedBatchCount += 1
+                    Log.error("Sample batch failed (rowids \(currentRowId)-\(batchEndRowId)): \(error)", subsystem: .importing)
+                }
+
                 // Progress logging every 100 batches (100k samples)
                 if (currentRowId / batchSize) % 100 == 0 {
                     print("Processed \(processedCount) samples...")
                 }
             }
-            
+
             // Update progress based on rowid position
             progress = Double(currentRowId - minRowId) / Double(maxRowId - minRowId)
-            
+
             // Move to next batch
             currentRowId = batchEndRowId + 1
+        }
+
+        if failedBatchCount > 0 {
+            Log.error("Sample import completed with \(failedBatchCount) failed batches out of \(processedCount + failedBatchCount * batchSize) samples", subsystem: .importing)
         }
         
         // Create preserved parent items for scenario 2 mismatches
