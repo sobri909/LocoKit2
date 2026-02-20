@@ -45,13 +45,12 @@ extension TimelineItem {
         self.base = mutableBase
         
         if legacyItem.isVisit {
-            // create visit with nil coordinates - will be calculated from samples later
             var visit = TimelineItemVisit(
                 itemId: legacyItem.itemId,
-                latitude: nil,  // coordinates calculated from samples
-                longitude: nil,  // coordinates calculated from samples
-                radiusMean: 50,  // reasonable default radius
-                radiusSD: 10  // reasonable default SD
+                latitude: legacyItem.latitude,
+                longitude: legacyItem.longitude,
+                radiusMean: legacyItem.radiusMean ?? 50,
+                radiusSD: legacyItem.radiusSD ?? 10
             )
             
             if let placeId = legacyItem.placeId {

@@ -25,6 +25,10 @@ public struct LegacyItem: FetchableRecord, TableRecord, Codable, Hashable, Senda
     public var manualPlace: Bool?
     public var streetAddress: String?
     public var customTitle: String?
+    public var latitude: Double?
+    public var longitude: Double?
+    public var radiusMean: Double?
+    public var radiusSD: Double?
     
     // Path specific fields
     public var distance: Double?
@@ -71,6 +75,10 @@ public struct LegacyItem: FetchableRecord, TableRecord, Codable, Hashable, Senda
         public static let manualPlace = Column("manualPlace")
         public static let streetAddress = Column("streetAddress")
         public static let customTitle = Column("customTitle")
+        public static let latitude = Column("latitude")
+        public static let longitude = Column("longitude")
+        public static let radiusMean = Column("radiusMean")
+        public static let radiusSD = Column("radiusSD")
         public static let distance = Column("distance")
         public static let manualActivityType = Column("manualActivityType")
         public static let activityType = Column("activityType")
