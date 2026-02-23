@@ -68,7 +68,7 @@ public enum ActivityTypesManager {
             minimumDelay: .hours(1),
             requiresNetwork: false,
             requiresPower: true,
-            foregroundThreshold: .hours(23),
+            foregroundThreshold: .days(2),
             workHandler: processModelsForBackground
         )
         
