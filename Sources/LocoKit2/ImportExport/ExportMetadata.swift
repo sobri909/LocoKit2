@@ -25,9 +25,9 @@ public struct ExportMetadata: Codable, Sendable {
     let sessionStartDate: Date
     let sessionFinishDate: Date?
     
-    let itemsCompleted: Bool
-    let placesCompleted: Bool
-    let samplesCompleted: Bool
+    public let itemsCompleted: Bool
+    public let placesCompleted: Bool
+    public let samplesCompleted: Bool
     
     let stats: ExportStats
 
