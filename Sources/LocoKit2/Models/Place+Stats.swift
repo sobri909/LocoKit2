@@ -107,7 +107,7 @@ extension Place {
             let locationData: (latitude: Double, longitude: Double, radiusMean: Double, radiusSD: Double)?
             
             if let center {
-                let radius = samples.radius(from: center.location)
+                let radius = samples.weightedRadius(from: center.location)
                 let boundedMean = radius.mean.clamped(min: Place.minimumPlaceRadius, max: Place.maximumPlaceRadius)
                 let boundedSD = radius.sd.clamped(min: 0, max: Place.maximumPlaceRadius)
                 locationData = (center.latitude, center.longitude, boundedMean, boundedSD)
