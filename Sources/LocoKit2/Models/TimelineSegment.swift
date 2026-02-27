@@ -29,6 +29,14 @@ public final class TimelineSegment: Sendable {
     nonisolated(unsafe)
     private var changesTask: Task<Void, Never>?
 
+    @ObservationIgnored
+    nonisolated(unsafe)
+    private var processingTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    nonisolated(unsafe)
+    private var processingInterrupted = false
+
     private let updateDebouncer = Debouncer()
 
     public init(dateRange: DateInterval, shouldReprocessOnUpdate: Bool = false) {
@@ -40,6 +48,22 @@ public final class TimelineSegment: Sendable {
 
     deinit {
         changesTask?.cancel()
+        processingTask?.cancel()
+    }
+
+    // MARK: - Processing lifecycle
+
+    public func cancelProcessing() {
+        guard processingTask != nil else { return }
+        processingTask?.cancel()
+        processingTask = nil
+        processingInterrupted = true
+    }
+
+    public func resumeProcessingIfNeeded() {
+        guard processingInterrupted, shouldReprocessOnUpdate else { return }
+        processingInterrupted = false
+        Task { await fetchItems() }
     }
 
     // MARK: -
@@ -141,7 +165,8 @@ public final class TimelineSegment: Sendable {
         guard shouldReprocessOnUpdate else { return }
         guard UIApplication.shared.applicationState == .active else { return }
 
-        Task {
+        processingTask?.cancel()
+        processingTask = Task {
             await classify(items: newItems)
             await processItems(newItems, oldItems: oldItems)
         }
