@@ -67,7 +67,11 @@ public enum TimelineProcessor {
 
                 // heal broken edges for items in the list
                 for itemId in await list.itemIds {
-                    try await healEdges(itemId: itemId)
+                    do {
+                        try await healEdges(itemId: itemId)
+                    } catch let error as DatabaseError where error.resultCode == .SQLITE_CONSTRAINT {
+                        Log.debug("Edge healing constraint error (harmless): \(error)", subsystem: .timeline)
+                    }
                 }
 
                 let merges = try await collectPotentialMerges(for: list)

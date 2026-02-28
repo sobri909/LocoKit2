@@ -182,6 +182,9 @@ internal final class Merge: Hashable, Sendable {
 
             return (kept: mutableKeeper, killed: [deadman, betweener].compactMap { $0 })
 
+        } catch let error as DatabaseError where error.resultCode == .SQLITE_CONSTRAINT {
+            Log.debug("Merge constraint error (harmless): \(error)", subsystem: .database)
+            return nil
         } catch {
             Log.error(error, subsystem: .database)
             return nil
