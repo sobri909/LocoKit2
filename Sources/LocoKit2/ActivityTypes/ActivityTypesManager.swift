@@ -319,6 +319,100 @@ public enum ActivityTypesManager {
     }
 #endif
 
+    // MARK: - BD0 Training
+
+#if targetEnvironment(simulator)
+    public nonisolated static func trainBD0() async throws -> URL {
+        fatalError("BD0 training requires a real device")
+    }
+#else
+    public nonisolated static func trainBD0() async throws -> URL {
+        try await Task.detached(priority: .userInitiated) {
+            print("BD0: Fetching training samples...")
+
+            let samples = try Database.pool.read { db in
+                try LocomotionSample
+                    .filter(sql: """
+                        confirmedActivityType IS NOT NULL
+                        AND likely(xyAcceleration IS NOT NULL)
+                        AND likely(zAcceleration IS NOT NULL)
+                        AND likely(stepHz IS NOT NULL)
+                        """)
+                    .order(\.date.desc)
+                    .limit(ActivityTypesModel.modelMaxTrainingSamples[0]!)
+                    .fetchAll(db)
+            }
+
+            print("BD0: Fetched \(samples.count) samples, exporting CSV...")
+
+            let csvFile = FileManager.default.temporaryDirectory.appendingPathComponent("BD0_training.csv")
+            try? FileManager.default.removeItem(at: csvFile)
+
+            let header = "confirmedActivityType,stepHz,xyAcceleration,zAcceleration,movingState,verticalAccuracy,horizontalAccuracy,speed,course,latitude,longitude,altitude,heartRate,timeOfDay,sinceVisitStart"
+            try header.appendLineTo(csvFile)
+
+            var samplesCount = 0
+            var includedTypes: Set<ActivityType> = []
+
+            for sample in samples {
+                guard let confirmedType = sample.confirmedActivityType else { continue }
+                guard let bucket = confirmedType.bd0Bucket else { continue }
+                guard let location = sample.location, location.hasUsableCoordinate else { continue }
+                guard location.speed >= 0, location.course >= 0 else { continue }
+                guard let stepHz = sample.stepHz else { continue }
+                guard let xyAcceleration = sample.xyAcceleration else { continue }
+                guard let zAcceleration = sample.zAcceleration else { continue }
+                guard location.horizontalAccuracy > 0 else { continue }
+                guard location.verticalAccuracy > 0 else { continue }
+
+                includedTypes.insert(bucket)
+
+                var line = ""
+                line += "\(bucket.rawValue),\(stepHz),\(xyAcceleration),\(zAcceleration),\(sample.movingState.rawValue),"
+                line += "\(location.verticalAccuracy),\(location.horizontalAccuracy),\(location.speed),\(location.course),"
+                line += "\(location.coordinate.latitude),\(location.coordinate.longitude),\(location.altitude),\(sample.heartRate ?? -1),"
+                line += "\(sample.timeOfDay),\(sample.sinceVisitStart)"
+
+                try line.appendLineTo(csvFile)
+                samplesCount += 1
+            }
+
+            print("BD0: Exported \(samplesCount) samples with \(includedTypes.count) types")
+
+            guard samplesCount > 0, includedTypes.count > 1 else {
+                throw NSError(domain: "ActivityTypes", code: 0, userInfo: [
+                    NSLocalizedDescriptionKey: "Insufficient training data: \(samplesCount) samples, \(includedTypes.count) types"
+                ])
+            }
+
+            print("BD0: Training classifier...")
+
+            let dataFrame = try DataFrame(contentsOfCSVFile: csvFile)
+            let classifier = try MLBoostedTreeClassifier(trainingData: dataFrame, targetColumn: "confirmedActivityType")
+
+            let accuracy = 1.0 - classifier.validationMetrics.classificationError
+            print("BD0: Trained — accuracy \(String(format: "%.1f%%", accuracy * 100))")
+
+            // write and compile model
+            let tempModelFile = FileManager.default.temporaryDirectory.appendingPathComponent("BD0.mlmodel")
+            try? FileManager.default.removeItem(at: tempModelFile)
+            try classifier.write(to: tempModelFile)
+            let compiledModelFile = try MLModel.compileModel(at: tempModelFile)
+
+            // copy to Documents for retrieval via Xcode/Files
+            let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let outputURL = documentsDir.appendingPathComponent("BD0.mlmodelc")
+            if FileManager.default.fileExists(atPath: outputURL.path) {
+                try FileManager.default.removeItem(at: outputURL)
+            }
+            try FileManager.default.copyItem(at: compiledModelFile, to: outputURL)
+
+            print("BD0: Saved to \(outputURL.path)")
+            return outputURL
+        }.value
+    }
+#endif
+
     nonisolated
     private static func fetchTrainingSamples(for model: ActivityTypesModel) throws -> [LocomotionSample] {
         return try Database.pool.read { db in

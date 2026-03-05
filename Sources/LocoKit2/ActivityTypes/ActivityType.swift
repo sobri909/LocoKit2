@@ -60,6 +60,20 @@ public enum ActivityType: Int, CaseIterable, Codable, Hashable, Sendable {
         !Self.nonMovingTypes.contains(self)
     }
 
+    /// Maps to BD0 base bucket for generalised training. Nil = excluded.
+    public var bd0Bucket: ActivityType? {
+        switch self {
+        case .stationary: return .stationary
+        case .walking, .hiking, .golf: return .walking
+        case .running: return .running
+        case .cycling, .skateboarding, .inlineSkating: return .cycling
+        case .car, .taxi, .bus, .motorcycle, .scooter, .tuktuk, .songthaew, .tractor, .boat: return .car
+        case .airplane, .hotAirBalloon: return .airplane
+        case .train, .metro, .tram, .cableCar, .funicular, .chairlift, .skiLift: return .train
+        default: return nil
+        }
+    }
+
     // MARK: - Display names
 
     public var displayName: String {
