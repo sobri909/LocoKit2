@@ -549,7 +549,7 @@ public enum ExportManager {
 
             if !weekSamples.isEmpty {
                 let weekOfYear = calendar.component(.weekOfYear, from: currentWeekStart)
-                let year = calendar.component(.year, from: currentWeekStart)
+                let year = calendar.component(.yearForWeekOfYear, from: currentWeekStart)
                 let weekId = String(format: "%4d-W%02d", year, weekOfYear)
 
                 let weekURL = samplesURL.appendingPathComponent("\(weekId).json.gz")
