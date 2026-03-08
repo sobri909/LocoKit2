@@ -123,7 +123,10 @@ public struct Histogram: Hashable, Sendable, Codable {
         let sd = sqrt(weightedSqSum / Double(totalCount - 1))
 
         // More conservative bandwidth for sparse data
-        let h = sd * pow(Double(totalCount), -1.0/3.0)
+        // Use bin width as floor when SD=0 (e.g., single-bin histograms where all data
+        // is in one cluster), so the KDE still produces meaningful probabilities
+        let binWidth = bins.first?.width ?? 1.0
+        let h = max(binWidth, sd * pow(Double(totalCount), -1.0/3.0))
 
         // Factor out the constant
         let gaussianConstant = 1.0 / sqrt(2 * .pi)
