@@ -172,7 +172,16 @@ public enum ActivityTypesManager {
                     return
                 }
                 defer { Task { await OperationRegistry.endOperation(handle) } }
-                
+
+                // remove from queue immediately, before the detached training task begins,
+                // to prevent the background loop from re-fetching this model while it's being updated
+                try await Database.pool.write { db in
+                    var mutableModel = model
+                    try mutableModel.updateChanges(db) {
+                        $0.needsUpdate = false
+                    }
+                }
+
                 await update(model: model)
             }
             
@@ -205,7 +214,7 @@ public enum ActivityTypesManager {
 
         // run heavy training work off-actor to avoid blocking classification
         let trained = await Task.detached(priority: .background) { [model] () -> Bool in
-            print("UPDATING: \(model.geoKey)")
+            Log.debug("UPDATING: \(model.geoKey)", subsystem: .activitytypes)
 
             let manager = FileManager.default
             let tempModelFile = manager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mlmodel")
@@ -217,7 +226,7 @@ public enum ActivityTypesManager {
 
                 let start = Date()
                 let samples = try fetchTrainingSamples(for: model)
-                print("UPDATING: \(model.geoKey), SAMPLES BATCH: \(samples.count), duration: \(start.age)")
+                Log.debug("UPDATING: \(model.geoKey), SAMPLES BATCH: \(samples.count), duration: \(start.age)", subsystem: .activitytypes)
 
                 let (url, samplesAdded, typesAdded) = try exportCSV(samples: samples, appendingTo: csvFile)
                 csvFile = url
@@ -226,7 +235,7 @@ public enum ActivityTypesManager {
 
                 // if includedTypes only has one type and it's not stationary, throw in a fake stationary sample
                 if samplesCount > 0 && includedTypes.count == 1 && !includedTypes.contains(.stationary) {
-                    print("UPDATING: \(model.geoKey), ADDING FAKE STATIONARY SAMPLE")
+                    Log.debug("UPDATING: \(model.geoKey), ADDING FAKE STATIONARY SAMPLE", subsystem: .activitytypes)
 
                     let fakeLocation = CLLocation(
                         coordinate: model.centerCoordinate,
@@ -256,7 +265,7 @@ public enum ActivityTypesManager {
                 }
 
                 guard samplesCount > 0, includedTypes.count > 1 else {
-                    print("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))")
+                    Log.debug("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
                     try? Database.pool.write { db in
                         var mutableModel = model
                         try mutableModel.updateChanges(db) {
