@@ -10,7 +10,7 @@ import CoreML
 
 @ActivityTypesActor
 public enum MLModelCache {
-    private static var loadedModels: [String: MLModel] = [:]
+    private static var loadedModels: [String: ModelPredictor] = [:]
     
     nonisolated
     public static let modelsDir: URL = {
@@ -20,16 +20,17 @@ public enum MLModelCache {
     }()
 
     @discardableResult
-    public static func modelFor(filename: String) throws -> MLModel? {
-        if let cachedModel = loadedModels[filename] {
-            return cachedModel
+    public static func predictorFor(filename: String) throws -> ModelPredictor? {
+        if let cached = loadedModels[filename] {
+            return cached
         }
-        
+
         do {
             let modelURL = getModelURLFor(filename: filename)
             let newModel = try MLModel(contentsOf: modelURL)
-            loadedModels[filename] = newModel
-            return newModel
+            let predictor = ModelPredictor(newModel)
+            loadedModels[filename] = predictor
+            return predictor
 
         } catch let error as MLModelError {
             let isMissingModelFile = (error as NSError).localizedDescription.contains(".mlmodelc") &&
@@ -58,6 +59,6 @@ public enum MLModelCache {
     
     public static func reloadModelFor(filename: String) throws {
         invalidateModelFor(filename: filename)
-        try modelFor(filename: filename)
+        try predictorFor(filename: filename)
     }
 }

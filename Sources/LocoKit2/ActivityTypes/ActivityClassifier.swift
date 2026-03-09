@@ -44,7 +44,7 @@ public enum ActivityClassifier {
         var remainingWeight = 1.0
 
         for classifier in classifiers {
-            let results = classifier.classify(sample)
+            let results = await classifier.classify(sample)
 
             if combinedResults == nil {
                 combinedResults = results

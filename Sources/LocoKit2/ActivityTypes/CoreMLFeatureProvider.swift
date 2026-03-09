@@ -9,7 +9,7 @@
 import CoreML
 import CoreLocation
 
-class CoreMLFeatureProvider: MLFeatureProvider {
+class CoreMLFeatureProvider: MLFeatureProvider, @unchecked Sendable {
 
     var stepHz: Double?
     var xyAcceleration: Double?

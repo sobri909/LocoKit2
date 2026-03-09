@@ -205,25 +205,53 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
     // MARK: - Classification
     
     @ActivityTypesActor
-    public func classify(_ sample: LocomotionSample) -> ClassifierResults {
+    public func classify(_ sample: LocomotionSample) async -> ClassifierResults {
+        let predictor: ModelPredictor
         do {
-            guard let model = try MLModelCache.modelFor(filename: filename) else {
+            guard let p = try MLModelCache.predictorFor(filename: filename) else {
                 Task { await markNeedsUpdate(fileMissing: true) }
                 return ClassifierResults(resultItems: [])
             }
-
-            let input = sample.coreMLFeatureProvider
-            let output = try model.prediction(from: input, options: MLPredictionOptions())
-            return results(for: output)
-
+            predictor = p
         } catch {
             Log.error(error, subsystem: .activitytypes)
             return ClassifierResults(resultItems: [])
         }
+
+        let input = sample.coreMLFeatureProvider
+        let modelFilename = filename
+
+        // race prediction against timeout — prediction runs on ModelPredictor's
+        // actor (serial per model, off @ActivityTypesActor), timeout frees us if hung
+        return await withTaskGroup(of: ClassifierResults?.self) { group in
+            group.addTask {
+                do {
+                    let scores = try await predictor.predict(from: input)
+                    return self.results(from: scores)
+                } catch {
+                    Log.error(error, subsystem: .activitytypes)
+                    return ClassifierResults(resultItems: [])
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(30))
+                return nil
+            }
+
+            let result = await group.next() ?? nil
+            group.cancelAll()
+
+            // only evict if genuinely timed out, not if parent task was cancelled
+            if result == nil, !Task.isCancelled {
+                Log.info("CoreML prediction timed out (\(modelFilename)), evicting model", subsystem: .activitytypes)
+                MLModelCache.invalidateModelFor(filename: modelFilename)
+            }
+
+            return result ?? ClassifierResults(resultItems: [])
+        }
     }
     
-    private func results(for classifierOutput: MLFeatureProvider) -> ClassifierResults {
-        let scores = classifierOutput.featureValue(for: "confirmedActivityTypeProbability")!.dictionaryValue as! [Int: Double]
+    private func results(from scores: [Int: Double]) -> ClassifierResults {
         var items: [ClassifierResultItem] = []
         for (name, score) in scores {
             items.append(ClassifierResultItem(name: ActivityType(rawValue: name)!, score: score))
