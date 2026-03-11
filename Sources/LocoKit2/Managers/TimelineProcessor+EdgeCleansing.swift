@@ -16,7 +16,7 @@ extension TimelineProcessor {
         var alreadyMoved: Set<LocomotionSample> = []
         var processedItemIds = Set<String>()
 
-        for itemId in await list.itemIds {
+        for itemId in list.itemIds {
             if processedItemIds.contains(itemId) { continue }
 
             let moved = try await sanitiseEdges(forItemId: itemId, in: list, excluding: alreadyMoved)

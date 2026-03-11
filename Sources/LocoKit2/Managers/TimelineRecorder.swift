@@ -13,6 +13,7 @@ public enum TimelineRecorder {
 
     public static func startup() {
         Database.pool.add(transactionObserver: TimelineObserver.highlander)
+        Database.pool.add(transactionObserver: TimelineItemObserver.highlander)
     }
 
     public static func startRecording() async throws {

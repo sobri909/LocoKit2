@@ -19,7 +19,7 @@ public final class TimelineLinkedList: AsyncSequence {
             if let seedItem {
                 self.seedItem = seedItem
                 timelineItems[seedItemId] = seedItem
-                observers[seedItemId] = await addObserverFor(itemId: seedItemId)
+                trackedItemIds.insert(seedItemId)
             } else {
                 return nil
             }
@@ -28,6 +28,7 @@ public final class TimelineLinkedList: AsyncSequence {
             Log.error(error, subsystem: .database)
             return nil
         }
+        startObserving()
     }
 
     public convenience init(fromItems: [TimelineItem]) async {
@@ -35,19 +36,18 @@ public final class TimelineLinkedList: AsyncSequence {
     }
 
     public init(fromItemIds: [String]) async {
-        for itemId in fromItemIds {
-            observers[itemId] = await addObserverFor(itemId: itemId)
-        }
+        trackedItemIds = Set(fromItemIds)
+        startObserving()
+    }
+
+    deinit {
+        observationTask?.cancel()
     }
 
     public func itemFor(itemId: String) async -> TimelineItem? {
         if let cached = timelineItems[itemId] { return cached }
 
-        await MainActor.run {
-            if observers[itemId] == nil {
-                observers[itemId] = addObserverFor(itemId: itemId)
-            }
-        }
+        trackedItemIds.insert(itemId)
 
         do {
             if let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true, includePlace: true) {
@@ -82,14 +82,32 @@ public final class TimelineLinkedList: AsyncSequence {
     }
 
     public var itemIds: [String] {
-        get async {
-            return await Array(observers.keys)
-        }
+        return Array(trackedItemIds)
     }
 
     // MARK: - Private
 
     private var timelineItems: [String: TimelineItem] = [:]
+    private var trackedItemIds: Set<String> = []
+    private var observationTask: Task<Void, Never>?
+
+    private func startObserving() {
+        observationTask = Task { [weak self] in
+            for await changedIds in TimelineItemObserver.highlander.changesStream() {
+                guard let self else { return }
+                let relevantIds = changedIds.intersection(self.trackedItemIds)
+                for itemId in relevantIds {
+                    do {
+                        if let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true, includePlace: true) {
+                            await self.receivedItem(item)
+                        }
+                    } catch {
+                        Log.error(error, subsystem: .database)
+                    }
+                }
+            }
+        }
+    }
 
     private func receivedItem(_ item: TimelineItem) async {
         var mutableItem = item
@@ -100,30 +118,6 @@ public final class TimelineLinkedList: AsyncSequence {
         }
 
         timelineItems[item.id] = mutableItem
-    }
-
-    @MainActor
-    private var observers: [String: AnyDatabaseCancellable] = [:]
-
-    @MainActor
-    private func addObserverFor(itemId: String) -> AnyDatabaseCancellable {
-        return ValueObservation
-            .trackingConstantRegion { db in
-                let request = TimelineItem
-                    .itemBaseRequest(includeSamples: true, includePlaces: true)
-                    .filter { $0.id == itemId }
-                return try request.asRequest(of: TimelineItem.self).fetchOne(db)
-            }
-            .removeDuplicates()
-            .shared(in: Database.pool)
-            .start { error in
-                Log.error(error, subsystem: .database)
-
-            } onChange: { [weak self] item in
-                if let self, let item {
-                    Task { await self.receivedItem(item) }
-                }
-            }
     }
 
     // MARK: - AsyncSequence

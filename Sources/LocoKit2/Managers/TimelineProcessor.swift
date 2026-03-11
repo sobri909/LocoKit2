@@ -45,7 +45,7 @@ public enum TimelineProcessor {
             return
         }
 
-        let itemIds = await list.itemIds
+        let itemIds = list.itemIds
         let objectKey = Set(itemIds).hashValue.description
         
         guard let handle = await OperationRegistry.startOperation(
@@ -66,7 +66,7 @@ public enum TimelineProcessor {
                 try await sanitiseEdges(for: list)
 
                 // heal broken edges for items in the list
-                for itemId in await list.itemIds {
+                for itemId in list.itemIds {
                     do {
                         try await healEdges(itemId: itemId)
                     } catch let error as DatabaseError where error.resultCode == .SQLITE_CONSTRAINT {
