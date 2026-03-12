@@ -95,16 +95,16 @@ public final class TimelineSegment: Sendable {
     }
 
     private func fetchItems() async {
-        guard let handle = await OperationRegistry.startOperation(
+        guard let handle = OperationRegistry.startOperation(
             .timeline,
             operation: "TimelineSegment.fetchItems()",
             objectKey: dateRange.description,
             rejectDuplicates: true
         ) else {
-            Log.info("Skipping duplicate TimelineSegment.fetchItems()", subsystem: .timeline)
+            Log.debug("Skipping duplicate TimelineSegment.fetchItems()", subsystem: .timeline)
             return
         }
-        defer { Task { await OperationRegistry.endOperation(handle) } }
+        defer { OperationRegistry.endOperation(handle) }
         
         do {
             let items = try await Database.pool.read { [dateRange] db in
@@ -132,8 +132,8 @@ public final class TimelineSegment: Sendable {
     private var lastCurrentItemId: String?
 
     private func update(from updatedItems: [TimelineItem]) async {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.update(from:)", objectKey: dateRange.description) else { return }
-        defer { Task { await OperationRegistry.endOperation(handle) } }
+        guard let handle = OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.update(from:)", objectKey: dateRange.description) else { return }
+        defer { OperationRegistry.endOperation(handle) }
         
         let oldItems = timelineItems ?? []
         var newItems = updatedItems
@@ -173,17 +173,17 @@ public final class TimelineSegment: Sendable {
     }
 
     private func classify(items: [TimelineItem]) async {
-        guard let handle = await OperationRegistry.startOperation(
+        guard let handle = OperationRegistry.startOperation(
             .timeline,
             operation: "TimelineSegment.classify(items:)",
             objectKey: dateRange.description,
             rejectDuplicates: true
         ) else {
-            Log.info("Skipping duplicate TimelineSegment.classify(items:)", subsystem: .timeline)
+            Log.debug("Skipping duplicate TimelineSegment.classify(items:)", subsystem: .timeline)
             return
         }
 
-        defer { Task { await OperationRegistry.endOperation(handle) } }
+        defer { OperationRegistry.endOperation(handle) }
         
         var mutableItems = items
         for index in mutableItems.indices {

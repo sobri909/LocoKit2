@@ -31,10 +31,10 @@ extension TimelineProcessor {
         confirmedPlace: Bool = true,
         customTitle: String? = nil
     ) async throws -> TimelineItem? {
-        guard let handle = await OperationRegistry.startOperation(.timeline, operation: "TimelineProcessor.extractItem(from:isVisit:placeId:confirmedPlace:customTitle:)", objectKey: segment.id) else { 
-            return nil 
+        guard let handle = OperationRegistry.startOperation(.timeline, operation: "TimelineProcessor.extractItem(from:isVisit:placeId:confirmedPlace:customTitle:)", objectKey: segment.id) else {
+            return nil
         }
-        defer { Task { await OperationRegistry.endOperation(handle) } }
+        defer { OperationRegistry.endOperation(handle) }
         
         // TODO: think through a way to bring this back, but without the breakage
         // guard try await segment.validateIsContiguous() else {

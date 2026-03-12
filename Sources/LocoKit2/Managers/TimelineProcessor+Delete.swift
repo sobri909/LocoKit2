@@ -16,17 +16,17 @@ extension TimelineProcessor {
             return
         }
 
-        guard let handle = await OperationRegistry.startOperation(
+        guard let handle = OperationRegistry.startOperation(
             .timeline,
             operation: "TimelineProcessor.safeDeleteVisit(_:)",
             objectKey: deadman.id,
             rejectDuplicates: true
         ) else {
-            Log.info("Skipping duplicate TimelineProcessor.safeDeleteVisit(_:)", subsystem: .timeline)
+            Log.debug("Skipping duplicate TimelineProcessor.safeDeleteVisit(_:)", subsystem: .timeline)
             return
         }
 
-        defer { Task { await OperationRegistry.endOperation(handle) } }
+        defer { OperationRegistry.endOperation(handle) }
 
         if TimelineProcessor.debugLogging {
             print("TimelineProcessor.safeDeleteVisit()")

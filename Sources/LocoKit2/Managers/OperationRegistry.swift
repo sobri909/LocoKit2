@@ -2,73 +2,59 @@
 //  OperationRegistry.swift
 //  LocoKit2
 //
-//  Created by Matt Greenfield on 6/06/2025.
+//  Created by Matt Greenfield on 2025-06-06
 //
 
 import Foundation
+import Synchronization
 
-@MainActor
-@Observable
-public class OperationRegistry {
-    
+public final class OperationRegistry: Sendable {
+
     public static let highlander = OperationRegistry()
-    
-    // track active operations by category
-    public private(set) var activeOperations: [OperationCategory: Set<OperationHandle>] = [:]
-    
+
+    private let state = Mutex<[OperationCategory: Set<OperationHandle>]>([:])
+
     // MARK: - Public API
-    
+
     public static func startOperation(
-        _ category: OperationCategory, 
-        operation: String? = nil, 
+        _ category: OperationCategory,
+        operation: String? = nil,
         objectKey: String? = nil,
         rejectDuplicates: Bool = false
-    ) async -> OperationHandle? {
-        if rejectDuplicates && highlander.hasMatchingOperation(category, operation: operation, objectKey: objectKey) {
-            return nil
-        }
-        return highlander.startOperation(category, operation: operation, objectKey: objectKey)
-    }
-    
-    public static func endOperation(_ handle: OperationHandle) async {
-        highlander.endOperation(handle)
-    }
-    
-    // MARK: - Instance methods
-    
-    private func hasMatchingOperation(_ category: OperationCategory, operation: String?, objectKey: String?) -> Bool {
-        guard let handles = activeOperations[category] else { return false }
-        return handles.contains { handle in
-            handle.operation == operation && handle.objectKey == objectKey
+    ) -> OperationHandle? {
+        highlander.state.withLock { operations in
+            if rejectDuplicates, let handles = operations[category] {
+                if handles.contains(where: { $0.operation == operation && $0.objectKey == objectKey }) {
+                    return nil
+                }
+            }
+            let handle = OperationHandle(category: category, operation: operation, objectKey: objectKey)
+            operations[category, default: []].insert(handle)
+            return handle
         }
     }
-    
-    public func startOperation(_ category: OperationCategory, operation: String? = nil, objectKey: String? = nil) -> OperationHandle {
-        let handle = OperationHandle(category: category, operation: operation, objectKey: objectKey)
-        
-        if activeOperations[category] == nil {
-            activeOperations[category] = []
-        }
-        activeOperations[category]?.insert(handle)
-        
-        return handle
-    }
-    
-    public func endOperation(_ handle: OperationHandle) {
-        activeOperations[handle.category]?.remove(handle)
-        if activeOperations[handle.category]?.isEmpty == true {
-            activeOperations.removeValue(forKey: handle.category)
+
+    public static func endOperation(_ handle: OperationHandle) {
+        highlander.state.withLock { operations in
+            operations[handle.category]?.remove(handle)
+            if operations[handle.category]?.isEmpty == true {
+                operations.removeValue(forKey: handle.category)
+            }
         }
     }
-    
-    // MARK: - Convenience accessors
-    
+
+    // MARK: - Accessors
+
+    public var activeOperations: [OperationCategory: Set<OperationHandle>] {
+        state.withLock { $0 }
+    }
+
     public var totalOperationCount: Int {
-        activeOperations.values.reduce(0) { $0 + $1.count }
+        state.withLock { $0.values.reduce(0) { $0 + $1.count } }
     }
-    
+
     public func operationCount(for category: OperationCategory) -> Int {
-        activeOperations[category]?.count ?? 0
+        state.withLock { $0[category]?.count ?? 0 }
     }
 }
 

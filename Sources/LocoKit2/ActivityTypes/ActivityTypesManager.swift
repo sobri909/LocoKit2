@@ -162,16 +162,16 @@ public enum ActivityTypesManager {
                 try ActivityTypesModel.fetchOne($0, key: geoKey)
             }
             if let model {
-                guard let handle = await OperationRegistry.startOperation(
-                    .activityTypes, 
-                    operation: "ActivityTypesManager.updateModel(geoKey:)", 
+                guard let handle = OperationRegistry.startOperation(
+                    .activityTypes,
+                    operation: "ActivityTypesManager.updateModel(geoKey:)",
                     objectKey: model.geoKey,
                     rejectDuplicates: true
                 ) else {
-                    Log.info("Skipping duplicate ActivityTypesManager.updateModel(geoKey:) for \(model.geoKey)", subsystem: .activitytypes)
+                    Log.debug("Skipping duplicate ActivityTypesManager.updateModel(geoKey:) for \(model.geoKey)", subsystem: .activitytypes)
                     return
                 }
-                defer { Task { await OperationRegistry.endOperation(handle) } }
+                defer { OperationRegistry.endOperation(handle) }
 
                 // remove from queue immediately, before the detached training task begins,
                 // to prevent the background loop from re-fetching this model while it's being updated
@@ -197,7 +197,7 @@ public enum ActivityTypesManager {
         
         if shouldUpdateImmediately {
             let geoKey = model.geoKey
-            Task(priority: .background) { await updateModel(geoKey: geoKey) }
+            Task(priority: .utility) { await updateModel(geoKey: geoKey) }
         }
     }
 
@@ -213,7 +213,7 @@ public enum ActivityTypesManager {
         if Task.isCancelled { return }
 
         // run heavy training work off-actor to avoid blocking classification
-        let trained = await Task.detached(priority: .background) { [model] () -> Bool in
+        let trained = await Task.detached(priority: .utility) { [model] () -> Bool in
             Log.debug("UPDATING: \(model.geoKey)", subsystem: .activitytypes)
 
             let manager = FileManager.default
@@ -229,6 +229,7 @@ public enum ActivityTypesManager {
                 Log.debug("UPDATING: \(model.geoKey), SAMPLES BATCH: \(samples.count), duration: \(start.age)", subsystem: .activitytypes)
 
                 let (url, samplesAdded, typesAdded) = try exportCSV(samples: samples, appendingTo: csvFile)
+                Log.debug("UPDATING: \(model.geoKey), CSV EXPORT: \(samplesAdded) samples, elapsed: \(start.age)", subsystem: .activitytypes)
                 csvFile = url
                 samplesCount += samplesAdded
                 includedTypes.formUnion(typesAdded)
@@ -284,7 +285,9 @@ public enum ActivityTypesManager {
                 }
 
                 let dataFrame = try DataFrame(contentsOfCSVFile: csvFile)
+                Log.debug("UPDATING: \(model.geoKey), TRAINING START: \(samplesCount) samples, \(includedTypes.count) types, elapsed: \(start.age)", subsystem: .activitytypes)
                 let classifier = try MLBoostedTreeClassifier(trainingData: dataFrame, targetColumn: "confirmedActivityType")
+                Log.debug("UPDATING: \(model.geoKey), TRAINING DONE, elapsed: \(start.age)", subsystem: .activitytypes)
 
                 do {
                     try FileManager.default.createDirectory(at: MLModelCache.modelsDir, withIntermediateDirectories: true, attributes: nil)
@@ -295,6 +298,7 @@ public enum ActivityTypesManager {
                 try classifier.write(to: tempModelFile)
                 let compiledModelFile = try MLModel.compileModel(at: tempModelFile)
                 _ = try manager.replaceItemAt(MLModelCache.getModelURLFor(filename: model.filename), withItemAt: compiledModelFile)
+                Log.debug("UPDATING: \(model.geoKey), COMPILE DONE, elapsed: \(start.age)", subsystem: .activitytypes)
 
                 let accuracy = 1.0 - classifier.validationMetrics.classificationError
                 try? Database.pool.write { db in

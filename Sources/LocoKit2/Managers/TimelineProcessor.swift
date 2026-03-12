@@ -48,17 +48,17 @@ public enum TimelineProcessor {
         let itemIds = list.itemIds
         let objectKey = Set(itemIds).hashValue.description
         
-        guard let handle = await OperationRegistry.startOperation(
+        guard let handle = OperationRegistry.startOperation(
             .timeline,
             operation: "TimelineProcessor.process(list:)",
             objectKey: objectKey,
             rejectDuplicates: true
         ) else {
-            Log.info("Skipping duplicate TimelineProcessor.process(list:)", subsystem: .timeline)
+            Log.debug("Skipping duplicate TimelineProcessor.process(list:)", subsystem: .timeline)
             return
         }
-        
-        defer { Task { await OperationRegistry.endOperation(handle) } }
+
+        defer { OperationRegistry.endOperation(handle) }
         
         var lastResult: MergeResult?
         do {
