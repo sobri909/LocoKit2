@@ -22,21 +22,23 @@ public enum BackgroundTasksManager {
         if !alreadyRegistered {
             registerTask(identifier: task.identifier)
         }
-        updateTaskStateFor(identifier: task.identifier, to: .registered)
+        Task { await updateTaskStateFor(identifier: task.identifier, to: .registered) }
     }
 
     public static func scheduleTasks() {
-        for identifier in taskDefinitions.keys {
-            scheduleTask(identifier: identifier)
+        Task {
+            for identifier in taskDefinitions.keys {
+                await scheduleTask(identifier: identifier)
+            }
         }
     }
 
     // MARK: - Foreground Overdue Tasks
 
-    public static func hasOverdueForegroundTasks() -> Bool {
+    public static func hasOverdueForegroundTasks() async -> Bool {
         for (identifier, definition) in taskDefinitions {
             guard let threshold = definition.foregroundThreshold else { continue }
-            guard let status = try? getTaskStatusFor(identifier: identifier) else { continue }
+            guard let status = try? await getTaskStatusFor(identifier: identifier) else { continue }
             guard status.state != .running else { continue }
             if status.isForegroundOverdue(threshold: threshold) { return true }
         }
@@ -55,22 +57,22 @@ public enum BackgroundTasksManager {
 
             guard let threshold = definition.foregroundThreshold else { continue }
 
-            guard let status = try? getTaskStatusFor(identifier: identifier) else { continue }
+            guard let status = try? await getTaskStatusFor(identifier: identifier) else { continue }
             guard status.state != .running else { continue }
             guard status.isForegroundOverdue(threshold: threshold) else { continue }
 
             Log.info("Running overdue task in foreground: \(status.shortName)", subsystem: .tasks)
             onTaskStarted?(definition.displayName)
-            updateTaskStateFor(identifier: identifier, to: .running)
+            await updateTaskStateFor(identifier: identifier, to: .running)
 
             do {
                 try await definition.workHandler()
-                updateTaskStateFor(identifier: identifier, to: .completed)
-                scheduleTask(identifier: identifier)
+                await updateTaskStateFor(identifier: identifier, to: .completed)
+                await scheduleTask(identifier: identifier)
 
             } catch {
-                updateTaskStateFor(identifier: identifier, to: .unfinished)
-                scheduleTask(identifier: identifier)
+                await updateTaskStateFor(identifier: identifier, to: .unfinished)
+                await scheduleTask(identifier: identifier)
                 Log.error(error, subsystem: .tasks)
             }
         }
@@ -85,15 +87,15 @@ public enum BackgroundTasksManager {
         }
     }
 
-    private static func scheduleTask(identifier: String) {
+    private static func scheduleTask(identifier: String) async {
         guard let taskDefinition = taskDefinitions[identifier] else { return }
-        
+
         let request = BGProcessingTaskRequest(identifier: identifier)
-        
+
         // determine earliest begin date based on last execution
-        let status = try? getTaskStatusFor(identifier: identifier)
+        let status = try? await getTaskStatusFor(identifier: identifier)
         let minimumDelay = taskDefinition.minimumDelay
-        
+
         if let lastCompleted = status?.lastCompleted {
             // calculate next run time based on last completion and minimum delay
             let nextRunTime = lastCompleted.addingTimeInterval(minimumDelay)
@@ -103,13 +105,13 @@ public enum BackgroundTasksManager {
             // if nextRunTime <= .now, don't set earliestBeginDate (run ASAP)
         }
         // if never completed before, don't set earliestBeginDate (run ASAP)
-        
+
         request.requiresNetworkConnectivity = taskDefinition.requiresNetwork
         request.requiresExternalPower = taskDefinition.requiresPower
-        
+
         do {
             try BGTaskScheduler.shared.submit(request)
-            updateTaskStateFor(identifier: identifier, to: .scheduled)
+            await updateTaskStateFor(identifier: identifier, to: .scheduled)
         } catch {
             Log.error(error, subsystem: .tasks)
         }
@@ -124,26 +126,30 @@ public enum BackgroundTasksManager {
         // don't run scheduled tasks during active recording
         if LocomotionManager.highlander.recordingState == .recording {
             task.setTaskCompleted(success: true)
-            scheduleTask(identifier: identifier)
+            Task { await scheduleTask(identifier: identifier) }
             return
         }
 
-        updateTaskStateFor(identifier: identifier, to: .running)
+        Task { await updateTaskStateFor(identifier: identifier, to: .running) }
 
         let workTask = Task.detached {
             do {
                 try await taskDefinition.workHandler()
 
                 await MainActor.run {
-                    updateTaskStateFor(identifier: identifier, to: .completed)
-                    scheduleTask(identifier: identifier)
+                    Task {
+                        await updateTaskStateFor(identifier: identifier, to: .completed)
+                        await scheduleTask(identifier: identifier)
+                    }
                     task.setTaskCompleted(success: true)
                 }
 
             } catch {
                 await MainActor.run {
-                    updateTaskStateFor(identifier: identifier, to: .unfinished)
-                    scheduleTask(identifier: identifier)
+                    Task {
+                        await updateTaskStateFor(identifier: identifier, to: .unfinished)
+                        await scheduleTask(identifier: identifier)
+                    }
                     task.setTaskCompleted(success: false)
                     Log.error(error, subsystem: .tasks)
                 }
@@ -153,7 +159,7 @@ public enum BackgroundTasksManager {
         task.expirationHandler = {
             workTask.cancel()
             Task { @MainActor in
-                updateTaskStateFor(identifier: identifier, to: .expired)
+                Task { await updateTaskStateFor(identifier: identifier, to: .expired) }
                 task.setTaskCompleted(success: false)
             }
         }
@@ -161,35 +167,37 @@ public enum BackgroundTasksManager {
 
     // MARK: - TaskStatus handling
 
-    private static func getTaskStatusFor(identifier: String) throws -> TaskStatus? {
-        return try Database.pool.read {
+    private static func getTaskStatusFor(identifier: String) async throws -> TaskStatus? {
+        return try await Database.pool.read {
             try TaskStatus.fetchOne($0, key: identifier)
         }
     }
 
-    private static func updateTaskStateFor(identifier: String, to state: TaskStatus.TaskState) {
+    private static func updateTaskStateFor(identifier: String, to state: TaskStatus.TaskState) async {
         guard let taskDefinition = taskDefinitions[identifier] else { return }
 
         do {
-            guard let status = try getTaskStatusFor(identifier: identifier) else {
+            guard let status = try await getTaskStatusFor(identifier: identifier) else {
                 // no existing TaskStatus, so create and save a new one
-                var status = TaskStatus(
+                var newStatus = TaskStatus(
                     identifier: identifier,
                     state: state,
                     minimumDelay: taskDefinition.minimumDelay,
                     lastUpdated: .now
                 )
-                update(taskStatus: &status, state: state)
-                try Database.pool.write {
-                    try status.insert($0)
+                update(taskStatus: &newStatus, state: state)
+                let statusToInsert = newStatus
+                try await Database.pool.write {
+                    try statusToInsert.insert($0)
                 }
                 return
             }
 
-            try Database.pool.write { db in
+            let currentState = state
+            try await Database.pool.write { [status] db in
                 var mutableStatus = status
                 try mutableStatus.updateChanges(db) { status in
-                    update(taskStatus: &status, state: state)
+                    Self.update(taskStatus: &status, state: currentState)
                 }
             }
 
@@ -198,7 +206,7 @@ public enum BackgroundTasksManager {
         }
     }
 
-    private static func update(taskStatus status: inout TaskStatus, state: TaskStatus.TaskState) {
+    nonisolated private static func update(taskStatus status: inout TaskStatus, state: TaskStatus.TaskState) {
         status.state = state
         status.lastUpdated = .now
 
