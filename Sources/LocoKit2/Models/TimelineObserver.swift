@@ -7,7 +7,7 @@
 
 import Foundation
 import GRDB
-import os
+import Synchronization
 
 /// Provides real-time timeline change notifications intended for UI updates and foreground processing.
 ///
@@ -30,35 +30,34 @@ public final class TimelineObserver: TransactionObserver, Sendable {
 
     private let observedTables = ["TimelineItemBase", "TimelineItemVisit", "TimelineItemTrip"]
 
-    nonisolated(unsafe)
-    private var changedRowIds: [String: Set<Int64>] = [:]
+    private struct State {
+        var changedRowIds: [String: Set<Int64>] = [:]
+        var continuations: [UUID: AsyncStream<DateInterval>.Continuation] = [:]
+        var enabled = true
+    }
 
-    nonisolated(unsafe)
-    private var continuations: [UUID: AsyncStream<DateInterval>.Continuation] = [:]
+    private let state = Mutex(State())
 
-    private let lock = OSAllocatedUnfairLock()
-
-    nonisolated(unsafe)
-    public var enabled = true {
-        didSet {
-            if enabled && !oldValue {
-                processPendingChanges()
+    public var enabled: Bool {
+        get { state.withLock { $0.enabled } }
+        set {
+            let shouldProcess = state.withLock {
+                let wasDisabled = !$0.enabled
+                $0.enabled = newValue
+                return newValue && wasDisabled
             }
+            if shouldProcess { processPendingChanges() }
         }
     }
 
-    // MARK: - Observable Sream
+    // MARK: - Observable Stream
 
     public func changesStream() -> AsyncStream<DateInterval> {
         AsyncStream { continuation in
             let id = UUID()
-            lock.withLock {
-                continuations[id] = continuation
-            }
+            state.withLock { $0.continuations[id] = continuation }
             continuation.onTermination = { @Sendable _ in
-                self.lock.withLock {
-                    self.continuations[id] = nil
-                }
+                self.state.withLock { $0.continuations[id] = nil }
             }
         }
     }
@@ -66,10 +65,12 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     // MARK: - Change Processing
 
     private func processPendingChanges() {
-        let rowIds = lock.withLock { changedRowIds }
+        let rowIds = state.withLock {
+            let ids = $0.changedRowIds
+            $0.changedRowIds.removeAll()
+            return ids
+        }
         guard !rowIds.isEmpty else { return }
-
-        lock.withLock { changedRowIds.removeAll() }
         Task { await process(rowIds: rowIds) }
     }
 
@@ -122,7 +123,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     }
 
     private func notifyChange(_ dateRange: DateInterval) {
-        let continuations = lock.withLock { self.continuations }
+        let continuations = state.withLock { $0.continuations }
         for continuation in continuations.values {
             continuation.yield(dateRange)
         }
@@ -141,7 +142,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
         guard observedTables.contains(tableName) else { return }
 
         let rowID = event.rowID
-        lock.withLock { _ = changedRowIds[tableName, default: []].insert(rowID) }
+        state.withLock { _ = $0.changedRowIds[tableName, default: []].insert(rowID) }
     }
 
     public func databaseDidCommit(_ db: GRDB.Database) {
@@ -150,7 +151,7 @@ public final class TimelineObserver: TransactionObserver, Sendable {
     }
 
     public func databaseDidRollback(_ db: GRDB.Database) {
-        lock.withLock { changedRowIds.removeAll() }
+        state.withLock { $0.changedRowIds.removeAll() }
     }
 
 }

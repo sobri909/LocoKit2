@@ -7,7 +7,7 @@
 
 import Foundation
 @preconcurrency import CoreMotion
-import os
+import Synchronization
 
 public final class StepsMonitor: Sendable {
 
@@ -34,7 +34,7 @@ public final class StepsMonitor: Sendable {
     }
 
     public func currentStepHz() -> Double? {
-        let latestData = lock.withLock { self.latestData }
+        let latestData = latestData.withLock { $0 }
         guard let latestData else {
             return nil
         }
@@ -57,16 +57,13 @@ public final class StepsMonitor: Sendable {
     // MARK: - Private
 
     private let pedometer = CMPedometer()
-    
-    nonisolated(unsafe)
-    private var latestData: CMPedometerData?
+
+    private let latestData = Mutex<CMPedometerData?>(nil)
 
     private func add(_ pedometerData: sending CMPedometerData) {
-        lock.withLock { [pedometerData] in
-            self.latestData = pedometerData
+        latestData.withLock { [pedometerData] in
+            $0 = pedometerData
         }
     }
-
-    private let lock = OSAllocatedUnfairLock()
 
 }

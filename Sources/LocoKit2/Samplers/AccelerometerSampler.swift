@@ -2,12 +2,12 @@
 //  AccelerometerSampler.swift
 //
 //
-//  Created by Matt Greenfield on 22/3/24.
+//  Created by Matt Greenfield on 2024-03-22
 //
 
 import Foundation
 @preconcurrency import CoreMotion
-import os
+import Synchronization
 
 public final class AccelerometerSampler: Sendable {
 
@@ -28,15 +28,13 @@ public final class AccelerometerSampler: Sendable {
 
     public func stopMonitoring() {
         motionManager.stopDeviceMotionUpdates()
-        lock.withLock {
-            sample = []
-        }
+        sample.withLock { $0 = [] }
     }
 
     public func currentAccelerationData() -> AccelerationData? {
-        let sampleCopy = lock.withLock {
-            sample = sample.suffix(Self.maxSampleSize)
-            return sample
+        let sampleCopy = sample.withLock {
+            $0 = Array($0.suffix(Self.maxSampleSize))
+            return $0
         }
 
         if sampleCopy.isEmpty { return nil }
@@ -59,13 +57,10 @@ public final class AccelerometerSampler: Sendable {
 
     // MARK: - Private
 
-    nonisolated(unsafe)
-    private var sample: [CMDeviceMotion] = []
+    private let sample = Mutex<[CMDeviceMotion]>([])
 
     private func add(_ motionData: CMDeviceMotion) {
-        lock.withLock {
-            sample.append(motionData)
-        }
+        sample.withLock { $0.append(motionData) }
     }
 
     // MARK: -
@@ -81,8 +76,6 @@ public final class AccelerometerSampler: Sendable {
         queue.maxConcurrentOperationCount = 1
         return queue
     }()
-
-    private let lock = OSAllocatedUnfairLock()
 
 }
 
