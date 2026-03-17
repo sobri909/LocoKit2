@@ -190,12 +190,15 @@ public enum ActivityTypesManager {
         }
     }
     
+    static let maxConcurrentModelUpdates = 3
+
     public static func processModelUpdate(model: ActivityTypesModel, fileMissing: Bool = false) {
         guard model.needsUpdate else { return }
 
         let shouldUpdateImmediately = fileMissing || (model.depth == 2 && model.completenessScore < 0.1)
-        
+
         if shouldUpdateImmediately {
+            guard OperationRegistry.highlander.operationCount(for: .activityTypes) < maxConcurrentModelUpdates else { return }
             let geoKey = model.geoKey
             Task(priority: .utility) { await updateModel(geoKey: geoKey) }
         }
@@ -225,7 +228,7 @@ public enum ActivityTypesManager {
                 var includedTypes: Set<ActivityType> = []
 
                 let start = Date()
-                let samples = try fetchTrainingSamples(for: model)
+                let samples = try await fetchTrainingSamples(for: model)
                 Log.debug("UPDATING: \(model.geoKey), SAMPLES BATCH: \(samples.count), duration: \(start.age)", subsystem: .activitytypes)
 
                 let (url, samplesAdded, typesAdded) = try exportCSV(samples: samples, appendingTo: csvFile)
@@ -267,7 +270,7 @@ public enum ActivityTypesManager {
 
                 guard samplesCount > 0, includedTypes.count > 1 else {
                     Log.debug("SKIPPED: \(model.geoKey) (samples: \(samplesCount), includedTypes: \(includedTypes.count))", subsystem: .activitytypes)
-                    try? Database.pool.write { db in
+                    try? await Database.pool.write { [samplesCount] db in
                         var mutableModel = model
                         try mutableModel.updateChanges(db) {
                             $0.totalSamples = samplesCount
@@ -296,12 +299,12 @@ public enum ActivityTypesManager {
                 }
 
                 try classifier.write(to: tempModelFile)
-                let compiledModelFile = try MLModel.compileModel(at: tempModelFile)
+                let compiledModelFile = try await MLModel.compileModel(at: tempModelFile)
                 _ = try manager.replaceItemAt(MLModelCache.getModelURLFor(filename: model.filename), withItemAt: compiledModelFile)
                 Log.debug("UPDATING: \(model.geoKey), COMPILE DONE, elapsed: \(start.age)", subsystem: .activitytypes)
 
                 let accuracy = 1.0 - classifier.validationMetrics.classificationError
-                try? Database.pool.write { db in
+                try? await Database.pool.write { [samplesCount] db in
                     var mutableModel = model
                     try mutableModel.updateChanges(db) {
                         $0.totalSamples = samplesCount
@@ -427,8 +430,8 @@ public enum ActivityTypesManager {
 #endif
 
     nonisolated
-    private static func fetchTrainingSamples(for model: ActivityTypesModel) throws -> [LocomotionSample] {
-        return try Database.pool.read { db in
+    private static func fetchTrainingSamples(for model: ActivityTypesModel) async throws -> [LocomotionSample] {
+        return try await Database.pool.read { db in
             if model.depth != 0 {
                 // Use spatial query with rtree subquery and forced index usage
                 // This ensures the rtreeId index is used instead of the date index
