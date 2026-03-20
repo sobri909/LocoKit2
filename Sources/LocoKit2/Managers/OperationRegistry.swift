@@ -20,13 +20,18 @@ public final class OperationRegistry: Sendable {
         _ category: OperationCategory,
         operation: String? = nil,
         objectKey: String? = nil,
-        rejectDuplicates: Bool = false
+        rejectDuplicates: Bool = false,
+        maxConcurrent: Int? = nil
     ) -> OperationHandle? {
         highlander.state.withLock { operations in
             if rejectDuplicates, let handles = operations[category] {
                 if handles.contains(where: { $0.operation == operation && $0.objectKey == objectKey }) {
                     return nil
                 }
+            }
+            if let maxConcurrent, let operation {
+                let count = (operations[category] ?? []).filter { $0.operation == operation }.count
+                if count >= maxConcurrent { return nil }
             }
             let handle = OperationHandle(category: category, operation: operation, objectKey: objectKey)
             operations[category, default: []].insert(handle)

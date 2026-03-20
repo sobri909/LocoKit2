@@ -166,7 +166,8 @@ public enum ActivityTypesManager {
                     .activityTypes,
                     operation: "ActivityTypesManager.updateModel(geoKey:)",
                     objectKey: model.geoKey,
-                    rejectDuplicates: true
+                    rejectDuplicates: true,
+                    maxConcurrent: maxConcurrentModelUpdates
                 ) else {
                     Log.debug("Skipping duplicate ActivityTypesManager.updateModel(geoKey:) for \(model.geoKey)", subsystem: .activitytypes)
                     return
