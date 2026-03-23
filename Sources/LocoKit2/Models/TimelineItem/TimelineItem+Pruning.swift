@@ -76,7 +76,6 @@ extension TimelineItem {
         let maxGap: TimeInterval = .minutes(2)
 
         var keepSamples: Set<String> = []
-        var rollingWindow: [LocomotionSample] = []
 
         // first pass: keep all edge and non-stationary samples
         for sample in samples {
@@ -98,28 +97,12 @@ extension TimelineItem {
             .filter { !keepSamples.contains($0.id) }
             .sorted { $0.date < $1.date }
 
-        // rolling window approach
-        for sample in middleSamples {
-            rollingWindow.append(sample)
-
-            if let windowRange = rollingWindow.dateRange(),
-               windowRange.duration >= maxGap {
-
-                // pick best sample from window
-                if let bestSample = chooseBestSample(from: rollingWindow) {
-                    keepSamples.insert(bestSample.id)
-
-                    // remove everything up to and including kept sample
-                    if let keptIndex = rollingWindow.firstIndex(where: { $0.id == bestSample.id }) {
-                        rollingWindow.removeFirst(keptIndex + 1)
-                    }
-                }
-            }
-        }
-
-        // handle any remaining window
-        if !rollingWindow.isEmpty {
-            if let bestSample = chooseBestSample(from: rollingWindow) {
+        // group nearby samples, keep the best from each group
+        let clusters = clusterByProximity(middleSamples, maxGap: maxGap)
+        for cluster in clusters {
+            if cluster.count == 1 {
+                keepSamples.insert(cluster[0].id)
+            } else if let bestSample = chooseBestSample(from: cluster) {
                 keepSamples.insert(bestSample.id)
             }
         }
@@ -134,12 +117,36 @@ extension TimelineItem {
         }
 
         if keepSamples.count < samples.count {
-            print("""
-              pruneVisitSamples() results:
-              - Total samples: \(samples.count)
-              - Keeping \(keepSamples.count) samples (\(Int((Double(keepSamples.count) / Double(samples.count)) * 100))%)
-              """)
+            Log.debug("pruneVisitSamples() \(debugShortId): keeping \(keepSamples.count)/\(samples.count) samples", subsystem: .timeline)
         }
+    }
+
+    /// Groups consecutive samples into time windows of at most maxGap duration.
+    /// A new cluster starts when either:
+    /// - the gap to the next sample is >= maxGap (sparse data boundary)
+    /// - the cluster's total duration would exceed maxGap (dense data window cap)
+    /// Input must be sorted by date.
+    private func clusterByProximity(_ samples: [LocomotionSample], maxGap: TimeInterval) -> [[LocomotionSample]] {
+        guard !samples.isEmpty else { return [] }
+
+        var clusters: [[LocomotionSample]] = []
+        var current: [LocomotionSample] = [samples[0]]
+
+        for sample in samples.dropFirst() {
+            let clusterStart = current[0].date
+            let wouldSpan = sample.date.timeIntervalSince(clusterStart)
+
+            if wouldSpan >= maxGap {
+                // cluster would exceed maxGap — close it and start fresh
+                clusters.append(current)
+                current = [sample]
+            } else {
+                current.append(sample)
+            }
+        }
+        clusters.append(current)
+
+        return clusters
     }
 
     private func chooseBestSample(from candidates: [LocomotionSample]) -> LocomotionSample? {

@@ -68,9 +68,11 @@ public final class TimelineSegment: Sendable {
 
     // MARK: -
 
-    public func pruneSamples() async {
+    public func pruneSamples(excluding prunedItemIds: inout Set<String>) async {
         guard let timelineItems else { return }
         for item in timelineItems {
+            guard !prunedItemIds.contains(item.id) else { continue }
+            prunedItemIds.insert(item.id)
             do {
                 try await item.pruneSamples()
             } catch {
