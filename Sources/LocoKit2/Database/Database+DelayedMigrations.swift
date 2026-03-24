@@ -100,6 +100,33 @@ extension Database {
                 """)
         }
 
+        migrator.registerMigration("sample_deleted_item_guard") { db in
+            // prevent assigning samples to deleted items
+            try? db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_BEFORE_INSERT_deleted_check
+                BEFORE INSERT ON LocomotionSample
+                WHEN NEW.timelineItemId IS NOT NULL
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot assign sample to a deleted item')
+                    FROM TimelineItemBase
+                    WHERE id = NEW.timelineItemId
+                    AND deleted = 1;
+                END;
+                """)
+
+            try? db.execute(sql: """
+                CREATE TRIGGER LocomotionSample_BEFORE_UPDATE_deleted_check
+                BEFORE UPDATE OF timelineItemId ON LocomotionSample
+                WHEN NEW.timelineItemId IS NOT NULL AND OLD.timelineItemId IS NOT NEW.timelineItemId
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot assign sample to a deleted item')
+                    FROM TimelineItemBase
+                    WHERE id = NEW.timelineItemId
+                    AND deleted = 1;
+                END;
+                """)
+        }
+
         migrator.registerMigration("TimelineItemVisit.nullableCoordinates") { db in
             // recreate table with nullable coordinates and constraint
             try? db.create(table: "TimelineItemVisit_new") { table in
