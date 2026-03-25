@@ -114,7 +114,7 @@ internal final class Merge: Hashable, Sendable {
         }
 
         var mutableKeeper = keeper
-        guard let deadmanSamples = deadman.samples else {
+        guard deadman.samples != nil else {
             // BIG-296: this should be impossible - samples should always be loaded for merge candidates
             Log.error("Merge.doIt() deadman has nil samples. deadman: \(deadman.id), deleted: \(deadman.deleted), disabled: \(deadman.disabled), score: \(score)", subsystem: .timeline)
             return nil
@@ -124,9 +124,6 @@ internal final class Merge: Hashable, Sendable {
             mutableKeeper.willConsume(betweener)
         }
         mutableKeeper.willConsume(deadman)
-
-        var samplesToMove: Set<LocomotionSample> = []
-        var itemsToDelete: Set<TimelineItem> = []
 
         // copy over the edge ids from the items being deleted
         if let betweener = betweener {
@@ -141,28 +138,30 @@ internal final class Merge: Hashable, Sendable {
             mutableKeeper.base.previousItemId = deadman.base.previousItemId
         }
 
-        // collect the samples to move
-        if let betweener, let betweenerSamples = betweener.samples {
-            samplesToMove.formUnion(betweenerSamples)
+        // collect items to delete
+        var itemsToDelete: Set<TimelineItem> = []
+        if let betweener {
             itemsToDelete.insert(betweener)
         }
-        samplesToMove.formUnion(deadmanSamples)
         itemsToDelete.insert(deadman)
-        
+
         // do the db changes
         do {
-            try await Database.pool.write { [mutableKeeper, samplesToMove, itemsToDelete] db in
+            try await Database.pool.write { [mutableKeeper, itemsToDelete] db in
                 // call merge hook before applying changes
                 if let hook = TimelineItem.onItemMerge {
                     try hook(self.keeper, itemsToDelete, db)
                 }
 
                 try mutableKeeper.base.updateChanges(db, from: self.keeper.base)
-                for var sample in samplesToMove {
-                    try sample.updateChanges(db) {
-                        $0.timelineItemId = self.keeper.id
-                    }
+
+                // move samples using SQL-level UPDATE to avoid stale in-memory snapshots (BIG-366)
+                for item in itemsToDelete {
+                    try LocomotionSample
+                        .filter(LocomotionSample.Columns.timelineItemId == item.id)
+                        .updateAll(db, LocomotionSample.Columns.timelineItemId.set(to: self.keeper.id))
                 }
+
                 for var item in itemsToDelete {
                     try item.base.updateChanges(db) {
                         $0.deleted = true

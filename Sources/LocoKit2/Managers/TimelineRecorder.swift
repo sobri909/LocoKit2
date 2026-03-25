@@ -108,8 +108,8 @@ public enum TimelineRecorder {
     public static func updateCurrentItemId() {
         currentItemId = try? Database.pool.read {
             try TimelineItemBase
-                .filter { $0.deleted == false && $0.disabled == false }
-                .order(\.endDate.desc)
+                .filter(TimelineItemBase.Columns.deleted == false && TimelineItemBase.Columns.disabled == false)
+                .order(TimelineItemBase.Columns.endDate.desc)
                 .selectPrimaryKey()
                 .fetchOne($0)
         }
