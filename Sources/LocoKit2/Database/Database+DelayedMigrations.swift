@@ -127,6 +127,23 @@ extension Database {
                 """)
         }
 
+        migrator.registerMigration("orphan_samples_from_deleted_items") { db in
+            // BIG-367: One-time cleanup — orphan samples pointing to deleted items
+            // so that BIG-115 orphan adoption can re-home them to active items
+            let count = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM LocomotionSample
+                WHERE timelineItemId IN (SELECT id FROM TimelineItemBase WHERE deleted = 1)
+                """) ?? 0
+
+            if count > 0 {
+                Log.info("Orphaning \(count) samples from deleted items", subsystem: .database)
+                try db.execute(sql: """
+                    UPDATE LocomotionSample SET timelineItemId = NULL
+                    WHERE timelineItemId IN (SELECT id FROM TimelineItemBase WHERE deleted = 1)
+                    """)
+            }
+        }
+
         migrator.registerMigration("TimelineItemVisit.nullableCoordinates") { db in
             // recreate table with nullable coordinates and constraint
             try? db.create(table: "TimelineItemVisit_new") { table in
