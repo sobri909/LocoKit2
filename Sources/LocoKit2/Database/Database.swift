@@ -53,37 +53,41 @@ public final class Database: @unchecked Sendable {
 
     public lazy var migrator = {
         var migrator = DatabaseMigrator()
-        // migrator.eraseDatabaseOnSchemaChange = true
         return migrator
     }()
 
+    public func runMigrations() {
+        let pending = pendingMigrations()
+        if !pending.isEmpty {
+            Log.info("Running \(pending.count) migrations: \(pending.joined(separator: ", "))", subsystem: .database)
+        }
+        let start = Date()
+        do {
+            try migrator.migrate(pool)
+        } catch {
+            Log.error(error, subsystem: .database)
+        }
+        if !pending.isEmpty {
+            Log.info("Migrations completed in \(String(format: "%.1f", -start.timeIntervalSinceNow))s", subsystem: .database)
+        }
+    }
+
     public func doMigrations() {
         addMigrations()
-        do {
-            try migrator.migrate(pool)
-        } catch {
-            Log.error(error, subsystem: .database)
-        }
+        runMigrations()
     }
 
-    public func doDelayedMigrations() async {
-        do {
-            try migrator.migrate(pool)
-        } catch {
-            Log.error(error, subsystem: .database)
-        }
+    public var havePendingMigrations: Bool {
+        !pendingMigrations().isEmpty
     }
 
-    public var haveDelayedMigrationsToDo: Bool {
+    private func pendingMigrations() -> [String] {
         do {
             let registered = migrator.migrations
             let done = try pool.read { try migrator.appliedMigrations($0) }
-            let remaining = Set(registered).subtracting(Set(done))
-            return !remaining.isEmpty
-
+            return registered.filter { !done.contains($0) }
         } catch {
-            Log.error(error, subsystem: .database)
-            return false
+            return []
         }
     }
 
