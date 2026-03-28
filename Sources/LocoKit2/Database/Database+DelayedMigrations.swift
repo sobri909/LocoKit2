@@ -144,6 +144,36 @@ extension Database {
             }
         }
 
+        migrator.registerMigration("LocomotionSample.nullableSecondsFromGMT") { db in
+            // BIG-341: Make secondsFromGMT nullable for pre-2019 samples
+            Log.info("Starting LocomotionSample table rebuild (BIG-341)", subsystem: .database)
+            let start = Date()
+
+            try? db.create(table: "LocomotionSample_new") { table in
+                Database.defineLocomotionSampleTable(table)
+            }
+
+            try? db.execute(sql: "INSERT INTO LocomotionSample_new SELECT * FROM LocomotionSample")
+
+            try? db.drop(table: "LocomotionSample")
+            try? db.rename(table: "LocomotionSample_new", to: "LocomotionSample")
+
+            // recreate composite index (single-column indexes created by defineLocomotionSampleTable)
+            try? db.create(
+                index: "LocomotionSample_on_date_rtreeId_confirmedActivityType_xyAcceleration_zAcceleration_stepHz",
+                on: "LocomotionSample",
+                columns: ["date", "rtreeId", "confirmedActivityType", "xyAcceleration", "zAcceleration", "stepHz"]
+            )
+
+            // recreate all sample triggers (dropped with the old table)
+            try Database.createSampleTriggers(db)
+            try Database.createSampleRTreeTriggers(db)
+            try Database.createSampleLastSavedTrigger(db)
+            try Database.createSampleGuardTriggers(db)
+
+            Log.info("LocomotionSample table rebuild completed in \(String(format: "%.1f", -start.timeIntervalSinceNow))s", subsystem: .database)
+        }
+
         migrator.registerMigration("TimelineItemVisit.nullableCoordinates") { db in
             // recreate table with nullable coordinates and constraint
             try? db.create(table: "TimelineItemVisit_new") { table in

@@ -124,39 +124,7 @@ extension Database {
             // MARK: - LocomotionSample
 
             try db.create(table: "LocomotionSample") { table in
-                table.primaryKey("id", .text)
-                table.column("lastSaved", .datetime).notNull().indexed().defaults(sql: "CURRENT_TIMESTAMP")
-                table.column("rtreeId", .integer).indexed()
-
-                table.column("date", .datetime).notNull().indexed()
-                table.column("source", .text).notNull().indexed()
-                table.column("sourceVersion", .text).notNull()
-                table.column("secondsFromGMT", .integer).notNull()
-                table.column("movingState", .integer).notNull()
-                table.column("recordingState", .integer).notNull()
-                table.column("disabled", .boolean).notNull()
-
-                table.column("timelineItemId", .text).indexed()
-                    .references("TimelineItemBase", onDelete: .restrict, deferred: true)
-
-                // CLLocation
-                table.column("latitude", .double)
-                table.column("longitude", .double)
-                table.column("altitude", .double)
-                table.column("horizontalAccuracy", .double)
-                table.column("verticalAccuracy", .double)
-                table.column("speed", .double)
-                table.column("course", .double)
-
-                // motion sensor data
-                table.column("stepHz", .double)
-                table.column("xyAcceleration", .double)
-                table.column("zAcceleration", .double)
-
-                table.column("heartRate", .double)
-
-                table.column("classifiedActivityType", .integer)
-                table.column("confirmedActivityType", .integer)
+                Database.defineLocomotionSampleTable(table)
             }
 
             try db.create(
@@ -246,5 +214,41 @@ extension Database {
              longitude BETWEEN -180 AND 180 AND
              (latitude != 0 OR longitude != 0))
             """)
+    }
+
+    static func defineLocomotionSampleTable(_ table: TableDefinition) {
+        table.primaryKey("id", .text)
+        table.column("lastSaved", .datetime).notNull().indexed().defaults(sql: "CURRENT_TIMESTAMP")
+        table.column("rtreeId", .integer).indexed()
+
+        table.column("date", .datetime).notNull().indexed()
+        table.column("source", .text).notNull().indexed()
+        table.column("sourceVersion", .text).notNull()
+        table.column("secondsFromGMT", .integer) // nullable — pre-2019 samples have no timezone
+        table.column("movingState", .integer).notNull()
+        table.column("recordingState", .integer).notNull()
+        table.column("disabled", .boolean).notNull()
+
+        table.column("timelineItemId", .text).indexed()
+            .references("TimelineItemBase", onDelete: .restrict, deferred: true)
+
+        // CLLocation
+        table.column("latitude", .double)
+        table.column("longitude", .double)
+        table.column("altitude", .double)
+        table.column("horizontalAccuracy", .double)
+        table.column("verticalAccuracy", .double)
+        table.column("speed", .double)
+        table.column("course", .double)
+
+        // motion sensor data
+        table.column("stepHz", .double)
+        table.column("xyAcceleration", .double)
+        table.column("zAcceleration", .double)
+
+        table.column("heartRate", .double)
+
+        table.column("classifiedActivityType", .integer)
+        table.column("confirmedActivityType", .integer)
     }
 }

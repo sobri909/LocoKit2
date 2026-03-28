@@ -35,15 +35,7 @@ extension Database {
                 END;
                 """)
 
-            try db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_AFTER_UPDATE_lastSaved_UNCHANGED
-                AFTER UPDATE ON LocomotionSample
-                WHEN NEW.lastSaved IS OLD.lastSaved
-                BEGIN
-                    UPDATE LocomotionSample SET lastSaved = CURRENT_TIMESTAMP
-                    WHERE id = NEW.id;
-                END;
-                """)
+            try Database.createSampleLastSavedTrigger(db)
 
             try db.execute(sql: """
                 CREATE TRIGGER TimelineItemVisit_AFTER_UPDATE_lastSaved_UNCHANGED
@@ -65,5 +57,17 @@ extension Database {
                 END;
                 """)
         }
+    }
+
+    static func createSampleLastSavedTrigger(_ db: GRDB.Database) throws {
+        try db.execute(sql: """
+            CREATE TRIGGER LocomotionSample_AFTER_UPDATE_lastSaved_UNCHANGED
+            AFTER UPDATE ON LocomotionSample
+            WHEN NEW.lastSaved IS OLD.lastSaved
+            BEGIN
+                UPDATE LocomotionSample SET lastSaved = CURRENT_TIMESTAMP
+                WHERE id = NEW.id;
+            END;
+            """)
     }
 }

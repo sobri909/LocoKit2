@@ -15,7 +15,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     public var lastSaved: Date = .now
 
     public var date: Date
-    public var secondsFromGMT: Int
+    public var secondsFromGMT: Int?
     public var source: String = "LocoKit2"
     public var sourceVersion: String = LocomotionManager.locoKitVersion
     public let movingState: MovingState
@@ -66,7 +66,10 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
     // TODO: needs to us correct calendar based on secondsFromGMT
     public var timeOfDay: TimeInterval { date.sinceStartOfDay() }
 
-    public var localTimeZone: TimeZone? { TimeZone(secondsFromGMT: secondsFromGMT) }
+    public var localTimeZone: TimeZone? {
+        if let secondsFromGMT { return TimeZone(secondsFromGMT: secondsFromGMT) }
+        return nil
+    }
 
     // MARK: - Factory Methods
     
@@ -99,7 +102,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
     public init(
         id: String = UUID().uuidString,
-        date: Date, secondsFromGMT: Int = TimeZone.current.secondsFromGMT(),
+        date: Date, secondsFromGMT: Int? = TimeZone.current.secondsFromGMT(),
         movingState: MovingState, recordingState: RecordingState,
         location: CLLocation? = nil
     ) {
@@ -126,7 +129,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         self.lastSaved = try container.decode(Date.self, forKey: .lastSaved)
 
         self.date = try container.decode(Date.self, forKey: .date)
-        self.secondsFromGMT = try container.decode(Int.self, forKey: .secondsFromGMT)
+        self.secondsFromGMT = try container.decodeIfPresent(Int.self, forKey: .secondsFromGMT)
         self.source = try container.decode(String.self, forKey: .source)
         self.sourceVersion = try container.decode(String.self, forKey: .sourceVersion)
         self.movingState = try container.decode(MovingState.self, forKey: .movingState)

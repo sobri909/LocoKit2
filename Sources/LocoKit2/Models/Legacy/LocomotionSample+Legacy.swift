@@ -12,7 +12,7 @@ extension LocomotionSample {
     init(from legacySample: LegacySample) {
         self.init(
             id: legacySample.sampleId, date: legacySample.date,
-            secondsFromGMT: legacySample.secondsFromGMT ?? TimeZone.current.secondsFromGMT(),
+            secondsFromGMT: legacySample.secondsFromGMT,
             movingState: MovingState(stringValue: legacySample.movingState) ?? .uncertain,
             recordingState: RecordingState(stringValue: legacySample.recordingState) ?? .off,
             location: legacySample.location
