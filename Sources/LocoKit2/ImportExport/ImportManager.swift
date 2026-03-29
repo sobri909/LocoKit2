@@ -515,25 +515,78 @@ public enum ImportManager {
 
         Log.info("ImportManager: Copying backup to local container", subsystem: .importing)
 
+        // force iCloud to refresh directory listing and file contents
+        // this addresses stale cache when a device has previously seen the backup directory
+        if FileManager.default.isUbiquitousItem(at: sourceURL) {
+            Log.info("ImportManager: Requesting iCloud download for backup directory", subsystem: .importing)
+            try? FileManager.default.startDownloadingUbiquitousItem(at: sourceURL)
+            for subdir in ["places", "samples", "items", "notes"] {
+                let subdirURL = sourceURL.appendingPathComponent(subdir, isDirectory: true)
+                try? FileManager.default.startDownloadingUbiquitousItem(at: subdirURL)
+            }
+
+            // wait for directory metadata to sync (file contents download during copyItem)
+            let timeout: TimeInterval = 30
+            let start = Date()
+            var ready = false
+            while !ready, Date().timeIntervalSince(start) < timeout {
+                let values = try? sourceURL.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+                if values?.ubiquitousItemDownloadingStatus == .current {
+                    ready = true
+                } else {
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
+            }
+            if ready {
+                Log.info("ImportManager: iCloud directory sync complete", subsystem: .importing)
+            } else {
+                Log.info("ImportManager: iCloud directory sync timed out after \(Int(timeout))s, proceeding anyway", subsystem: .importing)
+            }
+        }
+
         // enumerate all files in source directory (must collect before async loop)
         guard let enumerator = FileManager.default.enumerator(
             at: sourceURL,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
         ) else {
             throw ImportExportError.importNotInitialised
         }
 
         var filesToCopy: [URL] = []
+        var skippedFiles: [(String, String)] = [] // (name, reason)
+        var staleFileCount = 0
         while let fileURL = enumerator.nextObject() as? URL {
-            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey, .fileSizeKey])
+            let relativePath = fileURL.path.replacingOccurrences(of: sourceURL.path + "/", with: "")
+
+            if let downloadStatus = resourceValues.ubiquitousItemDownloadingStatus {
+                let size = resourceValues.fileSize ?? -1
+                Log.debug("ImportManager: [\(downloadStatus.rawValue)] \(relativePath) (\(size) bytes)", subsystem: .importing)
+
+                // request fresh download for stale local copies (status "downloaded" = stale)
+                if downloadStatus == .downloaded, resourceValues.isRegularFile == true {
+                    try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
+                    staleFileCount += 1
+                }
+            }
+
             if resourceValues.isRegularFile == true {
                 filesToCopy.append(fileURL)
+            } else {
+                skippedFiles.append((relativePath, "isRegularFile=\(resourceValues.isRegularFile as Any)"))
             }
         }
 
+        if staleFileCount > 0 {
+            Log.info("ImportManager: Requested refresh for \(staleFileCount) stale iCloud files", subsystem: .importing)
+        }
+
         let totalFiles = filesToCopy.count
-        Log.info("ImportManager: Found \(totalFiles) files to copy", subsystem: .importing)
+        Log.info("ImportManager: Found \(totalFiles) files to copy, \(skippedFiles.count) skipped", subsystem: .importing)
+        for (name, reason) in skippedFiles {
+            Log.info("ImportManager: SKIPPED \(name) — \(reason)", subsystem: .importing)
+        }
 
         // copy each file with progress updates
         for (index, fileURL) in filesToCopy.enumerated() {
@@ -548,7 +601,13 @@ public enum ImportManager {
             }
 
             // copy file
-            try FileManager.default.copyItem(at: fileURL, to: destFileURL)
+            do {
+                try FileManager.default.copyItem(at: fileURL, to: destFileURL)
+            } catch {
+                let relativePath = fileURL.path.replacingOccurrences(of: sourceURL.path + "/", with: "")
+                Log.error("ImportManager: COPY FAILED \(relativePath): \(error)", subsystem: .importing)
+                throw error
+            }
 
             // update progress and yield to allow actor access
             progress = Double(index + 1) / Double(totalFiles)
