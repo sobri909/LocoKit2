@@ -24,14 +24,6 @@ extension Database {
             )
         }
         
-        migrator.registerMigration("LocomotionSample_rtreeId_index") { db in
-            try? db.create(
-                index: "LocomotionSample_on_rtreeId",
-                on: "LocomotionSample",
-                columns: ["rtreeId"]
-            )
-        }
-
         migrator.registerMigration("Place.lastVisitDate") { db in
             try? db.alter(table: "Place") { table in
                 table.add(column: "lastVisitDate", .datetime)
@@ -158,7 +150,7 @@ extension Database {
             try? db.drop(table: "LocomotionSample")
             try? db.rename(table: "LocomotionSample_new", to: "LocomotionSample")
 
-            // recreate composite index (single-column indexes created by defineLocomotionSampleTable)
+            // recreate composite index (rtreeId index name fixed by LocomotionSample_fix_rtreeId_index migration)
             try? db.create(
                 index: "LocomotionSample_on_date_rtreeId_confirmedActivityType_xyAcceleration_zAcceleration_stepHz",
                 on: "LocomotionSample",
@@ -235,6 +227,17 @@ extension Database {
                 table.column("phase", .text).notNull()
                 table.column("lastProcessedSampleRowId", .integer)
             }
+        }
+        
+        // BIG-379: table rebuild leaves indexes with _new_ prefix (SQLite doesn't rename them)
+        migrator.registerMigration("LocomotionSample_fix_rtreeId_index") { db in
+            // drop stale _new_ prefixed index left by table rebuild rename
+            try? db.execute(sql: "DROP INDEX IF EXISTS LocomotionSample_new_on_rtreeId")
+            try? db.create(
+                index: "LocomotionSample_on_rtreeId",
+                on: "LocomotionSample",
+                columns: ["rtreeId"]
+            )
         }
     }
 }
