@@ -547,34 +547,26 @@ public enum ImportManager {
         // enumerate all files in source directory (must collect before async loop)
         guard let enumerator = FileManager.default.enumerator(
             at: sourceURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey, .fileSizeKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey],
             options: [.skipsHiddenFiles]
         ) else {
             throw ImportExportError.importNotInitialised
         }
 
         var filesToCopy: [URL] = []
-        var skippedFiles: [(String, String)] = [] // (name, reason)
         var staleFileCount = 0
         while let fileURL = enumerator.nextObject() as? URL {
-            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey, .fileSizeKey])
-            let relativePath = fileURL.path.replacingOccurrences(of: sourceURL.path + "/", with: "")
+            let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .ubiquitousItemDownloadingStatusKey])
 
-            if let downloadStatus = resourceValues.ubiquitousItemDownloadingStatus {
-                let size = resourceValues.fileSize ?? -1
-                Log.debug("ImportManager: [\(downloadStatus.rawValue)] \(relativePath) (\(size) bytes)", subsystem: .importing)
-
-                // request fresh download for stale local copies (status "downloaded" = stale)
-                if downloadStatus == .downloaded, resourceValues.isRegularFile == true {
-                    try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
-                    staleFileCount += 1
-                }
+            // request fresh download for stale local copies (status "downloaded" = stale)
+            if let downloadStatus = resourceValues.ubiquitousItemDownloadingStatus,
+               downloadStatus == .downloaded, resourceValues.isRegularFile == true {
+                try? FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
+                staleFileCount += 1
             }
 
             if resourceValues.isRegularFile == true {
                 filesToCopy.append(fileURL)
-            } else {
-                skippedFiles.append((relativePath, "isRegularFile=\(resourceValues.isRegularFile as Any)"))
             }
         }
 
@@ -583,10 +575,7 @@ public enum ImportManager {
         }
 
         let totalFiles = filesToCopy.count
-        Log.info("ImportManager: Found \(totalFiles) files to copy, \(skippedFiles.count) skipped", subsystem: .importing)
-        for (name, reason) in skippedFiles {
-            Log.info("ImportManager: SKIPPED \(name) — \(reason)", subsystem: .importing)
-        }
+        Log.info("ImportManager: Found \(totalFiles) files to copy", subsystem: .importing)
 
         // copy each file with progress updates
         for (index, fileURL) in filesToCopy.enumerated() {
