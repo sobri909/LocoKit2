@@ -145,7 +145,22 @@ extension Database {
                 Database.defineLocomotionSampleTable(table)
             }
 
-            try? db.execute(sql: "INSERT INTO LocomotionSample_new SELECT * FROM LocomotionSample")
+            // explicit column names to prevent position-based mismatch (BIG-382)
+            try? db.execute(sql: """
+                INSERT INTO LocomotionSample_new
+                (id, lastSaved, rtreeId, date, source, sourceVersion, secondsFromGMT,
+                 movingState, recordingState, disabled, timelineItemId,
+                 latitude, longitude, altitude, horizontalAccuracy, verticalAccuracy,
+                 speed, course, stepHz, xyAcceleration, zAcceleration,
+                 heartRate, classifiedActivityType, confirmedActivityType)
+                SELECT
+                 id, lastSaved, rtreeId, date, source, sourceVersion, secondsFromGMT,
+                 movingState, recordingState, disabled, timelineItemId,
+                 latitude, longitude, altitude, horizontalAccuracy, verticalAccuracy,
+                 speed, course, stepHz, xyAcceleration, zAcceleration,
+                 heartRate, classifiedActivityType, confirmedActivityType
+                FROM LocomotionSample
+                """)
 
             try? db.drop(table: "LocomotionSample")
             try? db.rename(table: "LocomotionSample_new", to: "LocomotionSample")
