@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import Synchronization
 import os
 
 public enum Log {
@@ -20,29 +21,31 @@ public enum Log {
         let isMarker = message.hasPrefix("--")
         let line = isMarker ? format(message) : format(message, subsystem: subsystem)
 
-        Task { @MainActor in
-            State.shared.osLogger(for: subsystem).info("\(message, privacy: .public)")
+        // os_log and file write: immediate, on caller's thread
+        State.shared.osLogger(for: subsystem).info("\(message, privacy: .public)")
+        State.shared.writeToFile(line)
 
+        // fib state + timer: on MainActor (timer needs run loop)
+        // Task.detached to avoid inheriting cancellation from caller
+        Task.detached { @MainActor in
             if isMarker {
-                State.shared.incrementFib()
+                MarkerTimer.shared.incrementFib()
             } else {
-                State.shared.resetFib()
+                MarkerTimer.shared.resetFib()
             }
-
-            State.shared.writeToFile(line)
-
-            State.shared.resetFibTimer()
+            MarkerTimer.shared.schedule()
         }
     }
 
     public static func error(_ message: String, subsystem: Subsystem) {
         let line = format(message, subsystem: subsystem, level: "ERROR")
 
-        Task { @MainActor in
-            State.shared.osLogger(for: subsystem).error("\(message, privacy: .public)")
-            State.shared.resetFib()
-            State.shared.writeToFile(line)
-            State.shared.resetFibTimer()
+        State.shared.osLogger(for: subsystem).error("\(message, privacy: .public)")
+        State.shared.writeToFile(line)
+
+        Task.detached { @MainActor in
+            MarkerTimer.shared.resetFib()
+            MarkerTimer.shared.schedule()
         }
     }
 
@@ -52,9 +55,7 @@ public enum Log {
 
     /// console only - no file write, for high-volume debug output
     public static func debug(_ message: String, subsystem: Subsystem) {
-        Task { @MainActor in
-            State.shared.osLogger(for: subsystem).debug("\(message, privacy: .public)")
-        }
+        State.shared.osLogger(for: subsystem).debug("\(message, privacy: .public)")
     }
 
     // MARK: - File management
@@ -76,48 +77,55 @@ public enum Log {
         }
     }
 
-    // MARK: - MainActor-isolated state
+    // MARK: - Thread-safe state (os_log + file write)
 
-    @MainActor
-    private final class State {
+    private final class State: Sendable {
         static let shared = State()
 
-        var fibMarkerTimer: Timer?
-        var fibn = 1
-        var osLoggers: [Subsystem: os.Logger] = [:]
+        private let osLoggers = Mutex<[Subsystem: os.Logger]>([:])
+        private let fileLock = NSLock()
 
         func osLogger(for subsystem: Subsystem) -> os.Logger {
-            if let cached = osLoggers[subsystem] { return cached }
-            let newLogger = os.Logger(subsystem: "com.bigpaua.LocoKit", category: subsystem.rawValue)
-            osLoggers[subsystem] = newLogger
-            return newLogger
+            osLoggers.withLock { loggers in
+                if let cached = loggers[subsystem] { return cached }
+                let newLogger = os.Logger(subsystem: "com.bigpaua.LocoKit", category: subsystem.rawValue)
+                loggers[subsystem] = newLogger
+                return newLogger
+            }
         }
 
         func writeToFile(_ line: String) {
+            fileLock.lock()
+            defer { fileLock.unlock() }
             do {
                 try line.appendLineTo(Log.sessionLogFileURL)
             } catch {
                 os_log("Couldn't write to log file", type: .error)
             }
         }
+    }
 
-        func resetFibTimer() {
-            fibMarkerTimer?.invalidate()
+    // MARK: - Fib marker timer (MainActor — needs run loop for Timer)
+
+    @MainActor
+    private final class MarkerTimer {
+        static let shared = MarkerTimer()
+
+        private var timer: Timer?
+        private var fibn = 1
+
+        func schedule() {
+            timer?.invalidate()
             let currentFibn = fibn
-            fibMarkerTimer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(currentFibn)), repeats: false) { _ in
+            timer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(currentFibn)), repeats: false) { _ in
                 Log.info("--\(currentFibn)--", subsystem: .misc)
             }
         }
 
-        func incrementFib() {
-            fibn += 1
-        }
+        func incrementFib() { fibn += 1 }
+        func resetFib() { fibn = 1 }
 
-        func resetFib() {
-            fibn = 1
-        }
-
-        func fib(_ n: Int) -> Int {
+        private func fib(_ n: Int) -> Int {
             guard n > 1 else { return n }
             return fib(n - 1) + fib(n - 2)
         }
