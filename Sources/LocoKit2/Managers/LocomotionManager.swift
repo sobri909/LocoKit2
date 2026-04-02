@@ -99,7 +99,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func startRecording() {
         if recordingState == .recording { return }
 
-        print("LocomotionManager.startRecording()")
+        Log.info("LocomotionManager.startRecording() (was: \(recordingState))", subsystem: .locomotion)
 
         recordingState = .recording
 
@@ -228,7 +228,7 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func startSleeping() {
         if recordingState != .wakeup {
-            Log.debug("LocomotionManager.startSleeping()", subsystem: .locomotion)
+            Log.info("LocomotionManager.startSleeping()", subsystem: .locomotion)
         }
 
         stopCoreMotion()
@@ -366,7 +366,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
         guard lastRaw.timestamp.age > 60 else { return }
 
-        Log.debug("Restarting location manager (last raw: \(Int(lastRaw.timestamp.age))s ago)", subsystem: .locomotion)
+        Log.info("Restarting location manager (last raw: \(Int(lastRaw.timestamp.age))s ago)", subsystem: .locomotion)
         locationManager.stopUpdatingLocation()
         locationManager.startUpdatingLocation()
         lastLocationManagerRestart = .now
