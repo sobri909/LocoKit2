@@ -48,9 +48,13 @@ actor SleepModeDetector {
     private func updateTheFrozenState(with location: CLLocation) {
         guard state.isFrozen else { return }
 
+        let distance = state.geofenceCenter.map { location.distance(from: $0.location) }
         state.isLocationWithinGeofence = isWithinGeofence(location)
 
+        Log.info("SleepDetector [frozen]: dist=\(distance.map { String(format: "%.0f", $0) } ?? "?")m, radius=\(String(format: "%.0f", state.geofenceRadius))m, hAcc=\(String(format: "%.0f", location.horizontalAccuracy))m, inside=\(state.isLocationWithinGeofence)", subsystem: .locomotion)
+
         if !state.isLocationWithinGeofence {
+            Log.info("SleepDetector: unfreezing — location outside geofence", subsystem: .locomotion)
             unfreeze()
         }
     }

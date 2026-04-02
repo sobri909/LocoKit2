@@ -296,6 +296,14 @@ public final class LocomotionManager: @unchecked Sendable {
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
 
         await stationaryDetector.add(location: kalmanLocation)
+
+        // diagnostic: compare raw vs filtered location going into sleep detector
+        let rawDist = await sleepModeDetector.state.geofenceCenter.map { location.distance(from: $0.location) }
+        let filteredDist = await sleepModeDetector.state.geofenceCenter.map { kalmanLocation.distance(from: $0.location) }
+        if let rawDist, let filteredDist, await sleepModeDetector.state.isFrozen {
+            Log.info("SleepDetector input: rawDist=\(String(format: "%.0f", rawDist))m, filteredDist=\(String(format: "%.0f", filteredDist))m, rawAcc=\(String(format: "%.0f", location.horizontalAccuracy))m", subsystem: .locomotion)
+        }
+
         await sleepModeDetector.add(location: kalmanLocation)
 
         await updateTheRecordingState()
@@ -341,6 +349,7 @@ public final class LocomotionManager: @unchecked Sendable {
             if let appGroup, await appGroup.isAnActiveRecorder, !appGroup.shouldBeTheRecorder {
                 startStandby()
             } else if !(await TimelineRecorder.canStartSleeping) {
+                Log.info("canStartSleeping=false while sleeping — forcing recording", subsystem: .locomotion)
                 startRecording()
             }
 

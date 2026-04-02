@@ -229,12 +229,15 @@ public enum TimelineRecorder {
     static var canStartSleeping: Bool {
         get async {
             guard let currentItem = currentItem() else {
+                Log.info("canStartSleeping: false (no current item)", subsystem: .locomotion)
                 return false
             }
             guard currentItem.isVisit else {
+                Log.info("canStartSleeping: false (current item is not a visit: \(currentItem.debugShortId))", subsystem: .locomotion)
                 return false
             }
             guard let dateRange = currentItem.dateRange else {
+                Log.info("canStartSleeping: false (visit has no dateRange: \(currentItem.debugShortId))", subsystem: .locomotion)
                 return false
             }
             // use age instead of duration, because distanceFilter delays new samples when stationary
