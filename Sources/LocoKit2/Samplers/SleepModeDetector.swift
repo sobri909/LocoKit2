@@ -20,11 +20,11 @@ actor SleepModeDetector {
 
     private(set) var state = SleepDetectorState()
 
-    func add(location: CLLocation) {
+    func add(filteredLocation: CLLocation, rawLocation: CLLocation) {
         if state.isFrozen {
-            updateTheFrozenState(with: location)
+            updateTheFrozenState(filteredLocation: filteredLocation, rawLocation: rawLocation)
         } else {
-            updateTheUnfrozenState(with: location)
+            updateTheUnfrozenState(with: filteredLocation)
         }
     }
 
@@ -45,16 +45,19 @@ actor SleepModeDetector {
         state.isFrozen = false
     }
 
-    private func updateTheFrozenState(with location: CLLocation) {
+    private func updateTheFrozenState(filteredLocation: CLLocation, rawLocation: CLLocation) {
         guard state.isFrozen else { return }
 
-        let distance = state.geofenceCenter.map { location.distance(from: $0.location) }
-        state.isLocationWithinGeofence = isWithinGeofence(location)
+        state.isLocationWithinGeofence = isWithinGeofence(filteredLocation)
+        state.isRawLocationOutsideGeofence = !isWithinGeofence(rawLocation)
 
-        Log.info("SleepDetector [frozen]: dist=\(distance.map { String(format: "%.0f", $0) } ?? "?")m, radius=\(String(format: "%.0f", state.geofenceRadius))m, hAcc=\(String(format: "%.0f", location.horizontalAccuracy))m, inside=\(state.isLocationWithinGeofence)", subsystem: .locomotion)
+        let filteredDist = state.geofenceCenter.map { filteredLocation.distance(from: $0.location) }
+        let rawDist = state.geofenceCenter.map { rawLocation.distance(from: $0.location) }
+
+        Log.info("SleepDetector [frozen]: rawDist=\(rawDist.map { String(format: "%.0f", $0) } ?? "?")m, dist=\(filteredDist.map { String(format: "%.0f", $0) } ?? "?")m, radius=\(String(format: "%.0f", state.geofenceRadius))m, rawAcc=\(String(format: "%.0f", rawLocation.horizontalAccuracy))m, hAcc=\(String(format: "%.0f", filteredLocation.horizontalAccuracy))m, inside=\(state.isLocationWithinGeofence), rawOutside=\(state.isRawLocationOutsideGeofence)", subsystem: .locomotion)
 
         if !state.isLocationWithinGeofence {
-            Log.info("SleepDetector: unfreezing — location outside geofence", subsystem: .locomotion)
+            Log.info("SleepDetector: unfreezing — filtered location outside geofence", subsystem: .locomotion)
             unfreeze()
         }
     }
@@ -140,6 +143,7 @@ public struct SleepDetectorState: Sendable {
     public var geofenceRadius: CLLocationDistance = 50.0
     public var lastGeofenceEnterTime: Date? = nil
     public var isLocationWithinGeofence: Bool = false
+    public var isRawLocationOutsideGeofence: Bool = false
     public var shouldBeSleeping: Bool = false
     public var n: Int = 0
 

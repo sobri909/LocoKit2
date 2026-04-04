@@ -297,14 +297,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
         await stationaryDetector.add(location: kalmanLocation)
 
-        // diagnostic: compare raw vs filtered location going into sleep detector
-        let rawDist = await sleepModeDetector.state.geofenceCenter.map { location.distance(from: $0.location) }
-        let filteredDist = await sleepModeDetector.state.geofenceCenter.map { kalmanLocation.distance(from: $0.location) }
-        if let rawDist, let filteredDist, await sleepModeDetector.state.isFrozen {
-            Log.info("SleepDetector input: rawDist=\(String(format: "%.0f", rawDist))m, filteredDist=\(String(format: "%.0f", filteredDist))m, rawAcc=\(String(format: "%.0f", location.horizontalAccuracy))m", subsystem: .locomotion)
-        }
-
-        await sleepModeDetector.add(location: kalmanLocation)
+        await sleepModeDetector.add(filteredLocation: kalmanLocation, rawLocation: location)
 
         await updateTheRecordingState()
 
@@ -340,8 +333,30 @@ public final class LocomotionManager: @unchecked Sendable {
 
         case .wakeup:
             if sleepState.shouldBeSleeping {
-                startSleeping()
+                if sleepState.isRawLocationOutsideGeofence {
+                    if let start = extendedWakeupStart {
+                        if start.age >= extendedWakeupTimeout {
+                            // extended wakeup timed out — raw was probably drift
+                            Log.info("Extended wakeup timed out (\(String(format: "%.0f", start.age))s) — back to sleep", subsystem: .locomotion)
+                            extendedWakeupStart = nil
+                            startSleeping()
+                        } else {
+                            // still within timeout — keep gathering data
+                            Log.info("Extended wakeup: \(String(format: "%.0f", start.age))s — still gathering data", subsystem: .locomotion)
+                        }
+                    } else {
+                        // start extended wakeup
+                        extendedWakeupStart = .now
+                        Log.info("Extended wakeup started: raw outside geofence, Kalman inside", subsystem: .locomotion)
+                    }
+                } else {
+                    // raw also inside — no disagreement, go back to sleep
+                    extendedWakeupStart = nil
+                    startSleeping()
+                }
             } else {
+                // Kalman says outside — genuine movement detected
+                extendedWakeupStart = nil
                 startRecording()
             }
 
@@ -386,6 +401,8 @@ public final class LocomotionManager: @unchecked Sendable {
     private var wakeupTimer: Timer?
     private var standbyTimer: Timer?
     private var fallbackUpdateTimer: Timer?
+    private var extendedWakeupStart: Date?
+    private let extendedWakeupTimeout: TimeInterval = 15
 
     private func restartTheFallbackTimer() {
         let duration = fallbackUpdateDuration
