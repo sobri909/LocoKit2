@@ -339,24 +339,34 @@ public final class LocomotionManager: @unchecked Sendable {
                             // extended wakeup timed out — raw was probably drift
                             Log.info("Extended wakeup timed out (\(String(format: "%.0f", start.age))s) — back to sleep", subsystem: .locomotion)
                             extendedWakeupStart = nil
+                            extendedWakeupTimer?.invalidate()
                             startSleeping()
                         } else {
                             // still within timeout — keep gathering data
-                            Log.info("Extended wakeup: \(String(format: "%.0f", start.age))s — still gathering data", subsystem: .locomotion)
+                            Log.debug("Extended wakeup: \(String(format: "%.0f", start.age))s — still gathering data", subsystem: .locomotion)
                         }
                     } else {
                         // start extended wakeup
                         extendedWakeupStart = .now
                         Log.info("Extended wakeup started: raw outside geofence, Kalman inside", subsystem: .locomotion)
+
+                        // safety timer in case no more locations arrive
+                        extendedWakeupTimer?.invalidate()
+                        extendedWakeupTimer = Timer.scheduledTimer(withTimeInterval: extendedWakeupTimeout, repeats: false) { [weak self] _ in
+                            guard let self else { return }
+                            Task { await self.endExtendedWakeup() }
+                        }
                     }
                 } else {
                     // raw also inside — no disagreement, go back to sleep
                     extendedWakeupStart = nil
+                    extendedWakeupTimer?.invalidate()
                     startSleeping()
                 }
             } else {
                 // Kalman says outside — genuine movement detected
                 extendedWakeupStart = nil
+                extendedWakeupTimer?.invalidate()
                 startRecording()
             }
 
@@ -371,6 +381,15 @@ public final class LocomotionManager: @unchecked Sendable {
         case .standby, .off:
             break
         }
+    }
+
+    @MainActor
+    private func endExtendedWakeup() {
+        guard recordingState == .wakeup, extendedWakeupStart != nil else { return }
+        Log.info("Extended wakeup timer fired — back to sleep", subsystem: .locomotion)
+        extendedWakeupStart = nil
+        extendedWakeupTimer = nil
+        startSleeping()
     }
 
     // MARK: - Location staleness handling
@@ -402,6 +421,7 @@ public final class LocomotionManager: @unchecked Sendable {
     private var standbyTimer: Timer?
     private var fallbackUpdateTimer: Timer?
     private var extendedWakeupStart: Date?
+    private var extendedWakeupTimer: Timer?
     private let extendedWakeupTimeout: TimeInterval = 15
 
     private func restartTheFallbackTimer() {

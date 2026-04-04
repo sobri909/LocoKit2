@@ -54,7 +54,7 @@ actor SleepModeDetector {
         let filteredDist = state.geofenceCenter.map { filteredLocation.distance(from: $0.location) }
         let rawDist = state.geofenceCenter.map { rawLocation.distance(from: $0.location) }
 
-        Log.info("SleepDetector [frozen]: rawDist=\(rawDist.map { String(format: "%.0f", $0) } ?? "?")m, dist=\(filteredDist.map { String(format: "%.0f", $0) } ?? "?")m, radius=\(String(format: "%.0f", state.geofenceRadius))m, rawAcc=\(String(format: "%.0f", rawLocation.horizontalAccuracy))m, hAcc=\(String(format: "%.0f", filteredLocation.horizontalAccuracy))m, inside=\(state.isLocationWithinGeofence), rawOutside=\(state.isRawLocationOutsideGeofence)", subsystem: .locomotion)
+        Log.debug("SleepDetector [frozen]: rawDist=\(rawDist.map { String(format: "%.0f", $0) } ?? "?")m, dist=\(filteredDist.map { String(format: "%.0f", $0) } ?? "?")m, radius=\(String(format: "%.0f", state.geofenceRadius))m, rawAcc=\(String(format: "%.0f", rawLocation.horizontalAccuracy))m, hAcc=\(String(format: "%.0f", filteredLocation.horizontalAccuracy))m, inside=\(state.isLocationWithinGeofence), rawOutside=\(state.isRawLocationOutsideGeofence)", subsystem: .locomotion)
 
         if !state.isLocationWithinGeofence {
             Log.info("SleepDetector: unfreezing — filtered location outside geofence", subsystem: .locomotion)
