@@ -15,7 +15,7 @@ During this phase, all records are imported with null edge relationships to avoi
 1. Places imported first
    - No dependencies on other records
    - Preserves all place metadata and visit stats
-   - Handles duplicate places via upsert
+   - Duplicate places skipped via INSERT OR IGNORE (existing records are not updated)
 
 2. Timeline Items imported next
    - Visit/Trip type preserved
@@ -51,6 +51,16 @@ WHERE id = ?
 - Foreign key constraints enforced
 - No dependency on edge healing system
 - Temp file removed after successful restore
+
+## Conflict Resolution
+
+The current importer uses `INSERT OR IGNORE` for all record types (places, timeline items, and samples). Records with IDs that already exist in the database are silently skipped. This means:
+
+- The importer is designed for full restores into empty databases or adding new data
+- Existing records cannot be updated or replaced via import
+- To import corrected data, it must use new UUIDs (which creates new records alongside existing ones)
+
+**Planned**: Future versions will support `lastSaved`-based conflict resolution, where imported records with a newer `lastSaved` timestamp will update existing records. This is not yet implemented.
 
 ## Special Cases
 

@@ -39,8 +39,8 @@ Current status of the export/import system implementation.
 - [ ] Performance vs progress tracking tradeoffs
 
 ### Compression Support
-- [ ] Optional gzip compression (.json.gz)
-- [ ] Flexible format handling on import
+- [x] Optional gzip compression (.json.gz) - implemented in schema 2.2.0
+- [x] Flexible format handling on import (supports both .json and .json.gz)
 - [ ] Performance testing of compressed vs uncompressed
 - [ ] Infrastructure for future compression formats
 
@@ -51,8 +51,8 @@ Current status of the export/import system implementation.
 - [x] Basic error handling
 - [x] Basic place/item/sample import logic
 - [ ] Progress tracking
-- [ ] Sample FK constraint handling
-- [ ] LastSaved checks for incremental imports
+- [x] Sample FK constraint handling
+- [ ] LastSaved checks for incremental/update imports
 - [ ] Rebuild rtree indexes
 
 ## Future Work

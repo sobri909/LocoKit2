@@ -23,11 +23,9 @@ Core approach with clean separation and efficient organization:
    - Maintains chronological organization
 
 ### Compression Strategy
-- Optional compression for flexibility
-- Files may be .json or .json.gz
-- Implementations must support both
-- Starting with uncompressed for simplicity
-- Infrastructure ready for future formats
+- Sample files use gzip compression (.json.gz) as of schema 2.2.0
+- Item and place files remain uncompressed (.json)
+- Import supports both .json and .json.gz for backwards compatibility
 
 ## Implementation Notes
 

@@ -4,10 +4,9 @@ The LocoKit2 data persistence system supports both full database backups and dat
 
 ## Core Features
 
-- Two export formats:
-  * Bucketed format for backups and incremental updates
-  * Single-file format for sharing and analysis
-- Full database or date range exports
+- Bucketed export format for backups and incremental updates
+- Single-file format planned for sharing and analysis (not yet implemented)
+- Full database exports
 - Efficient incremental backup support
 - Compression for storage efficiency
 - Clear format specification for integrations

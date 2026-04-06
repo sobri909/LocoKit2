@@ -14,7 +14,7 @@
 
 ## Export Formats
 
-Two supported export formats with different use cases:
+One implemented format, with a second planned:
 
 ### 1. Bucketed Format
 
@@ -43,9 +43,10 @@ export-YYYY-MM-DD-HHmmss/
 metadata.json:
 ```json
 {
-  "schemaVersion": "2.1.0",     // Semantic version of export format
-  "exportMode": "bucketed",     // "bucketed" or "singleFile"
-  "exportType": "full",         // "full" or "incremental"
+  "exportId": "A1B2C3D4-...",   // Unique identifier for this export session (used for resume validation)
+  "schemaVersion": "2.2.0",     // Semantic version of export format
+  "exportMode": "bucketed",     // "bucketed" (only supported mode currently)
+  "exportType": "full",         // "full" or "incremental" (only valid values)
 
   // Export session timing (ISO8601 strings)
   "sessionStartDate": "2025-12-02T10:30:00Z",   // When this export session began
@@ -69,40 +70,20 @@ metadata.json:
   // Optional: extension state for app-specific tables
   "extensions": {
     "notes": { "recordCount": 142 }
+  },
+
+  // Optional: app-specific metadata (passthrough from app layer)
+  "appMetadata": {
+    "key": "value"
   }
 }
 ```
 
+**Important**: The `exportType` field only accepts `"full"` or `"incremental"`. Other values (e.g. `"partial"`, `"backup"`) will cause a decode failure during import.
+
 ### 2. Single File Format (Planned)
 
-Designed for sharing specific date ranges. All data contained in one file. Not yet implemented.
-
-#### File Structure
-```
-2025-01-05.json[.gz]   # Contents:
-{
-  "schemaVersion": "2.1.0",
-  "exportMode": "singleFile",
-  "exportType": "partial",
-  "exportRange": {
-    "start": "2025-01-05T00:00:00Z",
-    "end": "2025-01-06T00:00:00Z"
-  },
-  "sessionStartDate": "2025-12-02T10:30:00Z",
-  "sessionFinishDate": "2025-12-02T10:32:45Z",
-  "itemsCompleted": true,
-  "placesCompleted": true,
-  "samplesCompleted": true,
-  "stats": {
-    "placeCount": 42,
-    "itemCount": 96,
-    "sampleCount": 1440
-  },
-  "items": [...],
-  "places": [...],
-  "samples": [...]
-}
-```
+Designed for sharing specific date ranges. All data contained in one file. **Not yet implemented.**
 
 ## Export Policy
 
@@ -168,11 +149,11 @@ Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying
 ```typescript
 {
   id: string           // UUID
-  name: string        // Required, non-null
+  name: string        // Required, non-null, must be non-empty
   streetAddress: string | null
   locality: string | null
   countryCode: string | null
-  secondsFromGMT: number
+  secondsFromGMT: number | null  // nullable (pre-2019 data may lack timezone)
   latitude: number
   longitude: number
   radiusMean: number  // meters
@@ -180,17 +161,23 @@ Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying
   isStale: boolean
   visitCount: number
   visitDays: number
+  lastVisitDate: string | null  // ISO8601 date string
   lastSaved: string   // ISO8601 date string
   source: string      // eg "LocoKit2"
   rtreeId: number | null
 
   // Provider IDs
+  mapboxPlaceId: string | null
+  mapboxCategory: string | null
+  mapboxMakiIcon: string | null
   googlePlaceId: string | null
   googlePrimaryType: string | null
   foursquarePlaceId: string | null
   foursquareCategoryId: number | null
 }
 ```
+
+Note: Place histogram data (arrivalTimes, leavingTimes, visitDurations, occupancyTimes) is stored in the database as binary blobs but is **not included** in JSON exports. These are regenerated from visit data.
 
 ### TimelineItem Structure
 Timeline items are stored in three related tables that form a hierarchy:
@@ -232,13 +219,15 @@ Additional fields for visit items:
 {
   visit: {
     itemId: string           // UUID, foreign key to base
-    latitude: number
-    longitude: number
+    latitude: number | null  // nullable (both must be null or both valid)
+    longitude: number | null // nullable (both must be null or both valid)
     radiusMean: number
     radiusSD: number
     placeId: string | null
     confirmedPlace: boolean
     uncertainPlace: boolean
+    customTitle: string | null   // user-set custom name for the visit
+    streetAddress: string | null
     lastSaved: string        // ISO8601 date string
   }
 }
@@ -267,11 +256,12 @@ Additional fields for trip items:
   date: string             // ISO8601 date string
   source: string
   sourceVersion: string
-  secondsFromGMT: number
+  secondsFromGMT: number | null  // nullable (pre-2019 samples may lack timezone)
   movingState: number      // Maps to MovingState enum
   recordingState: number   // Maps to RecordingState enum
   disabled: boolean
   lastSaved: string        // ISO8601 date string
+  rtreeId: number | null   // spatial index reference
   timelineItemId: string | null
   
   // Location data
@@ -287,6 +277,9 @@ Additional fields for trip items:
   stepHz: number | null
   xyAcceleration: number | null
   zAcceleration: number | null
+  
+  // Health data
+  heartRate: number | null
   
   // Activity classification
   classifiedActivityType: number | null
