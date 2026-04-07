@@ -407,14 +407,13 @@ public final class LocomotionManager: @unchecked Sendable {
     private var wakeupTimeoutTimer: Timer?
     private let wakeupTimeout: TimeInterval = 30
 
+    @MainActor
     private func restartTheFallbackTimer() {
         let duration = fallbackUpdateDuration
-        Task { @MainActor in
-            fallbackUpdateTimer?.invalidate()
-            fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-                if let self {
-                    Task { await self.updateTheRecordingState() }
-                }
+        fallbackUpdateTimer?.invalidate()
+        fallbackUpdateTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+            if let self {
+                Task { await self.updateTheRecordingState() }
             }
         }
     }
@@ -422,47 +421,41 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func restartTheWakeupTimer() {
         let duration = sleepCycleDuration
-        Task { @MainActor in
-            wakeupTimer?.invalidate()
-            wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-                if let self {
-                    Task { await self.startWakeup() }
-                }
+        wakeupTimer?.invalidate()
+        wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+            if let self {
+                Task { await self.startWakeup() }
             }
         }
     }
 
+    @MainActor
     private func restartTheStandbyTimer() {
         let duration = standbyCycleDuration
-        Task { @MainActor in
-            standbyTimer?.invalidate()
-            standbyTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-                if let self {
-                    Task { await self.startWakeup() }
-                }
+        standbyTimer?.invalidate()
+        standbyTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
+            if let self {
+                Task { await self.startWakeup() }
             }
         }
     }
 
+    @MainActor
     private func stopTheFallbackTimer() {
-        Task { @MainActor in
-            fallbackUpdateTimer?.invalidate()
-            fallbackUpdateTimer = nil
-        }
+        fallbackUpdateTimer?.invalidate()
+        fallbackUpdateTimer = nil
     }
 
+    @MainActor
     private func stopTheWakeupTimer() {
-        Task { @MainActor in
-            wakeupTimer?.invalidate()
-            wakeupTimer = nil
-        }
+        wakeupTimer?.invalidate()
+        wakeupTimer = nil
     }
 
+    @MainActor
     private func stopTheStandbyTimer() {
-        Task { @MainActor in
-            standbyTimer?.invalidate()
-            standbyTimer = nil
-        }
+        standbyTimer?.invalidate()
+        standbyTimer = nil
     }
 
     @MainActor
@@ -475,6 +468,7 @@ public final class LocomotionManager: @unchecked Sendable {
         }
     }
 
+    @MainActor
     private func stopTheWakeupTimeoutTimer() {
         wakeupTimeoutStart = nil
         wakeupTimeoutTimer?.invalidate()
