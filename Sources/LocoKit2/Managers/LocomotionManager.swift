@@ -247,6 +247,8 @@ public final class LocomotionManager: @unchecked Sendable {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
 
+        Log.info("startWakeup() (was: \(recordingState))", subsystem: .locomotion)
+
         locationManager.startUpdatingLocation()
 
         // if in standby, do standby specific checks then exit early
@@ -343,6 +345,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
             } else {
                 // both raw and Kalman inside geofence — back to sleep
+                Log.info("Wakeup: both inside geofence — back to sleep", subsystem: .locomotion)
                 stopTheWakeupTimeoutTimer()
                 startSleeping()
             }
@@ -421,6 +424,7 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func restartTheWakeupTimer() {
         let duration = sleepCycleDuration
+        Log.info("Wakeup timer set (\(String(format: "%.0f", duration))s)", subsystem: .locomotion)
         wakeupTimer?.invalidate()
         wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
             if let self {
@@ -513,23 +517,23 @@ public final class LocomotionManager: @unchecked Sendable {
         }
 
         func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-            Task {
+            Task.detached {
                 for location in locations {
-                    await parent.add(location: location)
+                    await self.parent.add(location: location)
                 }
             }
         }
 
         func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
-            print("locationManagerDidPauseLocationUpdates()")
+            Log.error("locationManagerDidPauseLocationUpdates() — iOS paused despite pausesLocationUpdatesAutomatically=false", subsystem: .locomotion)
 
-            Task { @MainActor in
+            Task.detached { @MainActor in
                 self.parent.startSleeping()
             }
         }
 
         func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
-            print("locationManagerDidResumeLocationUpdates()")
+            Log.info("locationManagerDidResumeLocationUpdates()", subsystem: .locomotion)
         }
 
         func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
