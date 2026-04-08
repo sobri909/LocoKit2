@@ -56,12 +56,13 @@ extension TimelineItem {
         }
 
         if keepIndices.count < sortedSamples.count {
-            print("""
-              pruneTripSamples() results:
-              - Activity type: \(activityType.displayName)
-              - Total samples: \(sortedSamples.count)
-              - Keeping: \(keepIndices.count) samples (\(Int((Double(keepIndices.count) / Double(sortedSamples.count)) * 100))%)
-              """)
+            let survivors = keepIndices.sorted().map { sortedSamples[$0] }
+            var maxGapSeconds: TimeInterval = 0
+            for i in 1..<survivors.count {
+                let gap = survivors[i].date.timeIntervalSince(survivors[i-1].date)
+                if gap > maxGapSeconds { maxGapSeconds = gap }
+            }
+            Log.info("pruneTripSamples() \(debugShortId): \(keepIndices.count)/\(sortedSamples.count) samples (\(activityType.displayName)), maxGap: \(String(format: "%.0f", maxGapSeconds))s", subsystem: .timeline)
         }
     }
 
@@ -117,7 +118,13 @@ extension TimelineItem {
         }
 
         if keepSamples.count < samples.count {
-            Log.debug("pruneVisitSamples() \(debugShortId): keeping \(keepSamples.count)/\(samples.count) samples", subsystem: .timeline)
+            let survivors = samples.filter { keepSamples.contains($0.id) }.sorted { $0.date < $1.date }
+            var maxGapSeconds: TimeInterval = 0
+            for i in 1..<survivors.count {
+                let gap = survivors[i].date.timeIntervalSince(survivors[i-1].date)
+                if gap > maxGapSeconds { maxGapSeconds = gap }
+            }
+            Log.info("pruneVisitSamples() \(debugShortId): \(keepSamples.count)/\(samples.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s", subsystem: .timeline)
         }
     }
 
