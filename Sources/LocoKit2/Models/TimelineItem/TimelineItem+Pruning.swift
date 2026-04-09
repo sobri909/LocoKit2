@@ -66,6 +66,18 @@ extension TimelineItem {
         }
     }
 
+    // MARK: - Visit pruning
+
+    /// Prune visit samples using a sliding window of three consecutive samples.
+    ///
+    /// For each window where the span (first to last) is <= maxGap:
+    /// - Delete the middle sample unless it has strictly the best accuracy of the three.
+    /// - Repeat until no more deletions occur (stable).
+    ///
+    /// This guarantees:
+    /// - No gap > maxGap is ever created (the two ends are already within maxGap)
+    /// - Higher accuracy samples are preferentially retained
+    /// - Idempotent: re-running on already-pruned data produces no changes
     @TimelineActor
     private func pruneVisitSamples() async throws {
         guard isVisit, let dateRange = dateRange, let samples = samples else {
@@ -76,103 +88,78 @@ extension TimelineItem {
         let endEdgeStart = dateRange.end - .minutes(30)
         let maxGap: TimeInterval = .minutes(2)
 
-        var keepSamples: Set<String> = []
-
-        // first pass: keep all edge and non-stationary samples
+        // protect edge and non-stationary samples from deletion
+        var protected: Set<String> = []
         for sample in samples {
-            // Always keep non-stationary samples
             if sample.activityType != .stationary {
-                keepSamples.insert(sample.id)
-                continue
-            }
-
-            // Keep edge samples
-            if sample.date <= startEdgeEnd || sample.date >= endEdgeStart {
-                keepSamples.insert(sample.id)
-                continue
+                protected.insert(sample.id)
+            } else if sample.date <= startEdgeEnd || sample.date >= endEdgeStart {
+                protected.insert(sample.id)
             }
         }
 
-        // get remaining samples to process
-        let middleSamples = samples
-            .filter { !keepSamples.contains($0.id) }
-            .sorted { $0.date < $1.date }
+        var working = samples.sorted { $0.date < $1.date }
+        var totalDeleted = 0
 
-        // group nearby samples, keep the best from each group
-        let clusters = clusterByProximity(middleSamples, maxGap: maxGap)
-        for cluster in clusters {
-            if cluster.count == 1 {
-                keepSamples.insert(cluster[0].id)
-            } else if let bestSample = chooseBestSample(from: cluster) {
-                keepSamples.insert(bestSample.id)
+        while true {
+            var deletedThisPass = 0
+            var i = 0
+
+            while i < working.count - 2 {
+                let left = working[i]
+                let mid = working[i + 1]
+                let right = working[i + 2]
+
+                // skip protected samples
+                if protected.contains(mid.id) {
+                    i += 1
+                    continue
+                }
+
+                let span = right.date.timeIntervalSince(left.date)
+                if span <= maxGap {
+                    let midAcc = mid.horizontalAccuracy ?? 999
+                    let leftAcc = left.horizontalAccuracy ?? 999
+                    let rightAcc = right.horizontalAccuracy ?? 999
+
+                    // delete middle unless it's strictly the best accuracy
+                    if midAcc >= min(leftAcc, rightAcc) {
+                        working.remove(at: i + 1)
+                        deletedThisPass += 1
+                        continue
+                    }
+                }
+
+                i += 1
             }
+
+            totalDeleted += deletedThisPass
+            if deletedThisPass == 0 { break }
         }
 
-        // delete samples not in keepSamples
-        try await Database.pool.write { [keepSamples] db in
+        // log results
+        var maxGapSeconds: TimeInterval = 0
+        for i in 1..<working.count {
+            let gap = working[i].date.timeIntervalSince(working[i-1].date)
+            if gap > maxGapSeconds { maxGapSeconds = gap }
+        }
+        if totalDeleted > 0 {
+            Log.info("pruneVisitSamples() \(debugShortId): \(working.count)/\(samples.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s (\(totalDeleted) deleted)", subsystem: .timeline)
+        } else {
+            Log.info("pruneVisitSamples() \(debugShortId): \(working.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s (no change)", subsystem: .timeline)
+        }
+
+        if totalDeleted == 0 { return }
+
+        // delete pruned samples from the database
+        let survivorIds = Set(working.map { $0.id })
+        try await Database.pool.write { [survivorIds] db in
             for sample in samples {
-                if !keepSamples.contains(sample.id) {
+                if !survivorIds.contains(sample.id) {
                     try sample.delete(db)
                 }
             }
         }
-
-        if keepSamples.count < samples.count {
-            let survivors = samples.filter { keepSamples.contains($0.id) }.sorted { $0.date < $1.date }
-            var maxGapSeconds: TimeInterval = 0
-            for i in 1..<survivors.count {
-                let gap = survivors[i].date.timeIntervalSince(survivors[i-1].date)
-                if gap > maxGapSeconds { maxGapSeconds = gap }
-            }
-            Log.info("pruneVisitSamples() \(debugShortId): \(keepSamples.count)/\(samples.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s", subsystem: .timeline)
-        }
     }
 
-    /// Groups consecutive samples into time windows of at most maxGap duration.
-    /// A new cluster starts when either:
-    /// - the gap to the next sample is >= maxGap (sparse data boundary)
-    /// - the cluster's total duration would exceed maxGap (dense data window cap)
-    /// Input must be sorted by date.
-    private func clusterByProximity(_ samples: [LocomotionSample], maxGap: TimeInterval) -> [[LocomotionSample]] {
-        guard !samples.isEmpty else { return [] }
-
-        var clusters: [[LocomotionSample]] = []
-        var current: [LocomotionSample] = [samples[0]]
-
-        for sample in samples.dropFirst() {
-            let clusterStart = current[0].date
-            let wouldSpan = sample.date.timeIntervalSince(clusterStart)
-
-            if wouldSpan >= maxGap {
-                // cluster would exceed maxGap — close it and start fresh
-                clusters.append(current)
-                current = [sample]
-            } else {
-                current.append(sample)
-            }
-        }
-        clusters.append(current)
-
-        return clusters
-    }
-
-    private func chooseBestSample(from candidates: [LocomotionSample]) -> LocomotionSample? {
-        guard !candidates.isEmpty else { return nil }
-
-        // Sort by accuracy (higher accuracy = lower number = better)
-        // For equal accuracies, prefer older samples to minimize gaps
-        // Samples without horizontalAccuracy go last
-        return candidates
-            .sorted { lhs, rhs in
-                guard let lhsAccuracy = lhs.horizontalAccuracy else { return false }
-                guard let rhsAccuracy = rhs.horizontalAccuracy else { return true }
-
-                if lhsAccuracy == rhsAccuracy {
-                    return lhs.date < rhs.date // older samples first
-                }
-                return lhsAccuracy < rhsAccuracy
-            }
-            .first
-    }
-    
 }
