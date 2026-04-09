@@ -146,7 +146,7 @@ extension TimelineItem {
         if totalDeleted > 0 {
             Log.info("pruneVisitSamples() \(debugShortId): \(working.count)/\(samples.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s (\(totalDeleted) deleted)", subsystem: .timeline)
         } else {
-            Log.info("pruneVisitSamples() \(debugShortId): \(working.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s (no change)", subsystem: .timeline)
+            Log.debug("pruneVisitSamples() \(debugShortId): \(working.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s (no change)", subsystem: .timeline)
         }
 
         if totalDeleted == 0 { return }

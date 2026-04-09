@@ -247,7 +247,7 @@ public final class LocomotionManager: @unchecked Sendable {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
 
-        Log.info("startWakeup() (was: \(recordingState))", subsystem: .locomotion)
+        Log.debug("startWakeup() (was: \(recordingState))", subsystem: .locomotion)
 
         locationManager.startUpdatingLocation()
 
@@ -345,7 +345,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
             } else {
                 // both raw and Kalman inside geofence — back to sleep
-                Log.info("Wakeup: both inside geofence — back to sleep", subsystem: .locomotion)
+                Log.debug("Wakeup: both inside geofence — back to sleep", subsystem: .locomotion)
                 stopTheWakeupTimeoutTimer()
                 startSleeping()
             }
@@ -424,7 +424,7 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func restartTheWakeupTimer() {
         let duration = sleepCycleDuration
-        Log.info("Wakeup timer set (\(String(format: "%.0f", duration))s)", subsystem: .locomotion)
+        Log.debug("Wakeup timer set (\(String(format: "%.0f", duration))s)", subsystem: .locomotion)
         wakeupTimer?.invalidate()
         wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
             if let self {
