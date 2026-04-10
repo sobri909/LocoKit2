@@ -91,7 +91,7 @@ extension TimelineItem {
         // protect edge and non-stationary samples from deletion
         var protected: Set<String> = []
         for sample in samples {
-            if sample.activityType != .stationary {
+            if sample.activityType != .stationary && sample.activityType != .bogus {
                 protected.insert(sample.id)
             } else if sample.date <= startEdgeEnd || sample.date >= endEdgeStart {
                 protected.insert(sample.id)
