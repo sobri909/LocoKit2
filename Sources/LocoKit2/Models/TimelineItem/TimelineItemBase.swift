@@ -40,21 +40,8 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
         return nil
     }
 
-    public var previousItemId: String? {
-        didSet {
-            if previousItemId != nil, previousItemId == nextItemId {
-                fatalError("Can't set previousItem and nextItem to the same item")
-            }
-        }
-    }
-
-    public var nextItemId: String? {
-        didSet {
-            if nextItemId != nil, previousItemId == nextItemId {
-                fatalError("Can't set previousItem and nextItem to the same item")
-            }
-        }
-    }
+    public var previousItemId: String?
+    public var nextItemId: String?
 
     public static let visit = hasOne(TimelineItemVisit.self).forKey("visit")
     public static let trip = hasOne(TimelineItemTrip.self).forKey("trip")
