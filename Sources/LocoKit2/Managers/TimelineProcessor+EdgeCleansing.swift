@@ -43,12 +43,16 @@ extension TimelineProcessor {
             if let previousItemId = item.base.previousItemId {
                 if let moved = try await edgeSteal(forItemId: itemId, otherItemId: previousItemId, in: list, excluding: excluding.union(allMoved)) {
                     movedThisLoop.insert(moved)
+                    list.invalidate(itemId: itemId)
+                    list.invalidate(itemId: previousItemId)
                 }
             }
 
             if let nextItemId = item.base.nextItemId {
                 if let moved = try await edgeSteal(forItemId: itemId, otherItemId: nextItemId, in: list, excluding: excluding.union(allMoved)) {
                     movedThisLoop.insert(moved)
+                    list.invalidate(itemId: itemId)
+                    list.invalidate(itemId: nextItemId)
                 }
             }
 
