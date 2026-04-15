@@ -298,6 +298,7 @@ public final class LocomotionManager: @unchecked Sendable {
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
 
         await stationaryDetector.add(location: kalmanLocation)
+        await stationaryDetector.addRaw(location: location)
 
         await sleepModeDetector.add(filteredLocation: kalmanLocation, rawLocation: location)
 
