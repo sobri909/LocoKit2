@@ -43,7 +43,7 @@ public extension CLLocation {
     }
 
     var invalidVelocity: Bool {
-        course < 0 || speed < 0 || courseAccuracy < 0 || speedAccuracy < 0
+        course < 0 || speed < 0 || courseAccuracy < 0 || speedAccuracy < 0 || speedAccuracy >= 20
     }
 
     var hasUsableCoordinate: Bool {
