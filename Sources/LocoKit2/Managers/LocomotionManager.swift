@@ -28,6 +28,8 @@ public final class LocomotionManager: @unchecked Sendable {
         sleepCycleDuration = duration
     }
 
+    public var recordRawLocations: Bool = false
+
     public var standbyCycleDuration: TimeInterval = 60 * 2
     public var fallbackUpdateDuration: TimeInterval = 6
 
@@ -513,10 +515,50 @@ public final class LocomotionManager: @unchecked Sendable {
         }
 
         func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+            if parent.recordRawLocations {
+                for location in locations {
+                    Self.dumpRawLocation(location)
+                }
+            }
+
             Task.detached {
                 for location in locations {
                     await self.parent.add(location: location)
                 }
+            }
+        }
+
+        nonisolated(unsafe) private static var rawDumpFileHandle: FileHandle?
+        nonisolated(unsafe) private static var rawDumpInitialised = false
+
+        private static func dumpRawLocation(_ location: CLLocation) {
+            if !rawDumpInitialised {
+                rawDumpInitialised = true
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+                let file = docs.appendingPathComponent("raw_locations.csv")
+                if !FileManager.default.fileExists(atPath: file.path) {
+                    let header = "timestamp,lat,lon,hAcc,vAcc,altitude,speed,speedAcc,course,courseAcc,floor\n"
+                    FileManager.default.createFile(atPath: file.path, contents: header.data(using: .utf8))
+                }
+                rawDumpFileHandle = FileHandle(forWritingAtPath: file.path)
+                rawDumpFileHandle?.seekToEndOfFile()
+            }
+
+            let line = String(format: "%.3f,%.8f,%.8f,%.1f,%.1f,%.1f,%.2f,%.2f,%.2f,%.2f,%@\n",
+                              location.timestamp.timeIntervalSince1970,
+                              location.coordinate.latitude,
+                              location.coordinate.longitude,
+                              location.horizontalAccuracy,
+                              location.verticalAccuracy,
+                              location.altitude,
+                              location.speed,
+                              location.speedAccuracy,
+                              location.course,
+                              location.courseAccuracy,
+                              location.floor.map { String($0.level) } ?? "")
+
+            if let data = line.data(using: .utf8) {
+                rawDumpFileHandle?.write(data)
             }
         }
 
