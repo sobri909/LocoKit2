@@ -56,6 +56,15 @@ extension Database {
                     WHERE itemId = NEW.itemId;
                 END;
                 """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER DriftProfile_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON DriftProfile
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE DriftProfile SET lastSaved = CURRENT_TIMESTAMP WHERE id = NEW.id;
+                END;
+                """)
         }
     }
 

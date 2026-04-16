@@ -254,5 +254,21 @@ extension Database {
                 columns: ["rtreeId"]
             )
         }
+
+        // BIG-306: Drift profile learning for Trust Factor
+        migrator.registerMigration("DriftProfile") { db in
+            try? db.create(table: "DriftProfile") { table in
+                Database.defineDriftProfileTable(table)
+            }
+
+            try? db.execute(sql: """
+                CREATE TRIGGER DriftProfile_AFTER_UPDATE_lastSaved_UNCHANGED
+                AFTER UPDATE ON DriftProfile
+                WHEN NEW.lastSaved IS OLD.lastSaved
+                BEGIN
+                    UPDATE DriftProfile SET lastSaved = CURRENT_TIMESTAMP WHERE id = NEW.id;
+                END;
+                """)
+        }
     }
 }

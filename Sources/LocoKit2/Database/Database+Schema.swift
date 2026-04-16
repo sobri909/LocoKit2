@@ -56,6 +56,12 @@ extension Database {
                 using: "rtree(id, latMin, latMax, lonMin, lonMax)"
             )
 
+            // MARK: - DriftProfile
+
+            try db.create(table: "DriftProfile") { table in
+                Database.defineDriftProfileTable(table)
+            }
+
             // MARK: - TimelineItem
 
             try db.create(table: "TimelineItemBase") { table in
@@ -250,5 +256,24 @@ extension Database {
 
         table.column("classifiedActivityType", .integer)
         table.column("confirmedActivityType", .integer)
+    }
+
+    // MARK: - Shared Table Definitions
+
+    static func defineDriftProfileTable(_ table: TableDefinition) {
+        table.primaryKey("id", .text)
+        table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+        table.column("placeId", .text).indexed()
+            .references("Place", onDelete: .cascade, deferred: true)
+        table.column("excursionSampleCount", .integer).notNull().defaults(to: 0)
+        table.column("maxObservedDrift", .double).notNull().defaults(to: 0)
+        table.column("meanDriftDistance", .double).notNull().defaults(to: 0)
+        table.column("directionHistogram", .text).notNull().defaults(to: "[]")
+        table.column("typicalSpeedMin", .double).notNull().defaults(to: 0)
+        table.column("typicalSpeedMax", .double).notNull().defaults(to: 0)
+        table.column("typicalHAccMin", .double).notNull().defaults(to: 0)
+        table.column("typicalHAccMax", .double).notNull().defaults(to: 0)
+        table.column("typicalVAccDuringDrift", .double)
+        table.column("courseAvailability", .double).notNull().defaults(to: 0)
     }
 }

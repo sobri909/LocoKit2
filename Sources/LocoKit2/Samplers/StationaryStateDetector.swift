@@ -74,16 +74,16 @@ public actor StationaryStateDetector {
         // Determine the stationary state based on the weighted statistics
         var result: MovingState = (weightedMeanSpeed < meanSpeedThreshold && weightedStdDev < sdSpeedThreshold) ? .stationary : .moving
 
+        // compute raw invalidVelocity rate for override check and debug display
+        let invalidVelocityRate: Double? = rawSample.isEmpty ? nil :
+            Double(rawSample.filter { $0.invalidVelocity }.count) / Double(rawSample.count)
+
         // Raw speed=-1 override: if Kalman says moving but raw speed=-1 rate
         // is high, the device is likely genuinely stationary — iOS is honestly
         // reporting "I don't know" which only happens when not moving
-        if result == .moving, !rawSample.isEmpty {
-            let invalidCount = rawSample.filter { $0.invalidVelocity }.count
-            let invalidRate = Double(invalidCount) / Double(rawSample.count)
-            if invalidRate >= rawSpeedInvalidThreshold {
-                result = .stationary
-                Log.info("StationaryStateDetector overrode .moving → .stationary (raw invalidVelocity rate: \(Int(invalidRate * 100))%, \(rawSample.count) raws)", subsystem: .misc)
-            }
+        if result == .moving, let rate = invalidVelocityRate, rate >= rawSpeedInvalidThreshold {
+            result = .stationary
+            Log.info("StationaryStateDetector overrode .moving → .stationary (raw invalidVelocity rate: \(Int(rate * 100))%, \(rawSample.count) raws)", subsystem: .misc)
         }
 
         return MovingStateDetails(
@@ -91,7 +91,8 @@ public actor StationaryStateDetector {
             timestamp: newest.timestamp,
             meanAccuracy: meanAccuracy,
             meanSpeed: weightedMeanSpeed,
-            sdSpeed: weightedStdDev
+            sdSpeed: weightedStdDev,
+            rawInvalidVelocityRate: invalidVelocityRate
         )
     }
 

@@ -38,13 +38,15 @@ public struct MovingStateDetails: Sendable {
     public let meanAccuracy: CLLocationAccuracy?
     public let meanSpeed: CLLocationSpeed?
     public let sdSpeed: CLLocationSpeed?
+    public let rawInvalidVelocityRate: Double?
 
     internal init(
         _ movingState: MovingState,
         n: Int, timestamp: Date,
         meanAccuracy: CLLocationAccuracy? = nil,
         meanSpeed: CLLocationSpeed? = nil,
-        sdSpeed: CLLocationSpeed? = nil
+        sdSpeed: CLLocationSpeed? = nil,
+        rawInvalidVelocityRate: Double? = nil
     ) {
         self.movingState = movingState
         self.n = n
@@ -52,5 +54,6 @@ public struct MovingStateDetails: Sendable {
         self.meanAccuracy = meanAccuracy
         self.meanSpeed = meanSpeed
         self.sdSpeed = sdSpeed
+        self.rawInvalidVelocityRate = rawInvalidVelocityRate
     }
 }
