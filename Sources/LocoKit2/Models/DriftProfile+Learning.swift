@@ -48,10 +48,8 @@ extension DriftProfile {
             distances.append(distance)
 
             // bearing and sector
-            let bearing = self.bearing(
-                from: CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude),
-                to: sampleLocation.coordinate
-            )
+            let bearing = CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
+                .bearing(to: sampleLocation.coordinate)
             let sector = Int(bearing / 45.0) % 8
             sectorCounts[sector] += 1
 
@@ -248,14 +246,6 @@ extension DriftProfile {
     }
 
     // MARK: - Helpers
-
-    private static func bearing(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> Double {
-        let dLon = (to.longitude - from.longitude).radians
-        let y = sin(dLon) * cos(to.latitude.radians)
-        let x = cos(from.latitude.radians) * sin(to.latitude.radians) -
-                sin(from.latitude.radians) * cos(to.latitude.radians) * cos(dLon)
-        return (atan2(y, x).degrees + 360).truncatingRemainder(dividingBy: 360)
-    }
 
     private static func median(of values: [Double]) -> Double? {
         guard !values.isEmpty else { return nil }

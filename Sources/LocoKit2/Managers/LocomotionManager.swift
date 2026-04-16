@@ -294,9 +294,13 @@ public final class LocomotionManager: @unchecked Sendable {
         // only accept locations when recording is supposed to be happening
         guard recordingState == .recording || recordingState == .wakeup else { return }
 
-        await kalmanFilter.add(location: location)
+        // apply drift inflation before the Kalman sees the raw
+        let processedLocation = await applyDriftInflation(to: location) ?? location
+
+        await kalmanFilter.add(location: processedLocation)
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
 
+        // stationary detector gets the original raw for invalidVelocity checks
         await stationaryDetector.add(location: kalmanLocation)
         await stationaryDetector.addRaw(location: location)
 
@@ -307,6 +311,39 @@ public final class LocomotionManager: @unchecked Sendable {
         lastFilteredLocation = kalmanLocation
         lastRawLocation = location
         lastUpdated = .now
+    }
+
+    // MARK: - Drift Inflation (Trust Factor Layer 2)
+
+    private func applyDriftInflation(to location: CLLocation) async -> CLLocation? {
+        guard let context = await TimelineRecorder.currentDriftContext() else { return nil }
+
+        let distance = location.distance(from: context.centroid)
+
+        // compute bearing and check if this direction has drift history
+        let bearing = context.centroid.coordinate.bearing(to: location.coordinate)
+        let sector = Int(bearing / 45.0) % 8
+        guard context.profile.directionHistogram[sector] > 0 else { return nil }
+
+        let inflatedHAcc = max(location.horizontalAccuracy, context.profile.meanDriftDistance)
+
+        Log.debug(
+            "DriftInflation: \(Int(distance))m at \(Int(bearing))° (sector \(sector)), " +
+            "hAcc \(Int(location.horizontalAccuracy))→\(Int(inflatedHAcc))m, spdAcc→20",
+            subsystem: .misc
+        )
+
+        return CLLocation(
+            coordinate: location.coordinate,
+            altitude: location.altitude,
+            horizontalAccuracy: inflatedHAcc,
+            verticalAccuracy: location.verticalAccuracy,
+            course: location.course,
+            courseAccuracy: location.courseAccuracy,
+            speed: location.speed,
+            speedAccuracy: 20.0,
+            timestamp: location.timestamp
+        )
     }
 
     @MainActor

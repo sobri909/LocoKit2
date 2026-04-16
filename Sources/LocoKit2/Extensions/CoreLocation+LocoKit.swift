@@ -57,6 +57,15 @@ public extension CLLocationCoordinate2D {
     var isValid: Bool { CLLocationCoordinate2DIsValid(self) }
     var location: CLLocation { CLLocation(latitude: latitude, longitude: longitude) }
 
+    /// Forward azimuth (bearing) from self to another coordinate, in degrees 0-360
+    func bearing(to other: CLLocationCoordinate2D) -> Double {
+        let dLon = (other.longitude - longitude).radians
+        let y = sin(dLon) * cos(other.latitude.radians)
+        let x = cos(latitude.radians) * sin(other.latitude.radians) -
+                sin(latitude.radians) * cos(other.latitude.radians) * cos(dLon)
+        return (atan2(y, x).degrees + 360).truncatingRemainder(dividingBy: 360)
+    }
+
     func perpendicularDistance(to line: (CLLocationCoordinate2D, CLLocationCoordinate2D)) -> CLLocationDistance {
         let lat = self.latitude.radians
         let lon = self.longitude.radians

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreLocation
 import GRDB
 
 @TimelineActor
@@ -35,6 +36,51 @@ public enum TimelineRecorder {
         get async {
             return await loco.recordingState != .off
         }
+    }
+
+    // MARK: - Drift Profile Context
+
+    public struct DriftContext: Sendable {
+        public let itemId: String
+        public let placeId: String
+        public let centroid: CLLocation
+        public let profile: DriftProfile
+    }
+
+    private static var _cachedDriftContext: DriftContext?
+
+    /// Returns the drift profile context for the current visit, if available.
+    /// Caches by itemId — only fetches from DB when the current item changes.
+    public static func currentDriftContext() -> DriftContext? {
+        guard let itemId = currentItemId else {
+            _cachedDriftContext = nil
+            return nil
+        }
+
+        // cache hit — same item, same context
+        if let cached = _cachedDriftContext, cached.itemId == itemId {
+            return cached
+        }
+
+        // fetch fresh
+        guard let item = currentItem(includeSamples: false, includePlaces: true),
+              let place = item.place,
+              let placeId = item.visit?.placeId else {
+            _cachedDriftContext = nil
+            return nil
+        }
+
+        let context: DriftContext? = try? Database.pool.read { db in
+            guard let profile = try DriftProfile
+                .filter(DriftProfile.Columns.placeId == placeId)
+                .fetchOne(db) else { return nil }
+
+            let centroid = CLLocation(latitude: place.latitude, longitude: place.longitude)
+            return DriftContext(itemId: itemId, placeId: placeId, centroid: centroid, profile: profile)
+        }
+
+        _cachedDriftContext = context
+        return context
     }
 
     // MARK: -
