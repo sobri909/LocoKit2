@@ -318,19 +318,36 @@ public final class LocomotionManager: @unchecked Sendable {
     private func applyDriftInflation(to location: CLLocation) async -> CLLocation? {
         guard let context = await TimelineRecorder.currentDriftContext() else { return nil }
 
-        let distance = location.distance(from: context.centroid)
-
-        // compute bearing and check if this direction has drift history
+        // compute bearing and sector
         let bearing = context.centroid.coordinate.bearing(to: location.coordinate)
         let sector = Int(bearing / 45.0) % 8
-        guard context.profile.directionHistogram[sector] > 0 else { return nil }
 
-        let inflatedHAcc = max(location.horizontalAccuracy, context.profile.meanDriftDistance)
+        let count = context.profile.directionCounts[sector]
+        guard count > 0 else { return nil }  // no drift history in this direction
 
-        Log.debug(
-            "DriftInflation: \(Int(distance))m at \(Int(bearing))° (sector \(sector)), " +
-            "hAcc \(Int(location.horizontalAccuracy))→\(Int(inflatedHAcc))m, spdAcc→20",
-            subsystem: .misc
+        // confidence ramps with count — 5+ samples = full confidence in this sector's magnitude
+        let confidence = min(1.0, Double(count) / 5.0)
+        let sectorMagnitude = context.profile.directionMagnitudes[sector]
+        let effectiveInflation = sectorMagnitude * confidence
+
+        // scale hAcc and speedAccuracy proportionally to effective inflation
+        let inflatedHAcc = max(location.horizontalAccuracy, effectiveInflation)
+        // leave invalidVelocity raws untouched — iOS's "don't know" already gives Kalman a zero-velocity anchor
+        // otherwise stay below the 20.0 invalidVelocity sentinel — let Kalman's quadratic variance do the work
+        let inflatedSpdAcc: Double
+        if location.invalidVelocity {
+            inflatedSpdAcc = location.speedAccuracy
+        } else {
+            inflatedSpdAcc = min(19.0, max(location.speedAccuracy, effectiveInflation / 20))
+        }
+
+        let distance = location.distance(from: context.centroid)
+        Log.info(
+            "DriftInflation: \(Int(distance))m at \(Int(bearing))° (sector \(sector), " +
+            "\(count) samples × \(Int(sectorMagnitude))m × conf \(String(format: "%.2f", confidence)) = \(Int(effectiveInflation))m effective), " +
+            "hAcc \(Int(location.horizontalAccuracy))→\(Int(inflatedHAcc))m, " +
+            "spdAcc \(String(format: "%.1f", location.speedAccuracy))→\(String(format: "%.1f", inflatedSpdAcc))",
+            subsystem: .locomotion
         )
 
         return CLLocation(
@@ -341,7 +358,7 @@ public final class LocomotionManager: @unchecked Sendable {
             course: location.course,
             courseAccuracy: location.courseAccuracy,
             speed: location.speed,
-            speedAccuracy: 20.0,
+            speedAccuracy: inflatedSpdAcc,
             timestamp: location.timestamp
         )
     }

@@ -37,6 +37,7 @@ extension DriftProfile {
         // compute per-excursion-sample metrics
         var distances: [Double] = []
         var sectorCounts = Array(repeating: 0, count: 8)
+        var sectorDistanceSums = Array(repeating: 0.0, count: 8)
         var validSpeeds: [Double] = []
         var hAccValues: [Double] = []
         var vAccValues: [Double] = []
@@ -52,6 +53,7 @@ extension DriftProfile {
                 .bearing(to: sampleLocation.coordinate)
             let sector = Int(bearing / 45.0) % 8
             sectorCounts[sector] += 1
+            sectorDistanceSums[sector] += distance
 
             // speed
             if let speed = sample.speed, speed >= 0 {
@@ -74,13 +76,22 @@ extension DriftProfile {
             }
         }
 
+        // compute mean magnitude per sector (0 for sectors with no samples)
+        var sectorMagnitudes = Array(repeating: 0.0, count: 8)
+        for i in 0..<8 {
+            if sectorCounts[i] > 0 {
+                sectorMagnitudes[i] = sectorDistanceSums[i] / Double(sectorCounts[i])
+            }
+        }
+
         // build the profile
         var profile = DriftProfile()
         profile.placeId = place.id
         profile.excursionSampleCount = excursionSamples.count
         profile.maxObservedDrift = distances.max() ?? 0
         profile.meanDriftDistance = distances.reduce(0, +) / Double(distances.count)
-        profile.directionHistogram = sectorCounts
+        profile.directionCounts = sectorCounts
+        profile.directionMagnitudes = sectorMagnitudes
         profile.typicalSpeedMin = validSpeeds.min() ?? 0
         profile.typicalSpeedMax = validSpeeds.max() ?? 0
         profile.typicalHAccMin = hAccValues.min() ?? 0
@@ -148,15 +159,15 @@ extension DriftProfile {
                     try profile.insert(db)
                 }
 
-                let topSector = profile.directionHistogram.enumerated().max(by: { $0.element < $1.element })
+                let topSector = profile.directionCounts.enumerated().max(by: { $0.element < $1.element })
                 let sectorNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
                 let directionName = topSector.map { sectorNames[$0.offset] } ?? "?"
+                let topMagnitude = topSector.map { profile.directionMagnitudes[$0.offset] } ?? 0
 
                 Log.info(
                     "DriftProfile updated for place '\(place.name)': \(profile.excursionSampleCount) excursion samples, " +
                     "max drift \(Int(profile.maxObservedDrift))m, mean \(Int(profile.meanDriftDistance))m, " +
-                    "primary direction \(directionName), " +
-                    "speed \(String(format: "%.1f", profile.typicalSpeedMin))-\(String(format: "%.1f", profile.typicalSpeedMax)) m/s",
+                    "primary direction \(directionName) (\(Int(topMagnitude))m mean)",
                     subsystem: .misc
                 )
             } catch {
@@ -194,7 +205,8 @@ extension DriftProfile {
             var weightedHAccMax = 0.0
             var weightedCourseAvail = 0.0
             var vAccValues: [Double] = []
-            var totalHistogram = Array(repeating: 0, count: 8)
+            var totalCounts = Array(repeating: 0, count: 8)
+            var totalDistanceSums = Array(repeating: 0.0, count: 8)
 
             for profile in placeProfiles {
                 let weight = Double(profile.excursionSampleCount)
@@ -211,7 +223,17 @@ extension DriftProfile {
                 }
 
                 for i in 0..<8 {
-                    totalHistogram[i] += profile.directionHistogram[i]
+                    totalCounts[i] += profile.directionCounts[i]
+                    // weight each profile's sector magnitude by its sector count to get total distance
+                    totalDistanceSums[i] += Double(profile.directionCounts[i]) * profile.directionMagnitudes[i]
+                }
+            }
+
+            // compute aggregate mean magnitudes per sector
+            var genericMagnitudes = Array(repeating: 0.0, count: 8)
+            for i in 0..<8 {
+                if totalCounts[i] > 0 {
+                    genericMagnitudes[i] = totalDistanceSums[i] / Double(totalCounts[i])
                 }
             }
 
@@ -219,7 +241,8 @@ extension DriftProfile {
             generic.excursionSampleCount = totalWeight
             generic.maxObservedDrift = weightedMaxDrift / divisor
             generic.meanDriftDistance = weightedMeanDrift / divisor
-            generic.directionHistogram = totalHistogram
+            generic.directionCounts = totalCounts
+            generic.directionMagnitudes = genericMagnitudes
             generic.typicalSpeedMin = weightedSpeedMin / divisor
             generic.typicalSpeedMax = weightedSpeedMax / divisor
             generic.typicalHAccMin = weightedHAccMin / divisor

@@ -20,8 +20,9 @@ public struct DriftProfile: FetchableRecord, PersistableRecord, Identifiable, Co
     public var maxObservedDrift: Double = 0      // metres from place centroid
     public var meanDriftDistance: Double = 0      // metres
 
-    // Direction - 8 sectors of 45 degrees, JSON TEXT in database
-    public var directionHistogram: [Int] = Array(repeating: 0, count: 8)
+    // Direction — 8 sectors of 45 degrees, both arrays JSON TEXT in database
+    public var directionCounts: [Int] = Array(repeating: 0, count: 8)
+    public var directionMagnitudes: [Double] = Array(repeating: 0, count: 8)  // mean drift distance per sector
 
     // Raw signal characteristics from excursion samples
     public var typicalSpeedMin: Double = 0
@@ -57,7 +58,8 @@ public struct DriftProfile: FetchableRecord, PersistableRecord, Identifiable, Co
         public static let excursionSampleCount = Column(CodingKeys.excursionSampleCount)
         public static let maxObservedDrift = Column(CodingKeys.maxObservedDrift)
         public static let meanDriftDistance = Column(CodingKeys.meanDriftDistance)
-        public static let directionHistogram = Column("directionHistogram")
+        public static let directionCounts = Column("directionCounts")
+        public static let directionMagnitudes = Column("directionMagnitudes")
         public static let typicalSpeedMin = Column(CodingKeys.typicalSpeedMin)
         public static let typicalSpeedMax = Column(CodingKeys.typicalSpeedMax)
         public static let typicalHAccMin = Column(CodingKeys.typicalHAccMin)
@@ -84,10 +86,13 @@ public struct DriftProfile: FetchableRecord, PersistableRecord, Identifiable, Co
         typicalVAccDuringDrift = row["typicalVAccDuringDrift"]
         courseAvailability = row["courseAvailability"]
 
-        // directionHistogram: JSON-encoded [Int] in database
+        // directionCounts and directionMagnitudes: JSON-encoded in database
         let decoder = JSONDecoder()
-        if let data = row["directionHistogram"] as? Data {
-            directionHistogram = (try? decoder.decode([Int].self, from: data)) ?? Array(repeating: 0, count: 8)
+        if let data = row["directionCounts"] as? Data {
+            directionCounts = (try? decoder.decode([Int].self, from: data)) ?? Array(repeating: 0, count: 8)
+        }
+        if let data = row["directionMagnitudes"] as? Data {
+            directionMagnitudes = (try? decoder.decode([Double].self, from: data)) ?? Array(repeating: 0, count: 8)
         }
     }
 
@@ -107,9 +112,10 @@ public struct DriftProfile: FetchableRecord, PersistableRecord, Identifiable, Co
         container["typicalVAccDuringDrift"] = typicalVAccDuringDrift
         container["courseAvailability"] = courseAvailability
 
-        // directionHistogram: JSON-encoded [Int] in database
+        // directionCounts and directionMagnitudes: JSON-encoded in database
         let encoder = JSONEncoder()
-        container["directionHistogram"] = try? encoder.encode(directionHistogram)
+        container["directionCounts"] = try? encoder.encode(directionCounts)
+        container["directionMagnitudes"] = try? encoder.encode(directionMagnitudes)
     }
 
 }
