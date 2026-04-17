@@ -330,14 +330,18 @@ public enum TimelineRecorder {
         let previouslyMoving = !workingItem.isVisit
         let currentlyMoving = sample.movingState != .stationary
 
-        /** stationary -> moving || moving -> stationary **/
-        if currentlyMoving != previouslyMoving {
+        // only create new items during full recording. during .wakeup we're still in the
+        // sleep mode paradigm — samples attach to the current visit, no item boundaries.
+        let isFullRecording = await loco.recordingState == .recording
+
+        /** stationary -> moving || moving -> stationary (only during recording) **/
+        if isFullRecording, currentlyMoving != previouslyMoving {
             let newItemBase = await createTimelineItem(from: sample, previousItemId: workingItem.id)
             currentItemId = newItemBase.id
             return
         }
 
-        /** stationary -> stationary || moving -> moving **/
+        /** same state, or wakeup — attach sample to current item **/
         do {
             try await Database.pool.write { [sample] in
                 var mutableSample = sample
