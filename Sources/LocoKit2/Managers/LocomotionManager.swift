@@ -338,7 +338,7 @@ public final class LocomotionManager: @unchecked Sendable {
         if location.invalidVelocity {
             inflatedSpdAcc = location.speedAccuracy
         } else {
-            inflatedSpdAcc = min(19.0, max(location.speedAccuracy, effectiveInflation / 20))
+            inflatedSpdAcc = min(19.0, max(location.speedAccuracy, effectiveInflation / 5))
         }
 
         let distance = location.distance(from: context.centroid)
