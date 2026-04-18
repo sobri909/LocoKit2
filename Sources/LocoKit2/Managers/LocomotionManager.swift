@@ -317,50 +317,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
     private func applyDriftInflation(to location: CLLocation) async -> CLLocation? {
         guard let context = await TimelineRecorder.currentDriftContext(for: location) else { return nil }
-
-        // compute bearing and sector
-        let bearing = context.centroid.coordinate.bearing(to: location.coordinate)
-        let sector = Int(bearing / 45.0) % 8
-
-        let count = context.profile.directionCounts[sector]
-        guard count > 0 else { return nil }  // no drift history in this direction
-
-        // confidence ramps with count — 5+ samples = full confidence in this sector's magnitude
-        let confidence = min(1.0, Double(count) / 5.0)
-        let sectorMagnitude = context.profile.directionMagnitudes[sector]
-        let effectiveInflation = sectorMagnitude * confidence
-
-        // scale hAcc and speedAccuracy proportionally to effective inflation
-        let inflatedHAcc = max(location.horizontalAccuracy, effectiveInflation)
-        // leave invalidVelocity raws untouched — iOS's "don't know" already gives Kalman a zero-velocity anchor
-        // otherwise stay below the 20.0 invalidVelocity sentinel — let Kalman's quadratic variance do the work
-        let inflatedSpdAcc: Double
-        if location.invalidVelocity {
-            inflatedSpdAcc = location.speedAccuracy
-        } else {
-            inflatedSpdAcc = min(19.0, max(location.speedAccuracy, effectiveInflation / 5))
-        }
-
-        let distance = location.distance(from: context.centroid)
-        Log.info(
-            "DriftInflation: \(Int(distance))m at \(Int(bearing))° (sector \(sector), " +
-            "\(count) samples × \(Int(sectorMagnitude))m × conf \(String(format: "%.2f", confidence)) = \(Int(effectiveInflation))m effective), " +
-            "hAcc \(Int(location.horizontalAccuracy))→\(Int(inflatedHAcc))m, " +
-            "spdAcc \(String(format: "%.1f", location.speedAccuracy))→\(String(format: "%.1f", inflatedSpdAcc))",
-            subsystem: .locomotion
-        )
-
-        return CLLocation(
-            coordinate: location.coordinate,
-            altitude: location.altitude,
-            horizontalAccuracy: inflatedHAcc,
-            verticalAccuracy: location.verticalAccuracy,
-            course: location.course,
-            courseAccuracy: location.courseAccuracy,
-            speed: location.speed,
-            speedAccuracy: inflatedSpdAcc,
-            timestamp: location.timestamp
-        )
+        return context.profile.inflate(location, relativeTo: context.centroid)
     }
 
     @MainActor
