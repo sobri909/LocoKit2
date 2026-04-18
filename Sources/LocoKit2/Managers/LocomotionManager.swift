@@ -73,6 +73,12 @@ public final class LocomotionManager: @unchecked Sendable {
         }
     }
 
+    // Trust Factor Layer 2 — diagnostic state for DebugView.
+    // Updated on every sample by applyDriftInflation(). Nil lastDriftContext means
+    // no profile applied to the last raw (no place-based context, no extended trust).
+    public private(set) var lastDriftContext: TimelineRecorder.DriftContext?
+    public private(set) var lastDriftResult: DriftInflationResult?
+
     // MARK: -
 
     public func locationUpdates() -> AsyncStream<CLLocation> {
@@ -316,8 +322,20 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Drift Inflation (Trust Factor Layer 2)
 
     private func applyDriftInflation(to location: CLLocation) async -> CLLocation? {
-        guard let context = await TimelineRecorder.currentDriftContext(for: location) else { return nil }
-        return context.profile.inflate(location, relativeTo: context.centroid)
+        guard let context = await TimelineRecorder.currentDriftContext(for: location) else {
+            lastDriftContext = nil
+            lastDriftResult = nil
+            return nil
+        }
+
+        let result = context.profile.inflate(location, relativeTo: context.centroid)
+        lastDriftContext = context
+        lastDriftResult = result
+
+        guard result.didInflate else { return nil }
+
+        Log.info(result.logDescription, subsystem: .locomotion)
+        return result.inflatedLocation
     }
 
     @MainActor
