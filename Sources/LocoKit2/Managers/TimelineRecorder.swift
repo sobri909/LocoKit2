@@ -49,9 +49,19 @@ public enum TimelineRecorder {
 
     private static var _cachedDriftContext: DriftContext?
 
-    /// Returns the drift profile context for the current visit, if available.
-    /// Caches by itemId — only fetches from DB when the current item changes.
-    public static func currentDriftContext() -> DriftContext? {
+    /// Returns the drift profile context applicable to the given location, if any.
+    ///
+    /// Primary path: current item is a Visit with a place → that place's profile.
+    ///
+    /// Extended trust window: if the current item has no place-based context (e.g. a Trip after
+    /// drift escaped the Visit), falls back to the previously cached profile as long as the
+    /// location is still within `maxObservedDrift` of the cached centroid. The profile's own
+    /// learned scope defines its scope of concern — beyond that distance we have no basis for
+    /// defending, and the cache expires.
+    ///
+    /// Caches the primary context by itemId; rebuild only happens on item transitions. The
+    /// fallback path does a cheap distance check per call but no DB work.
+    public static func currentDriftContext(for location: CLLocation) -> DriftContext? {
         guard let itemId = currentItemId else {
             _cachedDriftContext = nil
             return nil
@@ -62,25 +72,37 @@ public enum TimelineRecorder {
             return cached
         }
 
-        // fetch fresh
-        guard let item = currentItem(includeSamples: false, includePlaces: true),
-              let place = item.place,
-              let placeId = item.visit?.placeId else {
+        // item changed — try to build fresh context from current item's place
+        if let item = currentItem(includeSamples: false, includePlaces: true),
+           let place = item.place,
+           let placeId = item.visit?.placeId {
+
+            let context: DriftContext? = try? Database.pool.read { db in
+                guard let profile = try DriftProfile
+                    .filter(DriftProfile.Columns.placeId == placeId)
+                    .fetchOne(db) else { return nil }
+
+                let centroid = CLLocation(latitude: place.latitude, longitude: place.longitude)
+                return DriftContext(itemId: itemId, placeId: placeId, centroid: centroid, profile: profile)
+            }
+
+            if let context {
+                _cachedDriftContext = context
+                return context
+            }
+        }
+
+        // current item has no place-based context — check extended trust window from previous cache
+        if let cached = _cachedDriftContext {
+            let distance = location.distance(from: cached.centroid)
+            if distance < cached.profile.maxObservedDrift {
+                return cached  // still within profile's scope of concern
+            }
+            // crossed profile's scope — expire
             _cachedDriftContext = nil
-            return nil
         }
 
-        let context: DriftContext? = try? Database.pool.read { db in
-            guard let profile = try DriftProfile
-                .filter(DriftProfile.Columns.placeId == placeId)
-                .fetchOne(db) else { return nil }
-
-            let centroid = CLLocation(latitude: place.latitude, longitude: place.longitude)
-            return DriftContext(itemId: itemId, placeId: placeId, centroid: centroid, profile: profile)
-        }
-
-        _cachedDriftContext = context
-        return context
+        return nil
     }
 
     // MARK: -

@@ -316,7 +316,7 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Drift Inflation (Trust Factor Layer 2)
 
     private func applyDriftInflation(to location: CLLocation) async -> CLLocation? {
-        guard let context = await TimelineRecorder.currentDriftContext() else { return nil }
+        guard let context = await TimelineRecorder.currentDriftContext(for: location) else { return nil }
 
         // compute bearing and sector
         let bearing = context.centroid.coordinate.bearing(to: location.coordinate)
