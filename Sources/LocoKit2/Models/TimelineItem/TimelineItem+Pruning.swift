@@ -83,6 +83,7 @@ extension TimelineItem {
         guard isVisit, let dateRange = dateRange, let samples = samples else {
             throw TimelineError.invalidItem("Can only prune Visits with samples")
         }
+        guard samples.count > 2 else { return }
 
         let startEdgeEnd = dateRange.start + .minutes(30)
         let endEdgeStart = dateRange.end - .minutes(30)
