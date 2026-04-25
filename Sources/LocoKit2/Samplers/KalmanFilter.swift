@@ -63,7 +63,7 @@ public actor KalmanFilter {
 
     // MARK: -
 
-    public func add(location: CLLocation) {
+    public func add(location: CLLocation) async {
         guard location.coordinate.isUsable else { return }
 
         let invalidVelocity = location.invalidVelocity
@@ -92,15 +92,15 @@ public actor KalmanFilter {
             updateMeasurementNoise(with: location)
         }
 
-        altitudeKalman.add(location: location)
+        await altitudeKalman.add(location: location)
     }
 
-    public func currentEstimatedLocation() -> CLLocation {
+    public func currentEstimatedLocation() async -> CLLocation {
         return CLLocation(
             coordinate: currentEstimatedCoordinate(),
-            altitude: altitudeKalman.altitude ?? -1,
+            altitude: await altitudeKalman.altitude ?? -1,
             horizontalAccuracy: currentEstimatedHorizontalAccuracy(),
-            verticalAccuracy: altitudeKalman.unfilteredLocation?.verticalAccuracy ?? -1,
+            verticalAccuracy: await altitudeKalman.unfilteredLocation?.verticalAccuracy ?? -1,
             course: currentEstimatedCourse(),
             speed: currentEstimatedSpeed(),
             timestamp: lastTimestamp ?? .now

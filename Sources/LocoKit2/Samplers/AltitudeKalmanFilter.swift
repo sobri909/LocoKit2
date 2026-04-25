@@ -9,7 +9,7 @@ import CoreLocation
 
 // source: https://stackoverflow.com/a/15657798/790036
 
-internal class AltitudeKalmanFilter {
+internal actor AltitudeKalmanFilter {
 
     private var q: Double // expected mps change per sample
     private var k: Double = 1 // trust to apply to new values
