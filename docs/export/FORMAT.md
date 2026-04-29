@@ -50,7 +50,7 @@ metadata.json:
 
   // Export session timing (ISO8601 strings)
   "sessionStartDate": "2025-12-02T10:30:00Z",   // When this export session began
-  "sessionFinishDate": "2025-12-02T10:32:45Z",  // When session completed
+  "sessionFinishDate": "2025-12-02T10:32:45Z",  // When session completed (null while in flight or if never finalized)
 
   // For incremental backups
   "lastBackupDate": "2025-12-02T10:30:00Z",     // Timestamp for next incremental query
@@ -180,7 +180,21 @@ Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying
 Note: Place histogram data (arrivalTimes, leavingTimes, visitDurations, occupancyTimes) is stored in the database as binary blobs but is **not included** in JSON exports. These are regenerated from visit data.
 
 ### TimelineItem Structure
-Timeline items are stored in three related tables that form a hierarchy:
+Timeline items are stored in three related tables that form a hierarchy. In exports they are emitted as a single wrapper object with the sub-records nested under fixed keys:
+
+```json
+{
+  "base":  { ... },          // always present
+  "visit": { ... },          // present iff base.isVisit == true
+  "trip":  { ... },          // present iff base.isVisit == false
+  "place": { ... },          // optional embedded Place (see below)
+  "samples": [ ... ]         // optional embedded LocomotionSamples (see below)
+}
+```
+
+`items/YYYY-MM.json[.gz]` files in the bucketed format contain an array of these wrappers, with `place` and `samples` omitted — places live in their own `places/` bucket files and samples live in their own `samples/` week files. The single-file format (planned) is expected to use the same wrapper shape but with `place` and `samples` populated inline so that an item is self-contained.
+
+Exactly one of `visit` or `trip` is present per item. The discriminator is `base.isVisit`: `true` ⇒ `visit` block present, `false` ⇒ `trip` block present.
 
 #### TimelineItemBase
 Base fields common to all timeline items:
@@ -281,11 +295,98 @@ Additional fields for trip items:
   // Health data
   heartRate: number | null
   
-  // Activity classification
+  // Activity classification (ActivityType raw value, see Enum Values below)
   classifiedActivityType: number | null
   confirmedActivityType: number | null
 }
 ```
+
+## Enum Values
+
+Several integer-valued fields in the export map to Swift enums. The tables below list the raw values currently in use.
+
+### MovingState
+
+Used by: `LocomotionSample.movingState`. Source: [Sources/LocoKit2/Models/MovingState.swift](../../Sources/LocoKit2/Models/MovingState.swift).
+
+| Raw | Case          |
+| --- | ------------- |
+| -1  | `uncertain`   |
+| 0   | `stationary`  |
+| 1   | `moving`      |
+
+### RecordingState
+
+Used by: `LocomotionSample.recordingState`. Source: [Sources/LocoKit2/Models/RecordingState.swift](../../Sources/LocoKit2/Models/RecordingState.swift).
+
+| Raw | Case           |
+| --- | -------------- |
+| 0   | `off`          |
+| 1   | `recording`    |
+| 2   | `sleeping`     |
+| 3   | `deepSleeping` |
+| 4   | `wakeup`       |
+| 5   | `standby`      |
+
+### ActivityType
+
+Used by: `LocomotionSample.classifiedActivityType`, `LocomotionSample.confirmedActivityType`, `TimelineItemTrip.classifiedActivityType`, `TimelineItemTrip.confirmedActivityType`. Source: [Sources/LocoKit2/ActivityTypes/ActivityType.swift](../../Sources/LocoKit2/ActivityTypes/ActivityType.swift).
+
+Special:
+
+| Raw | Case        |
+| --- | ----------- |
+| -1  | `unknown`   |
+| 0   | `bogus`     |
+
+Base types:
+
+| Raw | Case          |
+| --- | ------------- |
+| 1   | `stationary`  |
+| 2   | `walking`     |
+| 3   | `running`     |
+| 4   | `cycling`     |
+| 5   | `car`         |
+| 6   | `airplane`    |
+
+Transport types:
+
+| Raw | Case            |
+| --- | --------------- |
+| 20  | `train`         |
+| 21  | `bus`           |
+| 22  | `motorcycle`    |
+| 23  | `boat`          |
+| 24  | `tram`          |
+| 25  | `tractor`       |
+| 26  | `tuktuk`        |
+| 27  | `songthaew`     |
+| 28  | `scooter`       |
+| 29  | `metro`         |
+| 30  | `cableCar`      |
+| 31  | `funicular`     |
+| 32  | `chairlift`     |
+| 33  | `skiLift`       |
+| 34  | `taxi`          |
+| 35  | `hotAirBalloon` |
+
+Active types:
+
+| Raw | Case            |
+| --- | --------------- |
+| 50  | `skateboarding` |
+| 51  | `inlineSkating` |
+| 52  | `snowboarding`  |
+| 53  | `skiing`        |
+| 54  | `horseback`     |
+| 55  | `swimming`      |
+| 56  | `golf`          |
+| 57  | `wheelchair`    |
+| 58  | `rowing`        |
+| 59  | `kayaking`      |
+| 60  | `surfing`       |
+| 61  | `hiking`        |
 
 ## Notes
 
