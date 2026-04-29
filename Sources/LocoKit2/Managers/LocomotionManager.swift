@@ -338,10 +338,6 @@ public final class LocomotionManager: @unchecked Sendable {
 
         guard result.didInflate else { return nil }
 
-        // BIG-430: demoted from Log.info to Log.debug for public ship.
-        // Fires on every drift-inflated sample (can be per-second during drift episodes).
-        // Still available in console during dev; no file-write noise for shipped builds.
-        Log.debug(result.logDescription, subsystem: .locomotion)
         return result.inflatedLocation
     }
 
