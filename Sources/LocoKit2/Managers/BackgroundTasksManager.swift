@@ -63,18 +63,48 @@ public enum BackgroundTasksManager {
 
             Log.info("Running overdue task in foreground: \(status.shortName)", subsystem: .tasks)
             onTaskStarted?(definition.displayName)
-            await updateTaskStateFor(identifier: identifier, to: .running)
+            await runTaskCore(identifier: identifier, definition: definition)
+        }
+    }
 
-            do {
-                try await definition.workHandler()
-                await updateTaskStateFor(identifier: identifier, to: .completed)
-                await scheduleTask(identifier: identifier)
+    /// Runs a registered task on demand through its full state machine, regardless of whether
+    /// it's currently overdue. Intended for debug/test affordances (e.g. a "Run Now" button) —
+    /// the BG and foreground-catchup paths shouldn't normally need this.
+    ///
+    /// Skips the thermal/low-power/recording guards that `runOverdueTasks` applies, since the
+    /// caller is explicitly forcing the run for visibility. The already-running guard remains
+    /// to prevent multi-tap races.
+    public static func runTaskNow(identifier: String) async {
+        guard let definition = taskDefinitions[identifier] else {
+            Log.error("runTaskNow: unknown task identifier \(identifier)", subsystem: .tasks)
+            return
+        }
+        guard let status = try? await getTaskStatusFor(identifier: identifier) else { return }
+        guard status.state != .running else {
+            Log.info("\(status.shortName): already running, ignoring on-demand request", subsystem: .tasks)
+            return
+        }
 
-            } catch {
-                await updateTaskStateFor(identifier: identifier, to: .unfinished)
-                await scheduleTask(identifier: identifier)
-                Log.error(error, subsystem: .tasks)
-            }
+        Log.info("Running task on demand: \(status.shortName)", subsystem: .tasks)
+        await runTaskCore(identifier: identifier, definition: definition)
+    }
+
+    /// Shared state-machine flow for `runOverdueTasks` (per-iter) and `runTaskNow`.
+    /// `handleTask` (the BGProcessingTask path) intentionally duplicates this shape rather
+    /// than calling through — the detached-Task wrapping for `expirationHandler.cancel()`
+    /// plus the iOS `task.setTaskCompleted(success:)` callouts make extraction awkward
+    /// without a parameter shape that would obscure both call sites.
+    private static func runTaskCore(identifier: String, definition: BackgroundTaskDefinition) async {
+        await updateTaskStateFor(identifier: identifier, to: .running)
+        do {
+            try await definition.workHandler()
+            await updateTaskStateFor(identifier: identifier, to: .completed)
+            await scheduleTask(identifier: identifier)
+
+        } catch {
+            await updateTaskStateFor(identifier: identifier, to: .unfinished)
+            await scheduleTask(identifier: identifier)
+            Log.error(error, subsystem: .tasks)
         }
     }
 
