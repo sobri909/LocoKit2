@@ -30,6 +30,13 @@ extension TimelineItem {
             if let place {
                 return place.name
             }
+            // BIG-495: fall back to streetAddress (from reverse geocode) before generic
+            // labels. Migrated visits from old app carry streetAddress; new-app visits
+            // will once BIG-455 lands. Lets unconfirmed visits show meaningful text
+            // instead of "Unknown Place" when location info is available.
+            if let visit, let streetAddress = visit.streetAddress {
+                return streetAddress
+            }
             // no place - need samples for isWorthKeeping distinction
             // but if samples aren't loaded, return generic title instead of error
             guard let samples, !samples.isEmpty else {
