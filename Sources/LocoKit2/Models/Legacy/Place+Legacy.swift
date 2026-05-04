@@ -28,5 +28,8 @@ extension Place {
         self.radiusMean = legacyPlace.radiusMean
         self.radiusSD = legacyPlace.radiusSD
         self.source = "LocoKit"
+        // LegacyPlace.foursquareCategoryId is Arc's Foursquare V2 string id;
+        // Place.foursquareCategoryId (Int?) is the unrelated V3 numeric id.
+        self.foursquareCategoryV2Id = legacyPlace.foursquareCategoryId
     }
 }
