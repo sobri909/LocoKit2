@@ -270,5 +270,11 @@ extension Database {
                 END;
                 """)
         }
+
+        migrator.registerMigration("Place.foursquareCategoryV2Id") { db in
+            try? db.alter(table: "Place") { table in
+                table.add(column: "foursquareCategoryV2Id", .text)
+            }
+        }
     }
 }

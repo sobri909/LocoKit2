@@ -116,6 +116,87 @@ public enum OldLocoKitImporter {
         }
     }
 
+    // MARK: - Backfills
+
+    /// One-shot backfill: copies `foursquareCategoryId` (Foursquare V2 string id) from
+    /// `ArcApp.sqlite` onto already-imported `Place` rows whose `foursquareCategoryV2Id`
+    /// is still NULL. Use this when an existing install has already run the legacy
+    /// import on a build that didn't preserve the field.
+    ///
+    /// No-op when `hasOldArcTimelineData` is false. Idempotent — only updates rows
+    /// where `Place.foursquareCategoryV2Id IS NULL`, matching on
+    /// `Place.id == LegacyPlace.placeId` AND
+    /// `Place.foursquarePlaceId == LegacyPlace.foursquareVenueId`.
+    ///
+    /// IMPORTANT: this library does not record whether the backfill has been run.
+    /// The calling app is responsible for tracking completion (e.g. via UserDefaults)
+    /// so it isn't re-run on every launch.
+    ///
+    /// - Returns: number of `Place` rows updated.
+    @discardableResult
+    public static func backfillFoursquareCategoryV2Id() async throws -> Int {
+        guard !importInProgress else {
+            throw ImportExportError.importAlreadyInProgress
+        }
+        guard hasOldArcTimelineData else { return 0 }
+        guard let appGroupDir = Database.highlander.appGroupDbDir else {
+            throw ImportExportError.databaseConnectionFailed
+        }
+
+        // claim the import slot so a concurrent startImport/resumeImport can't
+        // race us across await suspension points
+        importInProgress = true
+        defer { importInProgress = false }
+
+        let arcAppUrl = appGroupDir.appendingPathComponent("ArcApp.sqlite")
+
+        var arcConfig = Configuration()
+        arcConfig.readonly = true
+        let arcPool = try DatabasePool(path: arcAppUrl.path, configuration: arcConfig)
+
+        Log.info("Starting foursquareCategoryV2Id backfill", subsystem: .importing)
+        let start = Date()
+
+        let legacyPlaces = try await arcPool.read { db in
+            guard try db.tableExists("Place"),
+                  try db.columns(in: "Place").contains(where: { $0.name == "foursquareCategoryId" }) else {
+                return [LegacyPlace]()
+            }
+            return try LegacyPlace
+                .filter(LegacyPlace.Columns.foursquareCategoryId != nil)
+                .filter(LegacyPlace.Columns.foursquareVenueId != nil)
+                .fetchAll(db)
+        }
+
+        let batchSize = 500
+        let batches = legacyPlaces.chunked(into: batchSize)
+        var updateCount = 0
+
+        for batch in batches {
+            let batchUpdated = try await Database.pool.write { db -> Int in
+                var localCount = 0
+                for lp in batch {
+                    guard let categoryId = lp.foursquareCategoryId,
+                          let venueId = lp.foursquareVenueId else { continue }
+                    try db.execute(sql: """
+                        UPDATE Place
+                        SET foursquareCategoryV2Id = ?
+                        WHERE id = ?
+                          AND foursquarePlaceId = ?
+                          AND foursquareCategoryV2Id IS NULL
+                        """, arguments: [categoryId, lp.placeId, venueId])
+                    localCount += db.changesCount
+                }
+                return localCount
+            }
+            updateCount += batchUpdated
+        }
+
+        Log.info("foursquareCategoryV2Id backfill: updated \(updateCount) places (of \(legacyPlaces.count) candidates) in \(String(format: "%.1f", -start.timeIntervalSinceNow))s", subsystem: .importing)
+
+        return updateCount
+    }
+
     // MARK: - Private helpers
 
     private static func performImportPhases(
