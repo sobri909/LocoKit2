@@ -1,13 +1,14 @@
 # LocoKit2 Export Format Specification
 
 ## Version
-- Current schema version: 2.2.0
+- Current schema version: 2.3.0
 - Uses semantic versioning (major.minor.patch)
 - Major version changes indicate breaking format changes
 - Minor versions add features in a backward-compatible way
 - Patch versions make backward-compatible fixes
 
 ### Version History
+- **2.3.0**: Added `Place.foursquareCategoryV2Id` (legacy Foursquare V2 string category id, restored for places carried over from pre-AT4 Arc history)
 - **2.2.0**: Added gzip compression for sample files (samples/*.json.gz)
 - **2.1.0**: Changed date encoding from numeric (seconds since reference date) to ISO8601 strings
 - **2.0.0**: Initial LocoKit2 export format
@@ -44,7 +45,7 @@ metadata.json:
 ```json
 {
   "exportId": "A1B2C3D4-...",   // Unique identifier for this export session (used for resume validation)
-  "schemaVersion": "2.2.0",     // Semantic version of export format
+  "schemaVersion": "2.3.0",     // Semantic version of export format
   "exportMode": "bucketed",     // "bucketed" (only supported mode currently)
   "exportType": "full",         // "full" or "incremental" (only valid values)
 
@@ -173,7 +174,8 @@ Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying
   googlePlaceId: string | null
   googlePrimaryType: string | null
   foursquarePlaceId: string | null
-  foursquareCategoryId: number | null
+  foursquareCategoryId: number | null     // Foursquare V3 numeric category id
+  foursquareCategoryV2Id: string | null   // Foursquare V2 string category id 
 }
 ```
 

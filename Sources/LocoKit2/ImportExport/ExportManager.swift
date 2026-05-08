@@ -19,7 +19,7 @@ public protocol ExportExtensionHandler: Sendable {
 
 @ImportExportActor
 public enum ExportManager {
-    public static let schemaVersion = "2.2.0"
+    public static let schemaVersion = "2.3.0"
 
     // MARK: - Export state
 
