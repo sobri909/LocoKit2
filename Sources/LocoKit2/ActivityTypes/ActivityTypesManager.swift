@@ -64,7 +64,7 @@ public enum ActivityTypesManager {
     public static func registerModelUpdatesTask() {
         let taskDefinition = BackgroundTaskDefinition(
             identifier: taskIdentifier,
-            displayName: "Updating activity models",
+            displayName: "Activity model updates",
             minimumDelay: .hours(1),
             requiresNetwork: false,
             requiresPower: true,
