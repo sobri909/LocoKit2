@@ -67,8 +67,10 @@ public enum TimelineRecorder {
             return nil
         }
 
-        // cache hit — same item, same context
-        if let cached = _cachedDriftContext, cached.itemId == itemId {
+        // cache hit — same item AND same place context
+        if let cached = _cachedDriftContext,
+           cached.itemId == itemId,
+           cached.placeId == currentPlaceId {
             return cached
         }
 
@@ -113,6 +115,12 @@ public enum TimelineRecorder {
         }
     }
 
+    /// The placeId of the current item's visit. Refreshed lazily as a side effect of
+    /// `currentItem(includePlaces: true)` calls — may be briefly stale between a place
+    /// reassignment and the next refresh. Sufficient for drift-cache validation;
+    /// not for real-time place state.
+    public static private(set) var currentPlaceId: String?
+
     public static func currentItem(includeSamples: Bool = false, includePlaces: Bool = false) -> TimelineItem? {
         do {
             let item = try Database.pool.read { db in
@@ -126,6 +134,11 @@ public enum TimelineRecorder {
             // update currentItemId if changed
             if let item, item.id != currentItemId {
                 self.currentItemId = item.id
+            }
+
+            // refresh currentPlaceId if visit data was loaded
+            if includePlaces {
+                self.currentPlaceId = item?.visit?.placeId
             }
 
             return item
