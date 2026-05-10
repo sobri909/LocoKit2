@@ -222,9 +222,18 @@ public enum ActivityTypesManager {
 
             let manager = FileManager.default
             let tempModelFile = manager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).mlmodel")
+            var csvFile: URL?
+
+            // BIG-530: clean up training artefacts in tmp/ on all exit paths
+            // (success, throw, early return). iOS doesn't actively purge tmp/,
+            // so files left here accumulate indefinitely — single training cycle
+            // can leave ~40-50MB CSV behind, hundreds of those become GBs.
+            defer {
+                try? manager.removeItem(at: tempModelFile)
+                if let csvFile { try? manager.removeItem(at: csvFile) }
+            }
 
             do {
-                var csvFile: URL?
                 var samplesCount = 0
                 var includedTypes: Set<ActivityType> = []
 
@@ -345,6 +354,18 @@ public enum ActivityTypesManager {
 #else
     public nonisolated static func trainBD0() async throws -> URL {
         try await Task.detached(priority: .userInitiated) {
+            // BIG-530: clean up training artefacts in tmp/ on all exit paths.
+            // iOS doesn't actively purge tmp/. compileModel writes the compiled
+            // .mlmodelc there too — copyItem to Documents leaves the source.
+            let csvFile = FileManager.default.temporaryDirectory.appendingPathComponent("BD0_training.csv")
+            let tempModelFile = FileManager.default.temporaryDirectory.appendingPathComponent("BD0.mlmodel")
+            var compiledModelFile: URL?
+            defer {
+                try? FileManager.default.removeItem(at: csvFile)
+                try? FileManager.default.removeItem(at: tempModelFile)
+                if let compiledModelFile { try? FileManager.default.removeItem(at: compiledModelFile) }
+            }
+
             print("BD0: Fetching training samples...")
 
             let samples = try Database.pool.read { db in
@@ -362,7 +383,7 @@ public enum ActivityTypesManager {
 
             print("BD0: Fetched \(samples.count) samples, exporting CSV...")
 
-            let csvFile = FileManager.default.temporaryDirectory.appendingPathComponent("BD0_training.csv")
+            // csvFile + tempModelFile declared at top of closure for defer cleanup
             try? FileManager.default.removeItem(at: csvFile)
 
             let header = "confirmedActivityType,stepHz,xyAcceleration,zAcceleration,movingState,verticalAccuracy,horizontalAccuracy,speed,course,latitude,longitude,altitude,heartRate,timeOfDay,sinceVisitStart"
@@ -410,11 +431,12 @@ public enum ActivityTypesManager {
             let accuracy = 1.0 - classifier.validationMetrics.classificationError
             print("BD0: Trained — accuracy \(String(format: "%.1f%%", accuracy * 100))")
 
-            // write and compile model
-            let tempModelFile = FileManager.default.temporaryDirectory.appendingPathComponent("BD0.mlmodel")
+            // write and compile model — tempModelFile declared at top for defer cleanup
             try? FileManager.default.removeItem(at: tempModelFile)
             try classifier.write(to: tempModelFile)
-            let compiledModelFile = try MLModel.compileModel(at: tempModelFile)
+            compiledModelFile = try MLModel.compileModel(at: tempModelFile)
+            // shadow with non-Optional for the rest of the scope
+            guard let compiledModelFile else { fatalError("unreachable: compiledModelFile assigned above") }
 
             // copy to Documents for retrieval via Xcode/Files
             let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
