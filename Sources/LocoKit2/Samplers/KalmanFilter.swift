@@ -107,6 +107,23 @@ public actor KalmanFilter {
         )
     }
 
+    // BIG-150: introspection capability for diagnostic logging
+    public func snapshotForLogging() -> KalmanSnapshot {
+        let coord = currentEstimatedCoordinate()
+        return KalmanSnapshot(
+            latitude: coord.latitude,
+            longitude: coord.longitude,
+            speed: currentEstimatedSpeed(),
+            course: currentEstimatedCourse(),
+            hAccuracy: currentEstimatedHorizontalAccuracy(),
+            covarianceLatitude: covarianceMatrix[0, 0],
+            covarianceLongitude: covarianceMatrix[1, 1],
+            measurementNoiseLat: measurementNoiseCov[0, 0],
+            measurementNoiseSpeed: measurementNoiseCov[2, 2],
+            lastTimestamp: lastTimestamp
+        )
+    }
+
     func currentEstimatedCoordinate() -> CLLocationCoordinate2D {
         return CLLocationCoordinate2D(
             latitude: stateVector[0, 0],
@@ -234,5 +251,20 @@ public actor KalmanFilter {
         return (degreesLatitude + degreesLongitude) / 2
     }
 
+}
+
+// MARK: - Introspection (BIG-150)
+
+public struct KalmanSnapshot: Sendable {
+    public let latitude: Double
+    public let longitude: Double
+    public let speed: CLLocationSpeed
+    public let course: CLLocationDegrees
+    public let hAccuracy: CLLocationAccuracy
+    public let covarianceLatitude: Double
+    public let covarianceLongitude: Double
+    public let measurementNoiseLat: Double
+    public let measurementNoiseSpeed: Double
+    public let lastTimestamp: Date?
 }
 

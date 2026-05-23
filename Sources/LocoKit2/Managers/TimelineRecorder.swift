@@ -252,6 +252,7 @@ public enum TimelineRecorder {
         // ensure sleep cycles are short for when sleeping next starts
         if recordingState == .recording {
             await loco.setSleepCycleDuration(6)
+            Log.info("Sleep cycle duration → 6s (entering recording)", subsystem: .locomotion)
             return
         }
 
@@ -272,24 +273,33 @@ public enum TimelineRecorder {
         // Map probability to duration (6-60 seconds)
         let shortCycleThreshold = 0.1 // probability threshold for 6s sleep cycles
 
+        // BIG-150: log chosen duration + driving signal
+        let placeName = place.name
+        let probStr = String(format: "%.3f", probability)
+
         switch probability {
         case shortCycleThreshold...1.0:  // high probability
             await loco.setSleepCycleDuration(6)
+            Log.info("Sleep cycle duration → 6s (high leave-prob \(probStr) for '\(placeName)')", subsystem: .locomotion)
 
         case 0.01..<shortCycleThreshold: // common probability range
             let normalised = (probability - 0.01) / (shortCycleThreshold - 0.01)
             // Use cube root (0.33) for aggressive curve towards shorter cycles
             let curved = pow(normalised, 0.33)
-            await loco.setSleepCycleDuration(60 - (curved * 54))
+            let duration = 60 - (curved * 54)
+            await loco.setSleepCycleDuration(duration)
+            Log.info("Sleep cycle duration → \(String(format: "%.1f", duration))s (mid leave-prob \(probStr) for '\(placeName)')", subsystem: .locomotion)
 
         default:         // Very low probability (<1%)
             await loco.setSleepCycleDuration(60)
+            Log.info("Sleep cycle duration → 60s (very low leave-prob \(probStr) for '\(placeName)')", subsystem: .locomotion)
         }
     }
 
     private static func updateSleepCycleDurationFallback() async {
         guard let recordingEnded else {
             await loco.setSleepCycleDuration(6)
+            Log.info("Sleep cycle duration → 6s (fallback: no recordingEnded)", subsystem: .locomotion)
             return
         }
 
@@ -300,10 +310,14 @@ public enum TimelineRecorder {
         let sleepMinutes = recordingEnded.age / 60
         if sleepMinutes < 2 {
             await loco.setSleepCycleDuration(6)
+            Log.info("Sleep cycle duration → 6s (fallback: \(String(format: "%.1f", sleepMinutes))min asleep)", subsystem: .locomotion)
         } else if sleepMinutes <= 60 {
-            await loco.setSleepCycleDuration(6 + ((sleepMinutes - 2) / 58 * (30 - 6)))
+            let duration = 6 + ((sleepMinutes - 2) / 58 * (30 - 6))
+            await loco.setSleepCycleDuration(duration)
+            Log.info("Sleep cycle duration → \(String(format: "%.1f", duration))s (fallback: \(String(format: "%.1f", sleepMinutes))min asleep)", subsystem: .locomotion)
         } else {
             await loco.setSleepCycleDuration(30)
+            Log.info("Sleep cycle duration → 30s (fallback: \(String(format: "%.1f", sleepMinutes))min asleep, capped)", subsystem: .locomotion)
         }
     }
 

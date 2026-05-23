@@ -238,9 +238,8 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - State changes
     @MainActor
     private func startSleeping() {
-        if recordingState != .wakeup {
-            Log.info("LocomotionManager.startSleeping()", subsystem: .locomotion)
-        }
+        // BIG-150: log all transitions including wakeup→sleep (previously suppressed)
+        Log.info("LocomotionManager.startSleeping() (was: \(recordingState))", subsystem: .locomotion)
 
         stopCoreMotion()
 
@@ -257,6 +256,9 @@ public final class LocomotionManager: @unchecked Sendable {
     private func startWakeup() async {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
+
+        // BIG-150: re-added wakeup cycle diagnostic (was removed in 95bb4f4)
+        Log.info("LocomotionManager.startWakeup() (was: \(recordingState))", subsystem: .locomotion)
 
         locationManager.startUpdatingLocation()
 
@@ -369,14 +371,17 @@ public final class LocomotionManager: @unchecked Sendable {
         case .wakeup:
             if !sleepState.shouldBeSleeping {
                 // Kalman says outside — genuine movement detected
+                Log.info("Wakeup → recording: Kalman outside geofence", subsystem: .locomotion)
                 stopTheWakeupTimeoutTimer()
                 startRecording()
 
             } else if sleepState.isRawLocationOutsideGeofence {
                 // raw disagrees with Kalman — keep gathering data until timer
+                Log.info("Wakeup: raw outside geofence, Kalman inside — gathering data", subsystem: .locomotion)
 
             } else {
                 // both raw and Kalman inside geofence — back to sleep
+                Log.info("Wakeup → sleep: both raw and Kalman inside geofence", subsystem: .locomotion)
                 stopTheWakeupTimeoutTimer()
                 startSleeping()
             }
@@ -398,11 +403,12 @@ public final class LocomotionManager: @unchecked Sendable {
     private func endExtendedWakeup() {
         guard recordingState == .wakeup, let start = wakeupTimeoutStart else { return }
 
+        let cycleDuration = start.age
         let receivedLocation = lastRawLocation.map { $0.timestamp > start } ?? false
         if receivedLocation {
-            Log.info("Wakeup timed out (raw/Kalman disagreement) — back to sleep", subsystem: .locomotion)
+            Log.info("Wakeup timed out (raw/Kalman disagreement) — back to sleep (cycle: \(String(format: "%.1f", cycleDuration))s)", subsystem: .locomotion)
         } else {
-            Log.info("Wakeup timed out (no location data received) — back to sleep", subsystem: .locomotion)
+            Log.info("Wakeup timed out (no location data received) — back to sleep (cycle: \(String(format: "%.1f", cycleDuration))s)", subsystem: .locomotion)
         }
 
         stopTheWakeupTimeoutTimer()
@@ -455,6 +461,8 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func restartTheWakeupTimer() {
         let duration = sleepCycleDuration
+        // BIG-150: re-added wakeup cycle diagnostic (was removed in 95bb4f4)
+        Log.info("Wakeup timer set (\(String(format: "%.0f", duration))s)", subsystem: .locomotion)
         wakeupTimer?.invalidate()
         wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
             if let self {

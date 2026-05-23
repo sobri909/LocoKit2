@@ -51,6 +51,11 @@ actor SleepModeDetector {
         state.isLocationWithinGeofence = isWithinGeofence(filteredLocation)
         state.isRawLocationOutsideGeofence = !isWithinGeofence(rawLocation)
 
+        // BIG-150: re-added frozen state dump as Log.info (was removed as Log.debug in 95bb4f4)
+        let filteredDist = state.geofenceCenter.map { filteredLocation.distance(from: $0.location) }
+        let rawDist = state.geofenceCenter.map { rawLocation.distance(from: $0.location) }
+        Log.info("SleepDetector [frozen]: rawDist=\(rawDist.map { String(format: "%.0f", $0) } ?? "?")m, filtDist=\(filteredDist.map { String(format: "%.0f", $0) } ?? "?")m, radius=\(String(format: "%.0f", state.geofenceRadius))m, rawHAcc=\(String(format: "%.0f", rawLocation.horizontalAccuracy))m, filtHAcc=\(String(format: "%.0f", filteredLocation.horizontalAccuracy))m, rawOutside=\(state.isRawLocationOutsideGeofence), filtInside=\(state.isLocationWithinGeofence)", subsystem: .locomotion)
+
         if !state.isLocationWithinGeofence {
             Log.info("SleepDetector: unfreezing — filtered location outside geofence", subsystem: .locomotion)
             unfreeze()
