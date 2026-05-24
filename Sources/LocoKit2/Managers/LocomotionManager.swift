@@ -82,6 +82,12 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     public private(set) var lastDriftResult: DriftInflationResult?
 
+    // BIG-150: UndergroundDetector diagnostic state for DebugView.
+    // Nil means UndergroundDetector hasn't evaluated yet (pre-first-raw).
+    // When .inRegime, Layer 2 (DriftProfile) inflation was skipped for that raw.
+    @MainActor
+    public private(set) var lastUndergroundResult: UndergroundDetector.EvaluationResult?
+
     // MARK: -
 
     public func locationUpdates() -> AsyncStream<CLLocation> {
@@ -221,6 +227,7 @@ public final class LocomotionManager: @unchecked Sendable {
     private let kalmanFilter = KalmanFilter()
     private let stationaryDetector = StationaryStateDetector()
     private let sleepModeDetector = SleepModeDetector()
+    private let undergroundDetector = UndergroundDetector()  // BIG-150
     private let accelerometerSampler = AccelerometerSampler()
     private let stepsSampler = StepsMonitor()
 
@@ -305,10 +312,36 @@ public final class LocomotionManager: @unchecked Sendable {
         // only accept locations when recording is supposed to be happening
         guard recordingState == .recording || recordingState == .wakeup else { return }
 
-        // apply drift inflation before the Kalman sees the raw
-        let processedLocation = await applyDriftInflation(to: location) ?? location
+        // BIG-150: UndergroundDetector evaluates the raw stream for GPS-fallback
+        // regime (sustained invalidVelocity + sustained high hAcc). When in
+        // regime, takes precedence over Layer 2 — its reshape goes to the Kalman
+        // instead of the drift-inflated location, and Layer 2 state is cleared.
+        // When not in regime, Layer 2 (applyDriftInflation) runs as before.
+        let undergroundResult = await undergroundDetector.evaluate(rawLocation: location)
+        lastUndergroundResult = undergroundResult
 
-        await kalmanFilter.add(location: processedLocation)
+        // BIG-150: log Kalman state snapshot at regime entry/exit for diagnostic visibility
+        if undergroundResult.didEnterRegime {
+            let snapshot = await kalmanFilter.snapshotForLogging()
+            Log.info("UndergroundDetector: Kalman snapshot at REGIME ENTRY — lat=\(snapshot.latitude), lon=\(snapshot.longitude), speed=\(String(format: "%.1f", snapshot.speed))m/s, hAcc=\(String(format: "%.0f", snapshot.hAccuracy))m", subsystem: .locomotion)
+        } else if undergroundResult.didExitRegime {
+            let snapshot = await kalmanFilter.snapshotForLogging()
+            Log.info("UndergroundDetector: Kalman snapshot at REGIME EXIT — lat=\(snapshot.latitude), lon=\(snapshot.longitude), speed=\(String(format: "%.1f", snapshot.speed))m/s, hAcc=\(String(format: "%.0f", snapshot.hAccuracy))m", subsystem: .locomotion)
+        }
+
+        let kalmanInput: CLLocation
+        if undergroundResult.inRegime {
+            // BIG-150: underground regime takes precedence — use reshaped raw,
+            // skip Layer 2 entirely (clear stale drift state for DebugView)
+            kalmanInput = undergroundResult.reshapedLocation
+            lastDriftContext = nil
+            lastDriftResult = nil
+        } else {
+            // normal path: apply drift inflation before Kalman as before
+            kalmanInput = await applyDriftInflation(to: location) ?? location
+        }
+
+        await kalmanFilter.add(location: kalmanInput)
         let kalmanLocation = await kalmanFilter.currentEstimatedLocation()
 
         // stationary detector gets the original raw for invalidVelocity checks
