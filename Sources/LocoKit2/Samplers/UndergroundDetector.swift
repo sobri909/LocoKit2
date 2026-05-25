@@ -96,7 +96,9 @@ public actor UndergroundDetector {
             if regimeEntryTime == nil {
                 regimeEntryTime = now
             }
-            sustainedDuration = now.timeIntervalSince(regimeEntryTime!)
+            // clamp to 0 to avoid negative values when out-of-order older raws
+            // arrive after regimeEntryTime has been (re)set to a newer timestamp
+            sustainedDuration = max(0, now.timeIntervalSince(regimeEntryTime!))
             inRegime = (sustainedDuration ?? 0) >= minSustainedDuration
         } else {
             regimeEntryTime = nil

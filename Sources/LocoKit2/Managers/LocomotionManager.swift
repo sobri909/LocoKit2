@@ -411,6 +411,10 @@ public final class LocomotionManager: @unchecked Sendable {
             } else if sleepState.isRawLocationOutsideGeofence {
                 // raw disagrees with Kalman — keep gathering data until timer
                 Log.info("Wakeup: raw outside geofence, Kalman inside — gathering data", subsystem: .locomotion)
+                // BIG-150 Issue B: if UndergroundDetector is warming (predicate
+                // matched but not yet sustained-enough for regime entry), give
+                // the wakeup window more time to accumulate evidence.
+                extendWakeupTimeoutIfWarming()
 
             } else {
                 // both raw and Kalman inside geofence — back to sleep
@@ -479,6 +483,11 @@ public final class LocomotionManager: @unchecked Sendable {
     private var wakeupTimeoutStart: Date?
     private var wakeupTimeoutTimer: Timer?
     private let wakeupTimeout: TimeInterval = 30
+    // BIG-150 Issue B: extended wakeup timeout when UndergroundDetector is
+    // warming (predicate matched, sustained-duration not yet reached). Total
+    // budget from wakeupTimeoutStart, single-shot per wakeup.
+    private let wakeupTimeoutExtendedForWarming: TimeInterval = 60
+    private var hasExtendedWakeupForUndergroundWarmup: Bool = false
 
     @MainActor
     private func restartTheFallbackTimer() {
@@ -536,6 +545,7 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func restartTheWakeupTimeoutTimer() {
         wakeupTimeoutStart = .now
+        hasExtendedWakeupForUndergroundWarmup = false
         wakeupTimeoutTimer?.invalidate()
         wakeupTimeoutTimer = Timer.scheduledTimer(withTimeInterval: wakeupTimeout, repeats: false) { [weak self] _ in
             guard let self else { return }
@@ -546,8 +556,37 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func stopTheWakeupTimeoutTimer() {
         wakeupTimeoutStart = nil
+        hasExtendedWakeupForUndergroundWarmup = false
         wakeupTimeoutTimer?.invalidate()
         wakeupTimeoutTimer = nil
+    }
+
+    /// BIG-150 Issue B: extend the active wakeup timeout when
+    /// UndergroundDetector reports `predicateMatched && !inRegime` — gives
+    /// the warmup period more time to complete within a single wakeup.
+    /// Single-shot per wakeup (re-armed in `restartTheWakeupTimeoutTimer`).
+    /// Budget is measured from `wakeupTimeoutStart`, not from now — repeated
+    /// calls within the same wakeup are no-ops after first extension.
+    @MainActor
+    private func extendWakeupTimeoutIfWarming() {
+        guard recordingState == .wakeup,
+              let start = wakeupTimeoutStart,
+              let underground = lastUndergroundResult,
+              underground.predicateMatched && !underground.inRegime,
+              !hasExtendedWakeupForUndergroundWarmup else { return }
+
+        let extendedEnd = start.addingTimeInterval(wakeupTimeoutExtendedForWarming)
+        let remainingTime = extendedEnd.timeIntervalSinceNow
+        guard remainingTime > 0 else { return }
+
+        Log.info("BIG-150: extending wakeup timeout (UndergroundDetector warming, sustained=\(String(format: "%.1f", underground.sustainedDuration ?? 0))s, total budget \(Int(wakeupTimeoutExtendedForWarming))s)", subsystem: .locomotion)
+        hasExtendedWakeupForUndergroundWarmup = true
+
+        wakeupTimeoutTimer?.invalidate()
+        wakeupTimeoutTimer = Timer.scheduledTimer(withTimeInterval: remainingTime, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            Task { await self.endExtendedWakeup() }
+        }
     }
 
     // MARK: - Location Managers
