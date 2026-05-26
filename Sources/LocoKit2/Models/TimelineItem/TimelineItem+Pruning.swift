@@ -85,9 +85,9 @@ extension TimelineItem {
         }
         guard samples.count > 2 else { return }
 
-        let startEdgeEnd = dateRange.start + .minutes(30)
-        let endEdgeStart = dateRange.end - .minutes(30)
-        let maxGap: TimeInterval = .minutes(2)
+        let startEdgeEnd = dateRange.start + .minutes(20)
+        let endEdgeStart = dateRange.end - .minutes(20)
+        let maxGap: TimeInterval = .minutes(3)
 
         // protect edge and non-stationary samples from deletion
         var protected: Set<String> = []
