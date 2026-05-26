@@ -402,6 +402,15 @@ public final class LocomotionManager: @unchecked Sendable {
             }
 
         case .wakeup:
+            // BIG-567: nudge iOS if last raw is stale (>60s old). Addresses
+            // the iOS stale-fix-serving pattern observed during BIG-150
+            // Trip 3 — iOS keeps delivering the same cached CLLocation on
+            // every location-update callback without running fresh GPS/cell.
+            // Already called in the .recording case; extending here so
+            // sleep-cycle wakeups can also detect + try to recover. Internal
+            // 60s throttle prevents over-firing across rapid wakeup cycles.
+            requestLocationIfStale()
+
             if !sleepState.shouldBeSleeping {
                 // Kalman says outside — genuine movement detected
                 Log.info("Wakeup → recording: Kalman outside geofence", subsystem: .locomotion)
