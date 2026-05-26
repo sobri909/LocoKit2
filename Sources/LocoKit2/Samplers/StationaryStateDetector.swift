@@ -78,9 +78,15 @@ public actor StationaryStateDetector {
         let invalidVelocityRate: Double? = rawSample.isEmpty ? nil :
             Double(rawSample.filter { $0.invalidVelocity }.count) / Double(rawSample.count)
 
-        // Raw speed=-1 override: if Kalman says moving but raw speed=-1 rate
-        // is high, the device is likely genuinely stationary — iOS is honestly
-        // reporting "I don't know" which only happens when not moving
+        // Raw invalidVelocity rate override: when Kalman says moving but raw
+        // invalidVelocity rate is high, downgrade to .stationary. The original
+        // premise was "invalidVelocity only happens when not moving" — BIG-150
+        // has since shown that's not strictly true (underground regimes produce
+        // sustained invalidVelocity during real movement). For those regime
+        // cases, LocomotionManager applies a separate .uncertain overlay
+        // (Issue C v0.0.2), so this override doesn't need to know about
+        // regime — remains valid for the legitimate-stationary-with-degraded-
+        // GPS cases it was designed to catch.
         if result == .moving, let rate = invalidVelocityRate, rate >= rawSpeedInvalidThreshold {
             result = .stationary
             Log.info("StationaryStateDetector overrode .moving → .stationary (raw invalidVelocity rate: \(Int(rate * 100))%, \(rawSample.count) raws)", subsystem: .misc)

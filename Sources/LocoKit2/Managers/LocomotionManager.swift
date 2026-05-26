@@ -196,9 +196,19 @@ public final class LocomotionManager: @unchecked Sendable {
         let movingState = await stationaryDetector.currentState()
         let stepHz = stepsSampler.currentStepHz()
 
+        // BIG-150 Issue C v0.0.2: when UndergroundDetector is in regime,
+        // the SSD verdict can't be trusted (raws are reshaped so SSD's
+        // inputs are fudged). Override to .uncertain — which TimelineRecorder
+        // treats as moving, allowing Trip items to be created during
+        // underground travel. Honest semantic: in-regime by definition
+        // implies signal confidence too low for a confident verdict.
+        let undergroundInRegime = await lastUndergroundResult?.inRegime == true
+        let effectiveMovingState: MovingState =
+            undergroundInRegime ? .uncertain : movingState.movingState
+
         var sample = LocomotionSample(
             date: .now,
-            movingState: movingState.movingState,
+            movingState: effectiveMovingState,
             recordingState: await recordingState,
             location: location
         )
