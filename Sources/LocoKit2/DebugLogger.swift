@@ -77,6 +77,36 @@ public enum Log {
         }
     }
 
+    /// BIG-431: delete log files older than the given age threshold. Skips
+    /// the current session's log file as belt-and-braces (it'll be newer
+    /// than any reasonable threshold anyway). Uses content modification
+    /// date — last-written-to time — rather than creation date, since
+    /// long-lived sessions can have creation dates well before their
+    /// final modification.
+    public static func cleanupOldLogs(olderThan maxAge: TimeInterval = .days(30)) {
+        let now = Date()
+        let currentSessionURL = sessionLogFileURL
+        var deletedCount = 0
+
+        for url in logFileURLs() {
+            if url == currentSessionURL { continue }
+            guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let modDate = values.contentModificationDate else { continue }
+            if now.timeIntervalSince(modDate) <= maxAge { continue }
+            do {
+                try delete(url)
+                deletedCount += 1
+            } catch {
+                os_log("Couldn't delete old log %{public}@: %{public}@", type: .error, url.lastPathComponent, error.localizedDescription)
+            }
+        }
+
+        if deletedCount > 0 {
+            let plural = deletedCount == 1 ? "file" : "files"
+            Log.info("cleanupOldLogs: removed \(deletedCount) log \(plural) older than \(Int(maxAge / .days(1))) days", subsystem: .lifecycle)
+        }
+    }
+
     // MARK: - Thread-safe state (os_log + file write)
 
     private final class State: Sendable {
