@@ -255,8 +255,10 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - State changes
     @MainActor
     private func startSleeping() {
-        // BIG-150: log all transitions including wakeup→sleep (previously suppressed)
-        Log.info("LocomotionManager.startSleeping() (was: \(recordingState))", subsystem: .locomotion)
+        // genuine sleep-mode boundary (recording→sleep); wakeup→sleep suppressed to avoid sleep-cycle churn
+        if recordingState != .wakeup {
+            Log.info("LocomotionManager.startSleeping()", subsystem: .locomotion)
+        }
 
         stopCoreMotion()
 
@@ -273,9 +275,6 @@ public final class LocomotionManager: @unchecked Sendable {
     private func startWakeup() async {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
-
-        // BIG-150: re-added wakeup cycle diagnostic (was removed in 95bb4f4)
-        Log.info("LocomotionManager.startWakeup() (was: \(recordingState))", subsystem: .locomotion)
 
         locationManager.startUpdatingLocation()
 
@@ -329,15 +328,6 @@ public final class LocomotionManager: @unchecked Sendable {
         // When not in regime, Layer 2 (applyDriftInflation) runs as before.
         let undergroundResult = await undergroundDetector.evaluate(rawLocation: location)
         lastUndergroundResult = undergroundResult
-
-        // BIG-150: log Kalman state snapshot at regime entry/exit for diagnostic visibility
-        if undergroundResult.didEnterRegime {
-            let snapshot = await kalmanFilter.snapshotForLogging()
-            Log.info("UndergroundDetector: Kalman snapshot at REGIME ENTRY — lat=\(snapshot.latitude), lon=\(snapshot.longitude), speed=\(String(format: "%.1f", snapshot.speed))m/s, hAcc=\(String(format: "%.0f", snapshot.hAccuracy))m", subsystem: .locomotion)
-        } else if undergroundResult.didExitRegime {
-            let snapshot = await kalmanFilter.snapshotForLogging()
-            Log.info("UndergroundDetector: Kalman snapshot at REGIME EXIT — lat=\(snapshot.latitude), lon=\(snapshot.longitude), speed=\(String(format: "%.1f", snapshot.speed))m/s, hAcc=\(String(format: "%.0f", snapshot.hAccuracy))m", subsystem: .locomotion)
-        }
 
         let kalmanInput: CLLocation
         if undergroundResult.inRegime {
@@ -423,13 +413,11 @@ public final class LocomotionManager: @unchecked Sendable {
 
             if !sleepState.shouldBeSleeping {
                 // Kalman says outside — genuine movement detected
-                Log.info("Wakeup → recording: Kalman outside geofence", subsystem: .locomotion)
                 stopTheWakeupTimeoutTimer()
                 startRecording()
 
             } else if sleepState.isRawLocationOutsideGeofence {
                 // raw disagrees with Kalman — keep gathering data until timer
-                Log.info("Wakeup: raw outside geofence, Kalman inside — gathering data", subsystem: .locomotion)
                 // BIG-150 Issue B: if UndergroundDetector is warming (predicate
                 // matched but not yet sustained-enough for regime entry), give
                 // the wakeup window more time to accumulate evidence.
@@ -437,7 +425,6 @@ public final class LocomotionManager: @unchecked Sendable {
 
             } else {
                 // both raw and Kalman inside geofence — back to sleep
-                Log.info("Wakeup → sleep: both raw and Kalman inside geofence", subsystem: .locomotion)
                 stopTheWakeupTimeoutTimer()
                 startSleeping()
             }
@@ -522,8 +509,6 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     private func restartTheWakeupTimer() {
         let duration = sleepCycleDuration
-        // BIG-150: re-added wakeup cycle diagnostic (was removed in 95bb4f4)
-        Log.info("Wakeup timer set (\(String(format: "%.0f", duration))s)", subsystem: .locomotion)
         wakeupTimer?.invalidate()
         wakeupTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
             if let self {
@@ -598,7 +583,6 @@ public final class LocomotionManager: @unchecked Sendable {
         let remainingTime = extendedEnd.timeIntervalSinceNow
         guard remainingTime > 0 else { return }
 
-        Log.info("BIG-150: extending wakeup timeout (UndergroundDetector warming, sustained=\(String(format: "%.1f", underground.sustainedDuration ?? 0))s, total budget \(Int(wakeupTimeoutExtendedForWarming))s)", subsystem: .locomotion)
         hasExtendedWakeupForUndergroundWarmup = true
 
         wakeupTimeoutTimer?.invalidate()

@@ -105,23 +105,8 @@ public actor UndergroundDetector {
             inRegime = false
         }
 
-        // 5. Log state transitions
-        if !wasInRegime && inRegime {
-            Log.info("UndergroundDetector: REGIME ENTRY (consecutive=\(consecutiveInvalidVelocityCount), rollingHAccAvg=\(formatM(rollingHAccAvg)), sustained=\(formatS(sustainedDuration)))", subsystem: .locomotion)
-        } else if wasInRegime && !inRegime {
-            Log.info("UndergroundDetector: REGIME EXIT (predicate broken)", subsystem: .locomotion)
-        }
-
-        // 6. Reshape if in regime
+        // reshape the raw location while in regime
         let reshapedLocation = inRegime ? reshape(rawLocation) : rawLocation
-
-        // 7. Per-raw diagnostic logging
-        if inRegime {
-            Log.info("UndergroundDetector: reshape raw hAcc=\(formatM(rawLocation.horizontalAccuracy))→\(formatM(reshapeClampHAcc)), spdAcc=\(String(format: "%.2f", rawLocation.speedAccuracy))→\(String(format: "%.0f", reshapeRelaxedSpeedAcc))", subsystem: .locomotion)
-        } else if predicateMatched {
-            // warming phase — predicate matched but sustained-duration not yet reached
-            Log.info("UndergroundDetector: predicate matched, warming (sustained=\(formatS(sustainedDuration))/\(formatS(minSustainedDuration)))", subsystem: .locomotion)
-        }
 
         return EvaluationResult(
             inRegime: inRegime,
@@ -156,16 +141,6 @@ public actor UndergroundDetector {
             speedAccuracy: reshapeRelaxedSpeedAcc,
             timestamp: raw.timestamp
         )
-    }
-
-    private func formatM(_ value: Double?) -> String {
-        guard let value else { return "?" }
-        return String(format: "%.0f", value) + "m"
-    }
-
-    private func formatS(_ value: TimeInterval?) -> String {
-        guard let value else { return "?" }
-        return String(format: "%.1f", value) + "s"
     }
 
     // MARK: - Result struct
