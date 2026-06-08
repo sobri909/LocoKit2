@@ -26,7 +26,7 @@ extension TimelineProcessor {
         }
 
         if TimelineProcessor.debugLogging, !alreadyMoved.isEmpty {
-            print("TimelineProcessor.sanitiseEdges(for:) moved \(alreadyMoved.count) samples")
+            Log.debug("TimelineProcessor.sanitiseEdges(for:) moved \(alreadyMoved.count) samples", subsystem: .timeline)
         }
     }
 
@@ -131,15 +131,25 @@ extension TimelineProcessor {
         // check for usable coordinates and get locations
         guard visitEdge.hasUsableCoordinate, visitEdgeNext.hasUsableCoordinate,
               tripEdge.hasUsableCoordinate, tripEdgeNext.hasUsableCoordinate,
+              let visitEdgeLocation = visitEdge.location,
               let tripEdgeLocation = tripEdge.location,
               let tripEdgeNextLocation = tripEdgeNext.location else { return nil }
 
         // first attempt: try to move trip edge into visit
         if !excluding.contains(tripEdge) {
-            let tripEdgeIsInside = visit.contains(tripEdgeLocation, sd: 1) // experiment with smaller radius
-            let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: 1)
+            // BIG-408: stationary edge samples are genuine visit time (correct arrival/departure),
+            // so retain them readily (sd:2 ≈ the rendered visit circle). Moving samples stay
+            // conservative (sd:1) so low-hAcc edge samples can't drag the visit centre. Each sample
+            // gated on its own effective type (confirmed ?? classified).
+            let tripEdgeIsInside = visit.contains(tripEdgeLocation, sd: tripEdge.activityType == .stationary ? 2 : 1)
+            let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: tripEdgeNext.activityType == .stationary ? 2 : 1)
 
             if tripEdgeIsInside && tripEdgeNextIsInside {
+                // BIG-408 TEMP (strip before commit): log NEW retentions — stationary trip-edge in
+                // the (sd:1, sd:2] annulus that the old sd:1 threshold would have ejected.
+                if tripEdge.activityType == .stationary, !visit.contains(tripEdgeLocation, sd: 1) {
+                    Log.info("BIG-408 pull: retained stationary trip-edge → visit \(visitItem.id) [\(tripEdge.date)]", subsystem: .timeline)
+                }
                 try await tripEdge.assignTo(itemId: visitItem.id)
                 return tripEdge
             }
@@ -152,10 +162,24 @@ extension TimelineProcessor {
         // Don't steal edge if it would make the visit invalid
         guard let visitSamples = visitItem.samples, visitSamples.count > 1 else { return nil }
 
+        // BIG-408: don't eject a visit-edge sample that still belongs to the visit by its own
+        // type-threshold (stationary→sd:2, moving→sd:1). Keeps genuine stationary tails put +
+        // avoids cascading them back out after the pull path absorbs them; wrongly-stationary
+        // wakeup-launch samples still eject once they move beyond sd:2.
         if !excluding.contains(visitEdge), !visit.contains(tripEdgeLocation, sd: 1) {
-            try await visitEdge.assignTo(itemId: tripItem.id)
-            return visitEdge
+            let visitEdgeBelongs = visit.contains(visitEdgeLocation, sd: visitEdge.activityType == .stationary ? 2 : 1)
+            if visitEdgeBelongs {
+                // BIG-408 TEMP (strip before commit): log NEW keeps — stationary visit-edge in the
+                // (sd:1, sd:2] annulus that the old sd:1 threshold would have ejected.
+                if visitEdge.activityType == .stationary, !visit.contains(visitEdgeLocation, sd: 1) {
+                    Log.info("BIG-408 push-blocked: kept stationary visit-edge in visit \(visitItem.id) [\(visitEdge.date)]", subsystem: .timeline)
+                }
+            } else {
+                try await visitEdge.assignTo(itemId: tripItem.id)
+                return visitEdge
+            }
         }
+
 
         return nil
     }
