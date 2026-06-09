@@ -145,11 +145,6 @@ extension TimelineProcessor {
             let tripEdgeNextIsInside = visit.contains(tripEdgeNextLocation, sd: tripEdgeNext.activityType == .stationary ? 2 : 1)
 
             if tripEdgeIsInside && tripEdgeNextIsInside {
-                // BIG-408 TEMP (strip before commit): log NEW retentions — stationary trip-edge in
-                // the (sd:1, sd:2] annulus that the old sd:1 threshold would have ejected.
-                if tripEdge.activityType == .stationary, !visit.contains(tripEdgeLocation, sd: 1) {
-                    Log.info("BIG-408 pull: retained stationary trip-edge → visit \(visitItem.id) [\(tripEdge.date)]", subsystem: .timeline)
-                }
                 try await tripEdge.assignTo(itemId: visitItem.id)
                 return tripEdge
             }
@@ -168,13 +163,7 @@ extension TimelineProcessor {
         // wakeup-launch samples still eject once they move beyond sd:2.
         if !excluding.contains(visitEdge), !visit.contains(tripEdgeLocation, sd: 1) {
             let visitEdgeBelongs = visit.contains(visitEdgeLocation, sd: visitEdge.activityType == .stationary ? 2 : 1)
-            if visitEdgeBelongs {
-                // BIG-408 TEMP (strip before commit): log NEW keeps — stationary visit-edge in the
-                // (sd:1, sd:2] annulus that the old sd:1 threshold would have ejected.
-                if visitEdge.activityType == .stationary, !visit.contains(visitEdgeLocation, sd: 1) {
-                    Log.info("BIG-408 push-blocked: kept stationary visit-edge in visit \(visitItem.id) [\(visitEdge.date)]", subsystem: .timeline)
-                }
-            } else {
+            if !visitEdgeBelongs {
                 try await visitEdge.assignTo(itemId: tripItem.id)
                 return visitEdge
             }
