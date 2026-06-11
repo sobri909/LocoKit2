@@ -58,6 +58,28 @@ public enum Log {
         State.shared.osLogger(for: subsystem).debug("\(message, privacy: .public)")
     }
 
+    // MARK: - Wedge detector context hook (BIG-595)
+
+    /// Optional app-supplied context appended to task-pool wedge log lines (e.g. counts
+    /// of known cooperative-pool-blocking operations in flight). Must be cheap and
+    /// non-blocking — it's called synchronously on the main thread from a Timer.
+    public static func setWedgeContextProvider(_ provider: @escaping @Sendable () -> String) {
+        wedgeContextProvider.withLock { $0 = provider }
+    }
+
+    private static let wedgeContextProvider = Mutex<(@Sendable () -> String)?>(nil)
+
+    fileprivate static func wedgeContext() -> String? {
+        wedgeContextProvider.withLock { $0 }?()
+    }
+
+    /// Raw write that bypasses the fib-marker machinery: wedge lines must not reset the
+    /// fib cadence, so detector output stays naturally fib-throttled during a long wedge.
+    fileprivate static func writeWedgeLine(_ message: String) {
+        State.shared.osLogger(for: .misc).error("\(message, privacy: .public)")
+        State.shared.writeToFile(format(message, subsystem: .misc, level: "ERROR"))
+    }
+
     // MARK: - File management
 
     public static func delete(_ url: URL) throws {
@@ -144,11 +166,38 @@ public enum Log {
         private var timer: Timer?
         private var fibn = 1
 
+        // task-pool wedge detector state (BIG-595). The probe is a plain detached Task,
+        // so it can only land if the cooperative pool is scheduling jobs. The run-loop
+        // Timer + MainActor-direct jobs survive a pool wedge (field-verified in the
+        // BIG-595 logs), so this timer is the right place to stand watch from.
+        private var lastProbeSent: Date?
+        nonisolated private static let lastProbeLanded = Mutex<Date?>(nil)
+
         func schedule() {
             timer?.invalidate()
             let currentFibn = fibn
             timer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(currentFibn)), repeats: false) { _ in
+                MainActor.assumeIsolated {
+                    MarkerTimer.shared.checkTaskPoolLiveness()
+                }
                 Log.info("--\(currentFibn)--", subsystem: .misc)
+            }
+        }
+
+        func checkTaskPoolLiveness() {
+            if let sent = lastProbeSent {
+                let landed = Self.lastProbeLanded.withLock { $0 }
+                if landed == nil || landed! < sent {
+                    let staleness = Int(Date().timeIntervalSince(sent))
+                    var message = "Task-pool probe unanswered (\(staleness)s) — cooperative pool suspected wedged"
+                    if let context = Log.wedgeContext() { message += " — \(context)" }
+                    Log.writeWedgeLine(message)
+                    return // leave the unanswered probe standing; staleness keeps accumulating
+                }
+            }
+            lastProbeSent = .now
+            Task.detached {
+                MarkerTimer.lastProbeLanded.withLock { $0 = .now }
             }
         }
 
