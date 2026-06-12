@@ -177,23 +177,47 @@ public enum Log {
             timer?.invalidate()
             let currentFibn = fibn
             timer = Timer.scheduledTimer(withTimeInterval: .minutes(fib(currentFibn)), repeats: false) { _ in
-                MainActor.assumeIsolated {
-                    MarkerTimer.shared.checkTaskPoolLiveness()
-                }
                 Log.info("--\(currentFibn)--", subsystem: .misc)
             }
+
+            // probe timer runs on its own FIXED interval, independent of fib state —
+            // constant logging resets the fib timer, which previously suppressed probes
+            // entirely during busy phases (the BIG-599-era blind spot). Started lazily
+            // on the first log line; repeating, so it needs no re-arming (and survives
+            // a pool wedge — it's a main-run-loop Timer).
+            if probeTimer == nil {
+                probeTimer = Timer.scheduledTimer(withTimeInterval: probeInterval, repeats: true) { _ in
+                    MainActor.assumeIsolated {
+                        MarkerTimer.shared.checkTaskPoolLiveness()
+                    }
+                }
+            }
         }
+
+        private var probeTimer: Timer?
+        private let probeInterval: TimeInterval = 60
+        private var lastWedgeLog: Date?
+        private var wedgeLogGap: TimeInterval = 60
 
         func checkTaskPoolLiveness() {
             if let sent = lastProbeSent {
                 let landed = Self.lastProbeLanded.withLock { $0 }
                 if landed == nil || landed! < sent {
-                    let staleness = Int(Date().timeIntervalSince(sent))
-                    var message = "Task-pool probe unanswered (\(staleness)s) — cooperative pool suspected wedged"
-                    if let context = Log.wedgeContext() { message += " — \(context)" }
-                    Log.writeWedgeLine(message)
+                    // exponential backoff on wedge-line emission (60s, 2m, 4m, 8m...)
+                    // so a long wedge stays log-readable without flooding
+                    if lastWedgeLog == nil || lastWedgeLog!.age >= wedgeLogGap {
+                        let staleness = Int(Date().timeIntervalSince(sent))
+                        var message = "Task-pool probe unanswered (\(staleness)s) — cooperative pool suspected wedged"
+                        if let context = Log.wedgeContext() { message += " — \(context)" }
+                        Log.writeWedgeLine(message)
+                        lastWedgeLog = .now
+                        wedgeLogGap *= 2
+                    }
                     return // leave the unanswered probe standing; staleness keeps accumulating
                 }
+                // pool healthy — reset the backoff
+                lastWedgeLog = nil
+                wedgeLogGap = 60
             }
             lastProbeSent = .now
             Task.detached {
