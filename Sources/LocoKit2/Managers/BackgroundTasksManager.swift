@@ -95,6 +95,10 @@ public enum BackgroundTasksManager {
     /// plus the iOS `task.setTaskCompleted(success:)` callouts make extraction awkward
     /// without a parameter shape that would obscure both call sites.
     private static func runTaskCore(identifier: String, definition: BackgroundTaskDefinition) async {
+        if await ImportExportActivity.inProgress {
+            Log.info("Deferring \(definition.displayName): import/export in progress", subsystem: .tasks)
+            return   // status untouched → naturally retried next pass
+        }
         await updateTaskStateFor(identifier: identifier, to: .running)
         do {
             try await definition.workHandler()
@@ -160,9 +164,17 @@ public enum BackgroundTasksManager {
             return
         }
 
-        Task { await updateTaskStateFor(identifier: identifier, to: .running) }
-
         let workTask = Task.detached {
+            if await ImportExportActivity.inProgress {
+                Log.info("Deferring \(taskDefinition.displayName): import/export in progress", subsystem: .tasks)
+                await MainActor.run {
+                    Task { await scheduleTask(identifier: identifier) }   // reschedule the BGTask
+                    task.setTaskCompleted(success: true)                  // iOS requires completion
+                }
+                return
+            }
+
+            await updateTaskStateFor(identifier: identifier, to: .running)
             do {
                 try await taskDefinition.workHandler()
 
