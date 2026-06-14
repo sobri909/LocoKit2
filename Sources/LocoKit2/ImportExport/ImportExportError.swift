@@ -13,7 +13,9 @@ public enum ImportExportError: Error {
     
     case exportInProgress
     case exportNotInitialised
-    
+    case manifestUnreadable          // manifest exists in iCloud but couldn't be materialised/read — skip this run, never first-run
+    case manifestMissingButDataPresent  // no readable manifest, but the backup folder has data — abort rather than re-export from scratch
+
     // MARK: - General import errors
     
     case importInProgress

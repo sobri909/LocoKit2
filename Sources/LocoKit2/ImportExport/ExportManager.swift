@@ -42,6 +42,10 @@ public enum ExportManager {
     // unique identifier for this export session
     private static var currentExportId: String?
 
+    // manifest loaded during determineIncrementalMode, reused by writeInitialMetadata
+    // (avoids a second read + a second chance to misread an evicted manifest — BIG-597)
+    private static var loadedManifest: ExportMetadata?
+
     public enum ExportPhase: Sendable {
         case connecting
         case exportingPlaces
@@ -100,8 +104,9 @@ public enum ExportManager {
             snapshotUpperBound = startTime
             snapshotLowerBound = nil
             catchUpDateRange = nil
+            loadedManifest = nil
 
-            await determineIncrementalMode(type: type, startTime: startTime)
+            try await determineIncrementalMode(type: type, startTime: startTime)
 
             // write initial metadata
             try await writeInitialMetadata(type: type, startTime: startTime)
@@ -163,10 +168,37 @@ public enum ExportManager {
 
     // MARK: - Setup
 
-    private static func determineIncrementalMode(type: ExportType, startTime: Date) async {
+    private static func determineIncrementalMode(type: ExportType, startTime: Date) async throws {
         guard type == .incremental else { return }
+        guard let metadataURL else { throw ImportExportError.exportNotInitialised }
 
-        if let existingManifest = try? loadManifest() {
+        // Read the manifest with materialisation awareness. The safety is in the outcome:
+        // only a genuine `.absent` may drive first-run; couldn't-read MUST abort, never re-export.
+        let existingManifest: ExportMetadata?
+        switch await iCloudCoordinator.readCoordinated(from: metadataURL) {
+        case .data(let data):
+            existingManifest = try JSONDecoder.flexibleDateDecoder().decode(ExportMetadata.self, from: data)
+
+        case .absent:
+            // genuinely no manifest — but a true first run is only legitimate if the backup folder
+            // is actually empty. If it holds data, the manifest was lost/unreadable (not never-written):
+            // abort rather than destructively re-export everything from 2013 (BIG-597).
+            if backupFolderHasContent() {
+                Log.error("ExportManager: no readable manifest but backup folder has data — aborting (not a first run)", subsystem: .exporting)
+                throw ImportExportError.manifestMissingButDataPresent
+            }
+            existingManifest = nil
+
+        case .notLocalYet, .failed:
+            // couldn't materialise/read the manifest (evicted+offline / error) — skip this run,
+            // retry next cycle. Never first-run; that misread is the destructive bug (BIG-597).
+            Log.error("ExportManager: manifest unreadable (evicted/offline) — skipping this backup run", subsystem: .exporting)
+            throw ImportExportError.manifestUnreadable
+        }
+
+        loadedManifest = existingManifest
+
+        if let existingManifest {
             if let lastBackup = existingManifest.lastBackupDate {
                 // normal incremental: export changes since last backup
                 snapshotLowerBound = lastBackup
@@ -183,13 +215,26 @@ public enum ExportManager {
             }
 
         } else {
-            // no manifest: first backup, start catch-up from earliest data
+            // no manifest AND empty folder: genuine first backup, start catch-up from earliest data
             let earliestDate = await getEarliestDataDate()
             let chunkStart = earliestDate ?? startTime
             let chunkEnd = min(chunkStart.addingTimeInterval(catchUpChunkSize), startTime)
             catchUpDateRange = DateInterval(start: chunkStart, end: chunkEnd)
             Log.info("ExportManager: Catch-up mode (first run) from \(chunkStart) to \(chunkEnd)", subsystem: .exporting)
         }
+    }
+
+    /// true if the backup destination already holds exported data (items or samples) — used to tell
+    /// a genuine first run from a lost/unreadable manifest. Counts evicted `.icloud` placeholders too
+    /// (data exists, just offloaded), which is exactly what we want to protect (BIG-597).
+    private static func backupFolderHasContent() -> Bool {
+        let manager = FileManager.default
+        for dir in [itemsURL, samplesURL].compactMap({ $0 }) {
+            if let contents = try? manager.contentsOfDirectory(atPath: dir.path), !contents.isEmpty {
+                return true
+            }
+        }
+        return false
     }
 
     private static func exportBucketed<T: Encodable & Sendable>(
@@ -301,8 +346,9 @@ public enum ExportManager {
             throw ImportExportError.exportNotInitialised
         }
 
-        // preserve critical state from existing manifest (if any)
-        let existingManifest = try? loadManifest()
+        // preserve critical state from the manifest loaded in determineIncrementalMode — reuse the
+        // stash rather than re-reading (a second read is a second chance to misread an eviction — BIG-597)
+        let existingManifest = loadedManifest
 
         // gather stats
         let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
