@@ -132,6 +132,7 @@ public final class LocomotionManager: @unchecked Sendable {
         startCoreMotion()
 
         restartTheFallbackTimer()
+        restartTheChainWatchdog()
     }
 
     @MainActor
@@ -146,6 +147,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
         stopTheFallbackTimer()
         stopTheWakeupTimer()
+        stopTheChainWatchdog()
 
         backgroundSession?.invalidate()
         backgroundSession = nil
@@ -268,6 +270,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
         recordingState = .sleeping
 
+        lastChainActivity = .now
         restartTheWakeupTimer()
     }
 
@@ -290,6 +293,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
         recordingState = .wakeup
 
+        lastChainActivity = .now
         // give the location manager time to deliver data before going back to sleep
         restartTheWakeupTimeoutTimer()
     }
@@ -495,6 +499,19 @@ public final class LocomotionManager: @unchecked Sendable {
     private let wakeupTimeoutExtendedForWarming: TimeInterval = 60
     private var hasExtendedWakeupForUndergroundWarmup: Bool = false
 
+    // BIG-596: chain-liveness watchdog. The sleep/wakeup cycle is driven by
+    // one-shot timers whose handlers run via `Task { await … }`. In rare,
+    // field-observed cases (mechanism unproven — looks like a MainActor task
+    // not getting scheduled) that hop doesn't run, the successor timer never
+    // gets armed, and recording silently dies until relaunch. This is a
+    // backstop: a repeating run-loop timer that re-arms the chain if it stalls.
+    // It runs its check SYNCHRONOUSLY via MainActor.assumeIsolated (not a Task),
+    // so it survives the same stall that kills the chain — same footing as the
+    // DebugLogger task-pool probe.
+    private var chainWatchdogTimer: Timer?
+    private var lastChainActivity: Date?
+    private let chainStallThreshold: TimeInterval = 180
+
     @MainActor
     private func restartTheFallbackTimer() {
         let duration = fallbackUpdateDuration
@@ -563,6 +580,33 @@ public final class LocomotionManager: @unchecked Sendable {
         hasExtendedWakeupForUndergroundWarmup = false
         wakeupTimeoutTimer?.invalidate()
         wakeupTimeoutTimer = nil
+    }
+
+    // MARK: - Chain-liveness watchdog (BIG-596)
+
+    @MainActor
+    private func restartTheChainWatchdog() {
+        Log.info("Chain-liveness watchdog armed", subsystem: .locomotion)
+        chainWatchdogTimer?.invalidate()
+        chainWatchdogTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated { self.checkChainLiveness() }
+        }
+    }
+
+    @MainActor
+    private func stopTheChainWatchdog() {
+        chainWatchdogTimer?.invalidate()
+        chainWatchdogTimer = nil
+    }
+
+    @MainActor
+    private func checkChainLiveness() {
+        // only sleep/wakeup cycle on the one-shot chain; recording is driven by the fallback timer
+        guard recordingState == .sleeping || recordingState == .wakeup else { return }
+        guard let last = lastChainActivity, last.age > chainStallThreshold else { return }
+        Log.error("Sleep/wakeup chain stalled \(Int(last.age))s in \(recordingState) — re-arming", subsystem: .locomotion)
+        startSleeping()
     }
 
     /// BIG-150 Issue B: extend the active wakeup timeout when
