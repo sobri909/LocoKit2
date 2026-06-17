@@ -45,10 +45,20 @@ extension TimelineItem {
         self.base = mutableBase
         
         if legacyItem.isVisit {
+            // Only carry visit coordinates across when usable. A null-island (0,0) or
+            // out-of-range coordinate fails TimelineItemVisit's coordinate CHECK and throws
+            // at insert, aborting the whole import (BIG-611). nil satisfies the both-null arm
+            // of the CHECK; the processor recomputes the centre from samples later.
+            let coordinate: CLLocationCoordinate2D? = {
+                guard let latitude = legacyItem.latitude, let longitude = legacyItem.longitude else { return nil }
+                let coord = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                return coord.isUsable ? coord : nil
+            }()
+
             var visit = TimelineItemVisit(
                 itemId: legacyItem.itemId,
-                latitude: legacyItem.latitude,
-                longitude: legacyItem.longitude,
+                latitude: coordinate?.latitude,
+                longitude: coordinate?.longitude,
                 radiusMean: legacyItem.radiusMean ?? 50,
                 radiusSD: legacyItem.radiusSD ?? 10
             )
