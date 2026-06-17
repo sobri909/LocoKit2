@@ -81,6 +81,10 @@ extension Comparable {
 }
 
 extension String {
+    /// nil when empty, else self. Normalises empty-string values that would otherwise
+    /// violate length-CHECK constraints (treats "" the same as a missing value).
+    var nonEmpty: String? { isEmpty ? nil : self }
+
     func deletingPrefix(_ prefix: String) -> String {
         guard self.hasPrefix(prefix) else { return self }
         return String(self.dropFirst(prefix.count))

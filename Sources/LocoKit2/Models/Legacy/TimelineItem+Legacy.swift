@@ -74,7 +74,7 @@ extension TimelineItem {
             }
             
             visit.streetAddress = legacyItem.streetAddress
-            visit.customTitle = legacyItem.customTitle
+            visit.customTitle = legacyItem.customTitle?.nonEmpty
             
             self.visit = visit
             
@@ -92,8 +92,9 @@ extension TimelineItem {
                 
                 if let manualActivityType = legacyItem.manualActivityType, manualActivityType {
                     trip.confirmedActivityType = ActivityType(stringValue: activityType)
-                    // if we have a confirmed type, we can't be uncertain
-                    trip.uncertainActivityType = false
+                    // certain only if the type actually mapped; an unrecognised old string
+                    // leaves confirmed nil, so it must stay uncertain (CHECK constraint)
+                    trip.uncertainActivityType = trip.confirmedActivityType == nil
                 } else {
                     // unconfirmed activity type - could be uncertain
                     trip.uncertainActivityType = true

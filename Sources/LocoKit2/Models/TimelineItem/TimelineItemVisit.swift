@@ -202,6 +202,15 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
             uncertainPlace = placeId == nil ? true : uncertain
         }
     }
+
+    /// Clear the place association, leaving the visit placeless and uncertain.
+    /// Keeps the schema invariants consistent: a placeless visit can't be confirmed,
+    /// and must be uncertain (TimelineItemVisit CHECK constraints).
+    public mutating func clearPlace() {
+        placeId = nil
+        confirmedPlace = false
+        uncertainPlace = true
+    }
     
     public mutating func copyMetadata(from otherVisit: TimelineItemVisit) {
         placeId = otherVisit.placeId

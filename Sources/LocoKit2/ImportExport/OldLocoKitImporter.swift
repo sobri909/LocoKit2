@@ -326,10 +326,9 @@ public enum OldLocoKitImporter {
                             let placeExists = try Place.filter { $0.id == placeId }.fetchCount(db) > 0
                             if !placeExists {
                                 Log.info("Visit \(visit.itemId) references non-existent place: \(placeId)", subsystem: .importing)
-                                // clear the invalid placeId
+                                // clear the invalid place (placeless visits can't be confirmed, must be uncertain)
                                 var mutableVisit = visit
-                                mutableVisit.placeId = nil
-                                mutableVisit.setUncertainty(true)
+                                mutableVisit.clearPlace()
                                 try mutableVisit.insert(db, onConflict: .ignore)
                             } else {
                                 try visit.insert(db, onConflict: .ignore)

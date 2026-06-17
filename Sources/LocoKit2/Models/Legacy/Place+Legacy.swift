@@ -12,7 +12,7 @@ extension Place {
     public init(from legacyPlace: LegacyPlace) {
         self.init(
             coordinate: legacyPlace.coordinate,
-            name: legacyPlace.name ?? "Unnamed Place",
+            name: legacyPlace.name?.nonEmpty ?? "Unnamed Place",
             streetAddress: legacyPlace.streetAddress,
             secondsFromGMT: legacyPlace.secondsFromGMT,
             mapboxPlaceId: legacyPlace.mapboxPlaceId,
