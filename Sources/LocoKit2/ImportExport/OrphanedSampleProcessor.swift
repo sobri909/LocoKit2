@@ -24,42 +24,52 @@ public enum OrphanedSampleProcessor {
         Log.info("Starting orphan processing: \(orphanedSamples.count) groups, \(totalOrphans) total samples", subsystem: .database)
         
         // process each group of samples that belonged to the same original item
+        var failed = 0
         for (originalItemId, samples) in orphanedSamples {
-            // not enough samples to create a valid item
-            if samples.count < TimelineItemTrip.minimumValidSamples {
-                Log.info("Group \(originalItemId): \(samples.count) samples (below threshold) → creating individual items", subsystem: .database)
-                try await createIndividualItems(for: samples)
-                individualItems += samples.count
-                continue
-            }
-            
-            // analyze moving states to determine item type
-            let stationarySamples = samples.filter { $0.movingState == .stationary }
-            let stationaryRatio = Double(stationarySamples.count) / Double(samples.count)
-            let stationaryPercentage = Int(stationaryRatio * 100)
-            
-            // high confidence for Visit (>80% stationary)
-            if stationaryRatio > 0.8 {
-                Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Visit", subsystem: .database)
-                try await Database.pool.write { db in
-                    _ = try TimelineItem.createItem(from: samples, isVisit: true, db: db)
+            do {
+                // not enough samples to create a valid item
+                if samples.count < TimelineItemTrip.minimumValidSamples {
+                    Log.info("Group \(originalItemId): \(samples.count) samples (below threshold) → creating individual items", subsystem: .database)
+                    try await createIndividualItems(for: samples)
+                    individualItems += samples.count
+                    continue
                 }
-                recreatedItems += 1
-                
-            // high confidence for Trip (<20% stationary)
-            } else if stationaryRatio < 0.2 {
-                Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Trip", subsystem: .database)
-                try await Database.pool.write { db in
-                    _ = try TimelineItem.createItem(from: samples, isVisit: false, db: db)
+
+                // analyze moving states to determine item type
+                let stationarySamples = samples.filter { $0.movingState == .stationary }
+                let stationaryRatio = Double(stationarySamples.count) / Double(samples.count)
+                let stationaryPercentage = Int(stationaryRatio * 100)
+
+                // high confidence for Visit (>80% stationary)
+                if stationaryRatio > 0.8 {
+                    Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Visit", subsystem: .database)
+                    try await Database.pool.write { db in
+                        _ = try TimelineItem.createItem(from: samples, isVisit: true, db: db)
+                    }
+                    recreatedItems += 1
+
+                // high confidence for Trip (<20% stationary)
+                } else if stationaryRatio < 0.2 {
+                    Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary) → recreating as Trip", subsystem: .database)
+                    try await Database.pool.write { db in
+                        _ = try TimelineItem.createItem(from: samples, isVisit: false, db: db)
+                    }
+                    recreatedItems += 1
+
+                // mixed moving states, create individual items
+                } else {
+                    Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary, mixed) → creating individual items", subsystem: .database)
+                    try await createIndividualItems(for: samples)
+                    individualItems += samples.count
                 }
-                recreatedItems += 1
-                
-            // mixed moving states, create individual items
-            } else {
-                Log.info("Group \(originalItemId): \(samples.count) samples (\(stationaryPercentage)% stationary, mixed) → creating individual items", subsystem: .database)
-                try await createIndividualItems(for: samples)
-                individualItems += samples.count
+            } catch {
+                failed += 1
+                Log.error("Skipping orphan group \(originalItemId): \(error)", subsystem: .database)
             }
+        }
+
+        if failed > 0 {
+            Log.error("Orphan processing skipped \(failed) groups", subsystem: .database)
         }
         
         Log.info("Processed orphaned samples: created \(recreatedItems) items and \(individualItems) individual samples", subsystem: .database)

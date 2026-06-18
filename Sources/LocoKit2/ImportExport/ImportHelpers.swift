@@ -25,57 +25,69 @@ public enum ImportHelpers {
         let (visitCount, tripCount) = try await Database.pool.write { db -> (Int, Int) in
             var visits = 0
             var trips = 0
+            var failed = 0
 
             for (originalItemId, disabledSamples) in disabledSamplesFromEnabledParents {
-                // fetch original item to determine type and copy metadata
-                let request = TimelineItem
-                    .itemBaseRequest(includeSamples: false)
-                    .filter { $0.id == originalItemId }
-                    .asRequest(of: TimelineItem.self)
-                guard let originalItem = try request.fetchOne(db) else {
-                    Log.info("Could not find original item \(originalItemId) for preserved parent creation", subsystem: .importing)
-                    continue
-                }
-
-                // create preserved parent matching original type
-                var preservedBase = TimelineItemBase(isVisit: originalItem.base.isVisit)
-                preservedBase.source = originalItem.base.source
-                preservedBase.disabled = true
-
-                try preservedBase.insert(db)
-
-                // create visit or trip component with metadata
-                if originalItem.base.isVisit, let originalVisit = originalItem.visit {
-                    visits += 1
-
-                    var preservedVisit = TimelineItemVisit(
-                        itemId: preservedBase.id,
-                        latitude: originalVisit.latitude,
-                        longitude: originalVisit.longitude,
-                        radiusMean: originalVisit.radiusMean,
-                        radiusSD: originalVisit.radiusSD
-                    )
-                    preservedVisit.copyMetadata(from: originalVisit)
-                    try preservedVisit.insert(db)
-
-                } else if !originalItem.base.isVisit, let originalTrip = originalItem.trip {
-                    trips += 1
-
-                    var preservedTrip = TimelineItemTrip(itemId: preservedBase.id, samples: [])
-                    preservedTrip.classifiedActivityType = originalTrip.classifiedActivityType
-                    preservedTrip.confirmedActivityType = originalTrip.confirmedActivityType
-                    preservedTrip.uncertainActivityType = originalTrip.uncertainActivityType
-                    try preservedTrip.insert(db)
-                }
-
-                // reassign disabled samples to preserved parent
-                for var sample in disabledSamples {
-                    try sample.updateChanges(db) {
-                        $0.timelineItemId = preservedBase.id
+                do {
+                    // fetch original item to determine type and copy metadata
+                    let request = TimelineItem
+                        .itemBaseRequest(includeSamples: false)
+                        .filter { $0.id == originalItemId }
+                        .asRequest(of: TimelineItem.self)
+                    guard let originalItem = try request.fetchOne(db) else {
+                        Log.info("Could not find original item \(originalItemId) for preserved parent creation", subsystem: .importing)
+                        continue
                     }
+
+                    try db.inSavepoint {
+                        // create preserved parent matching original type
+                        var preservedBase = TimelineItemBase(isVisit: originalItem.base.isVisit)
+                        preservedBase.source = originalItem.base.source
+                        preservedBase.disabled = true
+
+                        try preservedBase.insert(db)
+
+                        // create visit or trip component with metadata
+                        if originalItem.base.isVisit, let originalVisit = originalItem.visit {
+                            visits += 1
+
+                            var preservedVisit = TimelineItemVisit(
+                                itemId: preservedBase.id,
+                                latitude: originalVisit.latitude,
+                                longitude: originalVisit.longitude,
+                                radiusMean: originalVisit.radiusMean,
+                                radiusSD: originalVisit.radiusSD
+                            )
+                            preservedVisit.copyMetadata(from: originalVisit)
+                            try preservedVisit.insert(db)
+
+                        } else if !originalItem.base.isVisit, let originalTrip = originalItem.trip {
+                            trips += 1
+
+                            var preservedTrip = TimelineItemTrip(itemId: preservedBase.id, samples: [])
+                            preservedTrip.classifiedActivityType = originalTrip.classifiedActivityType
+                            preservedTrip.confirmedActivityType = originalTrip.confirmedActivityType
+                            preservedTrip.uncertainActivityType = originalTrip.uncertainActivityType
+                            try preservedTrip.insert(db)
+                        }
+
+                        // reassign disabled samples to preserved parent
+                        for var sample in disabledSamples {
+                            try sample.updateChanges(db) {
+                                $0.timelineItemId = preservedBase.id
+                            }
+                        }
+                        return .commit
+                    }
+                } catch {
+                    failed += 1
+                    Log.error("Skipping preserved-parent group \(originalItemId): \(error)", subsystem: .importing)
                 }
             }
 
+            if failed > 0 {
+                Log.error("Preserved parent creation skipped \(failed) groups", subsystem: .importing)
+            }
             return (visits, trips)
         }
 

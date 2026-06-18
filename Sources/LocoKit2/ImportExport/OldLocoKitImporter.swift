@@ -209,21 +209,31 @@ public enum OldLocoKitImporter {
         let batchSize = 500
         let batches = legacyPlaces.chunked(into: batchSize)
         
+        var failedPlaceCount = 0
         for (batchIndex, batch) in batches.enumerated() {
-            try await Database.pool.write { db in
+            let batchFailed = try await Database.pool.write { db -> Int in
+                var failed = 0
                 for legacyPlace in batch {
-                    // Convert legacy place to new Place model
-                    let place = Place(from: legacyPlace)
-                    
-                    // Save the place (RTree will be created automatically via trigger)
-                    try place.insert(db, onConflict: .ignore)
+                    do {
+                        // skip-and-continue: an unexpected bad row must not abort the migration
+                        try db.inSavepoint {
+                            // Convert + save (RTree created automatically via trigger)
+                            try Place(from: legacyPlace).insert(db, onConflict: .ignore)
+                            return .commit
+                        }
+                    } catch {
+                        failed += 1
+                        Log.error("Skipping place \(legacyPlace.placeId) on import: \(error)", subsystem: .importing)
+                    }
                 }
+                return failed
             }
-            
+            failedPlaceCount += batchFailed
+
             // Update progress
             let completedPercentage = Double(batchIndex + 1) / Double(batches.count)
             progress = completedPercentage
-            
+
             // Progress logging for debugging
             if batchIndex % 10 == 0 || batchIndex == batches.count - 1 {
                 print("Imported places batch \(batchIndex + 1)/\(batches.count)")
@@ -231,6 +241,9 @@ public enum OldLocoKitImporter {
         }
         
         progress = 1.0
+        if failedPlaceCount > 0 {
+            Log.error("Places import skipped \(failedPlaceCount) unconvertible places", subsystem: .importing)
+        }
         Log.info("Places import completed", subsystem: .importing)
         return legacyPlaces.count
     }
@@ -273,8 +286,8 @@ public enum OldLocoKitImporter {
         
         let totalCount = legacyItems.count
         
-        // Collect all item IDs that we'll be importing
-        importedItemIds = Set(legacyItems.map { $0.itemId })
+        // importedItemIds is set after the loop from successfully-imported items only,
+        // so a skipped item's samples orphan (null parent) rather than FK-violating.
         
         // Import items in batches
         let batchSize = 200 // Smaller than places since items are more complex
@@ -282,74 +295,88 @@ public enum OldLocoKitImporter {
 
         // Build disabled states mapping as we import
         var itemDisabledStates: [String: Bool] = [:]
+        var failedItemCount = 0
 
         for (batchIndex, batch) in batches.enumerated() {
-            let batchDisabledStates = try await Database.pool.write { db -> [String: Bool] in
+            let (batchDisabledStates, batchFailed) = try await Database.pool.write { db -> ([String: Bool], Int) in
                 var localStates: [String: Bool] = [:]
+                var failed = 0
 
                 for legacyItem in batch {
-                    // Store edge relationships for later restoration
-                    var previousId = legacyItem.previousItemId
-                    var nextId = legacyItem.nextItemId
-                    
-                    // Sanitise circular edge references
-                    if let prev = previousId, let next = nextId, prev == next {
-                        Log.info("Item \(legacyItem.itemId) has circular edge reference: previousItemId == nextItemId", subsystem: .importing)
-                        // Can't trust either edge - nil them both
-                        previousId = nil
-                        nextId = nil
-                    }
-                    
-                    let record = EdgeRecordManager.EdgeRecord(
-                        itemId: legacyItem.itemId,
-                        previousId: previousId,
-                        nextId: nextId
-                    )
-                    try edgeManager.saveRecord(record)
-                    
-                    // Create sanitised legacy item without edges for the init
-                    var sanitisedLegacyItem = legacyItem
-                    sanitisedLegacyItem.previousItemId = nil
-                    sanitisedLegacyItem.nextItemId = nil
-                    
-                    // Create and save TimelineItem from legacy item
-                    let item = try TimelineItem(from: sanitisedLegacyItem)
-                    try item.base.insert(db, onConflict: .ignore)
+                    do {
+                        // Store edge relationships for later restoration
+                        var previousId = legacyItem.previousItemId
+                        var nextId = legacyItem.nextItemId
 
-                    // Track disabled state for sample import
-                    localStates[item.id] = item.base.disabled
-                    
-                    // Save visit or trip component
-                    if let visit = item.visit {
-                        // check if placeId exists before saving
-                        if let placeId = visit.placeId {
-                            let placeExists = try Place.filter { $0.id == placeId }.fetchCount(db) > 0
-                            if !placeExists {
-                                Log.info("Visit \(visit.itemId) references non-existent place: \(placeId)", subsystem: .importing)
-                                // clear the invalid place (placeless visits can't be confirmed, must be uncertain)
-                                var mutableVisit = visit
-                                mutableVisit.clearPlace()
-                                try mutableVisit.insert(db, onConflict: .ignore)
-                            } else {
-                                try visit.insert(db, onConflict: .ignore)
-                            }
-                        } else {
-                            try visit.insert(db, onConflict: .ignore)
+                        // Sanitise circular edge references
+                        if let prev = previousId, let next = nextId, prev == next {
+                            Log.info("Item \(legacyItem.itemId) has circular edge reference: previousItemId == nextItemId", subsystem: .importing)
+                            // Can't trust either edge - nil them both
+                            previousId = nil
+                            nextId = nil
                         }
+
+                        let record = EdgeRecordManager.EdgeRecord(
+                            itemId: legacyItem.itemId,
+                            previousId: previousId,
+                            nextId: nextId
+                        )
+                        try edgeManager.saveRecord(record)
+
+                        // Create sanitised legacy item without edges for the init
+                        var sanitisedLegacyItem = legacyItem
+                        sanitisedLegacyItem.previousItemId = nil
+                        sanitisedLegacyItem.nextItemId = nil
+
+                        // Create TimelineItem from legacy item
+                        let item = try TimelineItem(from: sanitisedLegacyItem)
+
+                        // Skip-and-continue: a bad item must not abort the migration. The
+                        // savepoint keeps the item's base + visit/trip atomic on failure.
+                        try db.inSavepoint {
+                            try item.base.insert(db, onConflict: .ignore)
+
+                            // Save visit or trip component
+                            if let visit = item.visit {
+                                // check if placeId exists before saving
+                                if let placeId = visit.placeId {
+                                    let placeExists = try Place.filter { $0.id == placeId }.fetchCount(db) > 0
+                                    if !placeExists {
+                                        Log.info("Visit \(visit.itemId) references non-existent place: \(placeId)", subsystem: .importing)
+                                        // clear the invalid place (placeless visits can't be confirmed, must be uncertain)
+                                        var mutableVisit = visit
+                                        mutableVisit.clearPlace()
+                                        try mutableVisit.insert(db, onConflict: .ignore)
+                                    } else {
+                                        try visit.insert(db, onConflict: .ignore)
+                                    }
+                                } else {
+                                    try visit.insert(db, onConflict: .ignore)
+                                }
+                            }
+                            try item.trip?.insert(db, onConflict: .ignore)
+                            return .commit
+                        }
+
+                        // Track disabled state for sample import (only for imported items)
+                        localStates[item.id] = item.base.disabled
+                    } catch {
+                        failed += 1
+                        Log.error("Skipping item \(legacyItem.itemId) on import: \(error)", subsystem: .importing)
                     }
-                    try item.trip?.insert(db, onConflict: .ignore)
                 }
 
-                return localStates
+                return (localStates, failed)
             }
 
             // Merge batch disabled states into main collection
             itemDisabledStates.merge(batchDisabledStates) { (_, new) in new }
-            
+            failedItemCount += batchFailed
+
             // Update progress
             let completedPercentage = Double(batchIndex + 1) / Double(batches.count)
             progress = completedPercentage / 2 // First half of the process
-            
+
             // Progress logging for debugging
             if batchIndex % 20 == 0 || batchIndex == batches.count - 1 {
                 print("Imported timeline items batch \(batchIndex + 1)/\(batches.count)")
@@ -367,8 +394,13 @@ public enum OldLocoKitImporter {
         edgeManager.cleanup()
         
         progress = 1.0
+        if failedItemCount > 0 {
+            Log.error("Timeline Items import skipped \(failedItemCount) unconvertible items", subsystem: .importing)
+        }
         Log.info("Timeline Items import completed", subsystem: .importing)
 
+        // only successfully-imported items count as valid sample parents
+        importedItemIds = Set(itemDisabledStates.keys)
         return (totalCount, importedItemIds, itemDisabledStates)
     }
     
@@ -428,21 +460,21 @@ public enum OldLocoKitImporter {
         while currentRowId <= maxRowId {
             let batchEndRowId = min(currentRowId + batchSize - 1, maxRowId)
 
-            // Only read a chunk of samples in each iteration
-            let batch = try await legacyPool.read { [currentRowId, batchEndRowId, importDateRange] db in
-                var query = LegacySample
-                    .filter { $0.deleted == false }
-                    .filter(Column("rowid") >= currentRowId && Column("rowid") <= batchEndRowId)
+            do {
+                // Only read a chunk of samples in each iteration
+                let batch = try await legacyPool.read { [currentRowId, batchEndRowId, importDateRange] db in
+                    var query = LegacySample
+                        .filter { $0.deleted == false }
+                        .filter(Column("rowid") >= currentRowId && Column("rowid") <= batchEndRowId)
 
-                if let dateRange = importDateRange {
-                    query = query.filter { $0.date >= dateRange.start && $0.date < dateRange.end }
+                    if let dateRange = importDateRange {
+                        query = query.filter { $0.date >= dateRange.start && $0.date < dateRange.end }
+                    }
+
+                    return try query.order(Column("rowid")).fetchAll(db)
                 }
 
-                return try query.order(Column("rowid")).fetchAll(db)
-            }
-
-            if !batch.isEmpty {
-                do {
+                if !batch.isEmpty {
                     try await processLegacySampleBatch(
                         batch,
                         importedItemIds: importedItemIds,
@@ -453,15 +485,14 @@ public enum OldLocoKitImporter {
                     processedCount += batch.count
                     try await OldLocoKitImportState.updateLastProcessedSampleRowId(batchEndRowId)
 
-                } catch {
-                    failedBatchCount += 1
-                    Log.error("Sample batch failed (rowids \(currentRowId)-\(batchEndRowId)): \(error)", subsystem: .importing)
+                    // Progress logging every 100 batches (100k samples)
+                    if (currentRowId / batchSize) % 100 == 0 {
+                        print("Processed \(processedCount) samples...")
+                    }
                 }
-
-                // Progress logging every 100 batches (100k samples)
-                if (currentRowId / batchSize) % 100 == 0 {
-                    print("Processed \(processedCount) samples...")
-                }
+            } catch {
+                failedBatchCount += 1
+                Log.error("Sample batch failed (rowids \(currentRowId)-\(batchEndRowId)): \(error)", subsystem: .importing)
             }
 
             // Update progress based on rowid position
