@@ -30,6 +30,7 @@ public struct LegacyPlace: FetchableRecord, TableRecord, Codable, Hashable, Send
     public var googlePrimaryType: String?
     
     public var foursquareVenueId: String?
+    public var foursquareCategoryId: String?
     public var foursquareCategoryIntId: Int?
     
     public var coordinate: CLLocationCoordinate2D {
@@ -53,6 +54,7 @@ public struct LegacyPlace: FetchableRecord, TableRecord, Codable, Hashable, Send
         public static let googlePlaceId = Column("googlePlaceId")
         public static let googlePrimaryType = Column("googlePrimaryType")
         public static let foursquareVenueId = Column("foursquareVenueId")
+        public static let foursquareCategoryId = Column("foursquareCategoryId")
         public static let foursquareCategoryIntId = Column("foursquareCategoryIntId")
     }
 }
