@@ -67,11 +67,17 @@ public enum OldLocoKitImporter {
             let importState = OldLocoKitImportState(startedAt: startTime, phase: .places)
             try await OldLocoKitImportState.save(importState)
 
+            // BIG-598: count this attempt, committed before the heavy work so an OOM/watchdog
+            // kill is still counted next launch. Reset to 0 once samples progress is made.
+            try await OldLocoKitImportState.recordAttemptStart()
+
             try await performImportPhases(startTime: startTime, isResume: false)
 
         } catch {
             Log.error("Database import failed: \(error)", subsystem: .importing)
-            // preserve import state for resume (do NOT clear)
+            // preserve import state for resume (do NOT clear); capture the failure for the
+            // BIG-598 give-up UI
+            try? await OldLocoKitImportState.recordError(error)
             cleanupAndReset()
             throw error
         }
@@ -100,6 +106,10 @@ public enum OldLocoKitImporter {
         do {
             Log.info("Resuming old LocoKit import from phase: \(state.phase.rawValue)", subsystem: .importing)
 
+            // BIG-598: count this attempt before the heavy work, so an OOM/watchdog kill is still
+            // counted next launch. Reset to 0 once samples progress is made.
+            try await OldLocoKitImportState.recordAttemptStart()
+
             try connectToDatabases()
 
             try await performImportPhases(
@@ -110,7 +120,9 @@ public enum OldLocoKitImporter {
 
         } catch {
             Log.error("OldLocoKitImporter resume failed: \(error)", subsystem: .importing)
-            // preserve import state for next resume attempt
+            // preserve import state for next resume attempt; capture the failure for the
+            // BIG-598 give-up UI
+            try? await OldLocoKitImportState.recordError(error)
             cleanupAndReset()
             throw error
         }

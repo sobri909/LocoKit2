@@ -241,6 +241,10 @@ extension Database {
                 table.column("startedAt", .datetime).notNull()
                 table.column("phase", .text).notNull()
                 table.column("lastProcessedSampleRowId", .integer)
+                // BIG-598 escape valve (mirrored in the OldLocoKitImportState.escapeValve alter below)
+                table.column("noProgressAttemptCount", .integer).notNull().defaults(to: 0)
+                table.column("lastError", .text)
+                table.column("acknowledged", .boolean).notNull().defaults(to: false)
             }
         }
         
@@ -269,6 +273,17 @@ extension Database {
                     UPDATE DriftProfile SET lastSaved = CURRENT_TIMESTAMP WHERE id = NEW.id;
                 END;
                 """)
+        }
+
+        // BIG-598: escape-valve fields for the v3-import loop (attempt counter + last error
+        // + acknowledged). Existing installs get them here; fresh installs get them from the
+        // OldLocoKitImportState create block above.
+        migrator.registerMigration("OldLocoKitImportState.escapeValve") { db in
+            try? db.alter(table: "OldLocoKitImportState") { table in
+                table.add(column: "noProgressAttemptCount", .integer).notNull().defaults(to: 0)
+                table.add(column: "lastError", .text)
+                table.add(column: "acknowledged", .boolean).notNull().defaults(to: false)
+            }
         }
     }
 }

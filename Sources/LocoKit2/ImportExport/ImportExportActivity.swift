@@ -23,7 +23,7 @@ public enum ImportExportActivity {
             if ImportManager.importInProgress { return true }
             if ExportManager.exportInProgress { return true }
             if await ImportState.hasPartialImport { return true }
-            if await OldLocoKitImportState.hasIncompleteImport { return true }
+            if await OldLocoKitImportState.hasActiveImport { return true }
             return false
         }
     }
