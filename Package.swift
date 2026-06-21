@@ -26,6 +26,12 @@ let package = Package(
                 .process("Resources")
             ]
         ),
-        .testTarget(name: "LocoKit2Tests", dependencies: ["LocoKit2"])
+        .testTarget(
+            name: "LocoKit2Tests",
+            dependencies: ["LocoKit2"],
+            resources: [
+                .copy("Fixtures")
+            ]
+        )
     ]
 )
