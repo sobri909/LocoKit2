@@ -115,11 +115,36 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         self.location = location
         self.latitude = location?.coordinate.latitude
         self.longitude = location?.coordinate.longitude
-        self.altitude = location?.altitude
-        self.horizontalAccuracy = location?.horizontalAccuracy
-        self.verticalAccuracy = location?.verticalAccuracy
+        self.altitude = Self.finiteAltitude(location?.altitude)
+        self.horizontalAccuracy = Self.validHorizontalAccuracy(location?.horizontalAccuracy)
+        self.verticalAccuracy = Self.validVerticalAccuracy(location?.verticalAccuracy)
         self.speed = location?.speed
         self.course = location?.course
+    }
+
+    // MARK: - Non-finite guards
+    //
+    // A LocomotionSample must never hold a non-finite altitude/accuracy: a GPS sample taken with
+    // no altitude fix can carry altitude or verticalAccuracy == .infinity, which is unrepresentable
+    // in JSON and aborts the whole day's export (EncodingError.invalidValue: inf). These coerce such
+    // values to nil ("unknown") at every construction boundary — both fresh CLLocation ingest and
+    // decode (JSON import and GRDB row reads), so values already persisted as inf are cleaned on read.
+    // CoreLocation signals an invalid accuracy with a negative value, so those are nilled too;
+    // altitude may legitimately be negative (below sea level) so only its finiteness is checked.
+
+    private static func finiteAltitude(_ value: CLLocationDistance?) -> CLLocationDistance? {
+        guard let value, value.isFinite else { return nil }
+        return value
+    }
+
+    private static func validHorizontalAccuracy(_ value: CLLocationAccuracy?) -> CLLocationAccuracy? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return value
+    }
+
+    private static func validVerticalAccuracy(_ value: CLLocationAccuracy?) -> CLLocationAccuracy? {
+        guard let value, value.isFinite, value > 0 else { return nil }
+        return value
     }
 
     public init(from decoder: any Decoder) throws {
@@ -140,9 +165,9 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
 
         self.latitude = try container.decodeIfPresent(CLLocationDegrees.self, forKey: .latitude)
         self.longitude = try container.decodeIfPresent(CLLocationDegrees.self, forKey: .longitude)
-        self.altitude = try container.decodeIfPresent(CLLocationDistance.self, forKey: .altitude)
-        self.horizontalAccuracy = try container.decodeIfPresent(CLLocationAccuracy.self, forKey: .horizontalAccuracy)
-        self.verticalAccuracy = try container.decodeIfPresent(CLLocationAccuracy.self, forKey: .verticalAccuracy)
+        self.altitude = Self.finiteAltitude(try container.decodeIfPresent(CLLocationDistance.self, forKey: .altitude))
+        self.horizontalAccuracy = Self.validHorizontalAccuracy(try container.decodeIfPresent(CLLocationAccuracy.self, forKey: .horizontalAccuracy))
+        self.verticalAccuracy = Self.validVerticalAccuracy(try container.decodeIfPresent(CLLocationAccuracy.self, forKey: .verticalAccuracy))
         self.speed = try container.decodeIfPresent(CLLocationSpeed.self, forKey: .speed)
         self.course = try container.decodeIfPresent(CLLocationDirection.self, forKey: .course)
 
@@ -157,7 +182,7 @@ public struct LocomotionSample: FetchableRecord, PersistableRecord, Identifiable
         if let latitude, let longitude {
             let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
             self.location = CLLocation(
-                coordinate: coordinate, altitude: altitude!,
+                coordinate: coordinate, altitude: altitude ?? 0,
                 horizontalAccuracy: horizontalAccuracy ?? -1,
                 verticalAccuracy: verticalAccuracy ?? -1,
                 course: course ?? -1, speed: speed ?? -1,
