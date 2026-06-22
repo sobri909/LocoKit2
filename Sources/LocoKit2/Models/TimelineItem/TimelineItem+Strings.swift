@@ -21,7 +21,18 @@ extension TimelineItem {
     /// A descriptive title for the timeline item.
     /// - Returns: The item's title string.
     /// - Note: Returns "Error" if samples are required but not loaded (trips only).
-    public var title: String {
+    ///   For lightweight contexts that deliberately don't load samples (e.g. widgets),
+    ///   use `sampleFreeTitle`.
+    public var title: String { resolveTitle(requireSamplesForTrips: true) }
+
+    /// A display title that never requires samples. Unlike `title`, a sample-free trip
+    /// degrades to its (denormalised) `activityType` / "Transport" rather than returning
+    /// "Error". It cannot distinguish a data gap (that needs samples), so a sample-free
+    /// data-gap item renders as "Transport" — safe for items known not to be data gaps,
+    /// e.g. the live current item, which by construction never is one.
+    public var sampleFreeTitle: String { resolveTitle(requireSamplesForTrips: false) }
+
+    private func resolveTitle(requireSamplesForTrips: Bool) -> String {
         // visits with customTitle or place don't need samples
         if isVisit {
             if let visit, let customTitle = visit.customTitle {
@@ -54,10 +65,15 @@ extension TimelineItem {
             }
         }
 
-        // trips require samples for isDataGap check
+        // trips need samples only for the isDataGap check. Strict `title` lets that
+        // throw (→ "Error") when samples are absent — error is information, it catches
+        // load bugs (BIG-228). sampleFreeTitle skips the gate, since its callers
+        // deliberately omit samples (and the current item is never a data gap).
         do {
-            if try isDataGap {
-                return String(localized: "Data Gap", bundle: .module)
+            if requireSamplesForTrips || samples != nil {
+                if try isDataGap {
+                    return String(localized: "Data Gap", bundle: .module)
+                }
             }
 
             if let trip, let activityType = trip.activityType {
