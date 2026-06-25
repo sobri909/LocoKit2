@@ -42,10 +42,16 @@ public actor UndergroundDetector {
     /// Time-bounded rolling window for hAcc averaging (seconds)
     private let rollingWindowDuration: TimeInterval = 60.0
 
-    /// Reshape: clamp incoming hAcc to this value when in regime. Aggressive
-    /// because we want Kalman to actually follow the raw stream, not just
-    /// drift toward it.
-    private let reshapeClampHAcc: CLLocationAccuracy = 20.0
+    /// Reshape: clamp incoming hAcc to this value when in regime. Low enough that
+    /// the Kalman follows the raw stream (rather than drifting toward it / locking
+    /// to origin), but raised from the original 20m to 100m (BIG-607) to reduce
+    /// over-trust of noisy underground fixes: the tight 20m clamp traced the noise
+    /// too faithfully, producing jagged paths on noisy lines. 100m is still far
+    /// below the km-scale raw hAcc in this regime, so tracking is preserved — it
+    /// just smooths more. Value is provisional, being tuned against real metro
+    /// reports (paired with the in-regime raw-hAcc logging in
+    /// LocomotionManager.add(location:)).
+    private let reshapeClampHAcc: CLLocationAccuracy = 100.0
 
     /// Reshape: override speedAccuracy to this value (MUST be < 20 sentinel
     /// to bypass invalidVelocity check). Removes the zero-velocity-with-0.01-

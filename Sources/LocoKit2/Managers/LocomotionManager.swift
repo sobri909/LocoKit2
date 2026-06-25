@@ -340,6 +340,10 @@ public final class LocomotionManager: @unchecked Sendable {
             kalmanInput = undergroundResult.reshapedLocation
             lastDriftContext = nil
             lastDriftResult = nil
+            // BIG-607: temporary diagnostic — log the in-regime raw hAcc vs the
+            // reshape clamp, to gauge from real metro trips how much the loosened
+            // clamp helps (and confirm whether snap-back raws are high-hAcc).
+            Log.info("BIG-607 underground raw hAcc \(Int(location.horizontalAccuracy))m → clamped \(Int(undergroundResult.reshapedLocation.horizontalAccuracy))m (rollingAvg \(undergroundResult.rollingHAccAvg.map { "\(Int($0))" } ?? "nil")m)", subsystem: .locomotion)
         } else {
             // normal path: apply drift inflation before Kalman as before
             kalmanInput = await applyDriftInflation(to: location) ?? location
