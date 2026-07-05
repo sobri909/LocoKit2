@@ -30,6 +30,17 @@ public final class LocomotionManager: @unchecked Sendable {
 
     public var recordRawLocations: Bool = false
 
+    // BIG-617 shield regime (two-manager compliance experiment): when true, the background
+    // keep-alive is a .always CLServiceSession (no forced location indicator) and the sleep
+    // manager becomes a permanent DTS-compliant "shield" session (999 + df=None, never stopped
+    // while recording is on) — letting the recording manager keep its wanted df=3. When false:
+    // the long-proven baseline — CLBackgroundActivitySession keep-alive (forces the indicator)
+    // + coarse 3km sleep manager, stopped during recording. Set before recording starts;
+    // next-launch semantics only (no live regime swapping).
+    public var useShieldRegime: Bool = false {
+        didSet { applySleepRegimeConfig() }
+    }
+
     public var standbyCycleDuration: TimeInterval = 60 * 2
     public var fallbackUpdateDuration: TimeInterval = 6
 
@@ -120,13 +131,28 @@ public final class LocomotionManager: @unchecked Sendable {
 
         recordingState = .recording
 
-        if backgroundSession == nil {
+        if useShieldRegime {
+            // BIG-617: CLServiceSession keep-alive (no forced indicator) instead of CLBackgroundActivitySession.
+            if serviceSession == nil {
+                serviceSession = CLServiceSession(authorization: .always)
+            }
+            locationManager.showsBackgroundLocationIndicator = false
+        } else if backgroundSession == nil {
             backgroundSession = CLBackgroundActivitySession()
         }
 
         locationManager.startUpdatingLocation()
         locationManager.startMonitoringSignificantLocationChanges()
-        sleepLocationManager.stopUpdatingLocation()
+        if useShieldRegime {
+            // BIG-617 shield: the sleep manager is a permanent DTS-compliant keep-alive
+            // (999 + df=None) that is NEVER stopped while recording is on — the compliance
+            // hypothesis says the sole-df=3-session state is what cued the suspensions, so keep
+            // the compliant session alive through recording mode too. (start is idempotent;
+            // also covers cold-launch-straight-into-recording, where no sleep ever started it.)
+            sleepLocationManager.startUpdatingLocation()
+        } else {
+            sleepLocationManager.stopUpdatingLocation()
+        }
         lastLocationManagerRestart = .now
 
         startCoreMotion()
@@ -151,6 +177,8 @@ public final class LocomotionManager: @unchecked Sendable {
 
         backgroundSession?.invalidate()
         backgroundSession = nil
+        serviceSession?.invalidate()  // BIG-617 shield regime
+        serviceSession = nil
 
         recordingState = .off
     }
@@ -245,6 +273,9 @@ public final class LocomotionManager: @unchecked Sendable {
 
     @ObservationIgnored
     private var backgroundSession: CLBackgroundActivitySession?
+
+    @ObservationIgnored
+    private var serviceSession: CLServiceSession?  // BIG-617 shield regime
 
     // MARK: -
 
@@ -653,6 +684,9 @@ public final class LocomotionManager: @unchecked Sendable {
         return manager
     }()
 
+    // Default config is the long-proven baseline (coarse 3km keep-alive, visible indicator).
+    // useShieldRegime's didSet reconfigures it into the shield regime via applySleepRegimeConfig()
+    // — the didSet is needed because this closure runs at init, before the app can set the flag.
     @ObservationIgnored
     private let sleepLocationManager: CLLocationManager = {
         let manager = CLLocationManager()
@@ -663,6 +697,23 @@ public final class LocomotionManager: @unchecked Sendable {
         manager.allowsBackgroundLocationUpdates = true
         return manager
     }()
+
+    // BIG-617: sleep-manager config per regime. Shield = the DTS-prescribed compliant session
+    // (desiredAccuracy 999 — just under the magic 1000 — distanceFilter None, no indicator),
+    // which shields the app so the recording manager can keep its wanted df=3. Baseline = the
+    // coarse config that shipped for months. Only called via useShieldRegime's didSet, which
+    // is set once at launch before recording starts (next-launch semantics).
+    private func applySleepRegimeConfig() {
+        if useShieldRegime {
+            sleepLocationManager.desiredAccuracy = 999
+            sleepLocationManager.distanceFilter = kCLDistanceFilterNone
+            sleepLocationManager.showsBackgroundLocationIndicator = false
+        } else {
+            sleepLocationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+            sleepLocationManager.distanceFilter = kCLLocationAccuracyThreeKilometers
+            sleepLocationManager.showsBackgroundLocationIndicator = true
+        }
+    }
 
     @ObservationIgnored
     private var locationDelegate: Delegate?
@@ -678,6 +729,12 @@ public final class LocomotionManager: @unchecked Sendable {
         }
 
         func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+            // BIG-617: the sleep manager is keep-alive only — its coarse stream must never
+            // enter the pipeline (the Day-76 wakeup-bleed lesson). Regime-agnostic: in the
+            // shield regime it also runs through recording mode, so this filter is
+            // permanently load-bearing.
+            guard manager !== parent.sleepLocationManager else { return }
+
             if parent.recordRawLocations {
                 for location in locations {
                     Self.dumpRawLocation(location)
