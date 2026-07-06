@@ -44,14 +44,19 @@ public actor UndergroundDetector {
 
     /// Reshape: clamp incoming hAcc to this value when in regime. Low enough that
     /// the Kalman follows the raw stream (rather than drifting toward it / locking
-    /// to origin), but raised from the original 20m to 100m (BIG-607) to reduce
-    /// over-trust of noisy underground fixes: the tight 20m clamp traced the noise
-    /// too faithfully, producing jagged paths on noisy lines. 100m is still far
-    /// below the km-scale raw hAcc in this regime, so tracking is preserved — it
-    /// just smooths more. Value is provisional, being tuned against real metro
-    /// reports (paired with the in-regime raw-hAcc logging in
-    /// LocomotionManager.add(location:)).
-    private let reshapeClampHAcc: CLLocationAccuracy = 100.0
+    /// to origin), high enough that noisy underground fixes don't get traced
+    /// faithfully. History: 20m (traced noise, jagged paths) → 100m (1.4.0, not
+    /// enough for the noisiest lines — five forum voices) → 500m (1.5.0). The
+    /// 2026-07-06 sim sweep (docs/diagnostics/BIG-607/) showed 500 roughly halves
+    /// jaggedness on dense-cadence noisy lines, costs little on good lines, and
+    /// can't origin-lock (the lock needed the zero-velocity anchor, which the
+    /// speedAccuracy relaxation below removes). NOTE: on sparse-cadence lines
+    /// (per-minute fixes) the clamp value barely matters — covariance growth
+    /// between fixes swamps it. Sparse-line jaggedness needs different levers
+    /// (intake ordering guard; regime warmup lag). Still provisional, tuned
+    /// against real metro reports via the raw-hAcc logging in
+    /// LocomotionManager.add(location:).
+    private let reshapeClampHAcc: CLLocationAccuracy = 500.0
 
     /// Reshape: override speedAccuracy to this value (MUST be < 20 sentinel
     /// to bypass invalidVelocity check). Removes the zero-velocity-with-0.01-
