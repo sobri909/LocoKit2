@@ -356,6 +356,20 @@ public final class LocomotionManager: @unchecked Sendable {
         // only accept locations when recording is supposed to be happening
         guard recordingState == .recording || recordingState == .wakeup else { return }
 
+        // BIG-607: intake ordering guard — discard raws that claim to predate the
+        // last accepted raw. iOS re-delivers cached fixes (documented in the May
+        // Bangkok data; likely amplified by requestLocationIfStale() restarts on
+        // sparse underground lines), and the Kalman is undefined for negative dt:
+        // an out-of-order raw steps the state backward along its velocity and
+        // regresses lastTimestamp. Also discards the classic stale cached first
+        // fix after wakeup. Logged for visibility of discard frequency in the
+        // field (metro logs especially).
+        if let lastRaw = lastRawLocation, location.timestamp <= lastRaw.timestamp {
+            let staleness = lastRaw.timestamp.timeIntervalSince(location.timestamp)
+            Log.info("Discarding out-of-order raw (\(String(format: "%.1f", staleness))s older than last accepted)", subsystem: .locomotion)
+            return
+        }
+
         // BIG-150: UndergroundDetector evaluates the raw stream for GPS-fallback
         // regime (sustained invalidVelocity + sustained high hAcc). When in
         // regime, takes precedence over Layer 2 — its reshape goes to the Kalman
