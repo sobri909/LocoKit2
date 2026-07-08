@@ -99,6 +99,19 @@ public enum Log {
         }
     }
 
+    /// BIG-626: log files whose session window overlaps the given interval.
+    /// A file's coverage is [creationDate, contentModificationDate] — a session
+    /// spanning midnight covers two calendar days, so this is an overlap test,
+    /// not a filename-date match. Returned newest-first, same as logFileURLs().
+    public static func logFileURLs(overlapping interval: DateInterval) -> [URL] {
+        return logFileURLs().filter { url in
+            guard let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey]),
+                  let created = values.creationDate,
+                  let modified = values.contentModificationDate else { return false }
+            return created <= interval.end && modified >= interval.start
+        }
+    }
+
     /// BIG-431: delete log files older than the given age threshold. Skips
     /// the current session's log file as belt-and-braces (it'll be newer
     /// than any reasonable threshold anyway). Uses content modification
