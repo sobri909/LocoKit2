@@ -49,6 +49,9 @@ public enum SampleImportProcessor {
         var result = SampleBatchResult()
 
         for var sample in samples {
+            var scenario2Key: String?
+            var orphanKey: String?
+
             // check for disabled state mismatches
             if let itemId = sample.timelineItemId, let itemDisabled = itemDisabledStates[itemId] {
                 if itemDisabled && !sample.disabled {
@@ -57,9 +60,8 @@ public enum SampleImportProcessor {
                     result.scenario1Count += 1
 
                 } else if !itemDisabled && sample.disabled {
-                    // scenario 2: item enabled, sample disabled → collect for preserved parent creation
-                    result.scenario2[itemId, default: []].append(sample)
-                    result.scenario2Count += 1
+                    // scenario 2: item enabled, sample disabled → preserved parent candidate
+                    scenario2Key = itemId
                     // orphan from current parent (will be reassigned to preserved parent later)
                     sample.timelineItemId = nil
                 }
@@ -68,11 +70,8 @@ public enum SampleImportProcessor {
             // check for orphaned samples (references to missing items)
             if let originalItemId = sample.timelineItemId, !validItemIds.contains(originalItemId) {
                 // optionally skip disabled samples for orphan collection (legacy import behavior)
-                let shouldOrphan = !orphanOnlyIfEnabled || !sample.disabled
-
-                if shouldOrphan {
-                    result.orphans[originalItemId, default: []].append(sample)
-                    result.orphanCount += 1
+                if !orphanOnlyIfEnabled || !sample.disabled {
+                    orphanKey = originalItemId
                 }
 
                 // always null the reference for database compliance
@@ -80,6 +79,20 @@ public enum SampleImportProcessor {
             }
 
             try sample.insert(db, onConflict: .ignore)
+
+            // BIG-629: only newly-inserted samples join the rebuild collections. An .ignore'd
+            // no-op means the sample already exists in the main db with its own current home —
+            // a re-run must not yank it into a freshly-created parent.
+            guard db.changesCount == 1 else { continue }
+
+            if let scenario2Key {
+                result.scenario2[scenario2Key, default: []].append(sample)
+                result.scenario2Count += 1
+            }
+            if let orphanKey {
+                result.orphans[orphanKey, default: []].append(sample)
+                result.orphanCount += 1
+            }
         }
 
         return result

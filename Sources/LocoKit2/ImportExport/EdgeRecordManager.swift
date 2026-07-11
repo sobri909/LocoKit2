@@ -25,6 +25,9 @@ struct EdgeRecordManager {
     init() {
         self.fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("edge_records_\(UUID().uuidString).jsonl")
         try? FileManager.default.removeItem(at: fileURL)
+        // create empty upfront: a zero-item import then reads an empty file (clean no-op),
+        // while a missing file unambiguously means the saved records were lost (BIG-629)
+        FileManager.default.createFile(atPath: fileURL.path, contents: nil)
     }
     
     /// Save an edge record to the temporary file

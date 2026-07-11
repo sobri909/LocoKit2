@@ -35,6 +35,23 @@ public enum OldLocoKitImporter {
         return locoKitExists && arcAppExists
     }
 
+    // cached per launch: the legacy db only ever gains newer data
+    private static var cachedLegacyEarliestItemDate: Date??
+
+    /// earliest non-deleted item date in the legacy LocoKit database (BIG-629)
+    public static func legacyEarliestItemDate() async -> Date? {
+        if let cached = cachedLegacyEarliestItemDate { return cached }
+        guard let legacyPool = Database.legacyPool else { return nil }
+        let earliest = try? await legacyPool.read { db -> Date? in
+            let request = LegacyItem
+                .filter { $0.deleted == false }
+                .select { min($0.startDate) }
+            return try request.asRequest(of: Date.self).fetchOne(db)
+        }
+        cachedLegacyEarliestItemDate = .some(earliest ?? nil)
+        return earliest ?? nil
+    }
+
     // MARK: - Public interface
     
     public static func startImport(dateRange: DateInterval? = nil) async throws {
@@ -105,6 +122,9 @@ public enum OldLocoKitImporter {
 
         do {
             Log.info("Resuming old LocoKit import from phase: \(state.phase.rawValue)", subsystem: .importing)
+            if let dateRange = importDateRange {
+                Log.info("Resuming import with date range: \(dateRange.start) to \(dateRange.end)", subsystem: .importing)
+            }
 
             // BIG-598: count this attempt before the heavy work, so an OOM/watchdog kill is still
             // counted next launch. Reset to 0 once samples progress is made.
@@ -333,7 +353,6 @@ public enum OldLocoKitImporter {
                             previousId: previousId,
                             nextId: nextId
                         )
-                        try edgeManager.saveRecord(record)
 
                         // Create sanitised legacy item without edges for the init
                         var sanitisedLegacyItem = legacyItem
@@ -343,10 +362,13 @@ public enum OldLocoKitImporter {
                         // Create TimelineItem from legacy item
                         let item = try TimelineItem(from: sanitisedLegacyItem)
 
+                        var itemWasInserted = false
+
                         // Skip-and-continue: a bad item must not abort the migration. The
                         // savepoint keeps the item's base + visit/trip atomic on failure.
                         try db.inSavepoint {
                             try item.base.insert(db, onConflict: .ignore)
+                            itemWasInserted = db.changesCount == 1 // .ignore no-ops leave it 0
 
                             // Save visit or trip component
                             if let visit = item.visit {
@@ -368,6 +390,13 @@ public enum OldLocoKitImporter {
                             }
                             try item.trip?.insert(db, onConflict: .ignore)
                             return .commit
+                        }
+
+                        // BIG-629: only newly-inserted items get legacy edges restored — on a
+                        // re-run, already-present items keep their current (possibly reshaped)
+                        // edges rather than having stale legacy linkage re-imposed
+                        if itemWasInserted {
+                            try edgeManager.saveRecord(record)
                         }
 
                         // Track disabled state for sample import (only for imported items)
@@ -411,9 +440,25 @@ public enum OldLocoKitImporter {
         }
         Log.info("Timeline Items import completed", subsystem: .importing)
 
-        // only successfully-imported items count as valid sample parents
-        importedItemIds = Set(itemDisabledStates.keys)
-        return (totalCount, importedItemIds, itemDisabledStates)
+        // BIG-629: derive sample-parent truth from the main db, not the legacy walk. On a
+        // re-run, already-present items may have since been deleted or disabled by timeline
+        // processing and user edits — assigning samples against the legacy view violates the
+        // parent-state triggers and swallows whole sample batches. The main db's live items
+        // are the authoritative parent set: samples of since-deleted parents orphan (and get
+        // rebuilt homes), and disabled-state alignment uses the parents' current values.
+        let currentStates = try await Database.pool.read { db -> [String: Bool] in
+            let request = TimelineItemBase
+                .filter { $0.deleted == false }
+                .select { [$0.id, $0.disabled] }
+            var states = [String: Bool]()
+            for row in try Row.fetchAll(db, request) {
+                let id: String = row[0]
+                states[id] = row[1]
+            }
+            return states
+        }
+        importedItemIds = Set(currentStates.keys)
+        return (totalCount, importedItemIds, currentStates)
     }
     
     // MARK: - Sample Importing
@@ -467,6 +512,7 @@ public enum OldLocoKitImporter {
         var currentRowId = resumeFromRowId.map { $0 + 1 } ?? minRowId
         var processedCount = 0
         var failedBatchCount = 0
+        var skippedSampleCount = 0
 
         // Process in rowid-range batches
         while currentRowId <= maxRowId {
@@ -487,14 +533,35 @@ public enum OldLocoKitImporter {
                 }
 
                 if !batch.isEmpty {
-                    try await processLegacySampleBatch(
-                        batch,
-                        importedItemIds: importedItemIds,
-                        itemDisabledStates: itemDisabledStates,
-                        orphanedSamples: &orphanedSamples,
-                        disabledSamplesFromEnabledParents: &disabledSamplesFromEnabledParents
-                    )
-                    processedCount += batch.count
+                    do {
+                        try await processLegacySampleBatch(
+                            batch,
+                            importedItemIds: importedItemIds,
+                            itemDisabledStates: itemDisabledStates,
+                            orphanedSamples: &orphanedSamples,
+                            disabledSamplesFromEnabledParents: &disabledSamplesFromEnabledParents
+                        )
+                        processedCount += batch.count
+
+                    } catch {
+                        // BIG-629: a batch-level failure must not cost the whole batch (the
+                        // "Shape-2 swallow" that silently dropped whole ranges). Rescue
+                        // per-sample: each sample retries individually, falling back to
+                        // orphaning (nulled parent, rebuilt home) before giving up on it.
+                        failedBatchCount += 1
+                        Log.error("Sample batch failed (rowids \(currentRowId)-\(batchEndRowId)), rescuing per-sample: \(error)", subsystem: .importing)
+                        let result = await rescueSampleBatch(
+                            batch,
+                            importedItemIds: importedItemIds,
+                            itemDisabledStates: itemDisabledStates,
+                            orphanedSamples: &orphanedSamples,
+                            disabledSamplesFromEnabledParents: &disabledSamplesFromEnabledParents
+                        )
+                        processedCount += result.rescued + result.orphaned
+                        skippedSampleCount += result.skipped
+                        Log.info("Batch rescue: \(result.rescued) rescued, \(result.orphaned) orphaned, \(result.skipped) unrecoverable of \(batch.count)", subsystem: .importing)
+                    }
+
                     try await OldLocoKitImportState.updateLastProcessedSampleRowId(batchEndRowId)
 
                     // Progress logging every 100 batches (100k samples)
@@ -504,7 +571,7 @@ public enum OldLocoKitImporter {
                 }
             } catch {
                 failedBatchCount += 1
-                Log.error("Sample batch failed (rowids \(currentRowId)-\(batchEndRowId)): \(error)", subsystem: .importing)
+                Log.error("Sample batch read failed (rowids \(currentRowId)-\(batchEndRowId)): \(error)", subsystem: .importing)
             }
 
             // Update progress based on rowid position
@@ -515,7 +582,7 @@ public enum OldLocoKitImporter {
         }
 
         if failedBatchCount > 0 {
-            Log.error("Sample import completed with \(failedBatchCount) failed batches out of \(processedCount + failedBatchCount * batchSize) samples", subsystem: .importing)
+            Log.error("Sample import: \(failedBatchCount) batches went through per-sample rescue; \(skippedSampleCount) samples unrecoverable, \(processedCount) imported", subsystem: .importing)
         }
         
         // Create preserved parent items for scenario 2 mismatches
@@ -583,6 +650,52 @@ public enum OldLocoKitImporter {
         SampleImportProcessor.logBatchResults(batchResult)
 
         SampleImportProcessor.mergeResults(batchResult, into: &orphanedSamples, scenario2: &disabledSamplesFromEnabledParents)
+    }
+
+    /// BIG-629: per-sample rescue for a failed batch. Retries each sample individually,
+    /// then falls back to orphaning it (nulled parent; the orphan processor rebuilds a home)
+    /// so credible data isn't discarded over a parent-state conflict. Only samples the
+    /// schema intrinsically rejects are skipped.
+    private static func rescueSampleBatch(
+        _ batch: [LegacySample],
+        importedItemIds: Set<String>,
+        itemDisabledStates: [String: Bool],
+        orphanedSamples: inout [String: [LocomotionSample]],
+        disabledSamplesFromEnabledParents: inout [String: [LocomotionSample]]
+    ) async -> (rescued: Int, orphaned: Int, skipped: Int) {
+        var rescued = 0, orphaned = 0, skipped = 0
+        for legacySample in batch {
+            do {
+                try await processLegacySampleBatch(
+                    [legacySample],
+                    importedItemIds: importedItemIds,
+                    itemDisabledStates: itemDisabledStates,
+                    orphanedSamples: &orphanedSamples,
+                    disabledSamplesFromEnabledParents: &disabledSamplesFromEnabledParents
+                )
+                rescued += 1
+
+            } catch {
+                do {
+                    var sample = LocomotionSample(from: legacySample)
+                    let originalParentId = sample.timelineItemId
+                    sample.timelineItemId = nil
+                    let orphanSample = sample
+                    try await Database.pool.write { db in
+                        try orphanSample.insert(db, onConflict: .ignore)
+                    }
+                    if let originalParentId {
+                        orphanedSamples[originalParentId, default: []].append(orphanSample)
+                    }
+                    orphaned += 1
+
+                } catch {
+                    skipped += 1
+                    Log.error("Sample \(legacySample.sampleId) unrecoverable on import: \(error)", subsystem: .importing)
+                }
+            }
+        }
+        return (rescued, orphaned, skipped)
     }
 
     private static func cleanupAndReset() {
