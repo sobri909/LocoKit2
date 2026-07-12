@@ -211,6 +211,8 @@ extension Database {
         table.column("customTitle", .text).indexed()
             .check { $0 == nil || length($0) > 0 }
         table.column("streetAddress", .text).indexed()
+        table.column("locality", .text).indexed()
+        table.column("countryCode", .text).indexed()
 
         // coordinates must be both NULL or both valid (not null island, within range)
         table.check(sql: """

@@ -31,6 +31,8 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     public var customTitle: String?
     public var streetAddress: String?
+    public var locality: String?
+    public var countryCode: String?
 
     public static let place = belongsTo(Place.self, using: ForeignKey(["placeId"]))
 
@@ -218,6 +220,8 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         setUncertainty(otherVisit.uncertainPlace)
         customTitle = otherVisit.customTitle
         streetAddress = otherVisit.streetAddress
+        locality = otherVisit.locality
+        countryCode = otherVisit.countryCode
     }
 
     // MARK: - Columns
@@ -234,6 +238,8 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
         public static let uncertainPlace = Column(CodingKeys.uncertainPlace)
         public static let customTitle = Column(CodingKeys.customTitle)
         public static let streetAddress = Column(CodingKeys.streetAddress)
+        public static let locality = Column(CodingKeys.locality)
+        public static let countryCode = Column(CodingKeys.countryCode)
     }
 
 }

@@ -285,5 +285,16 @@ extension Database {
                 table.add(column: "acknowledged", .boolean).notNull().defaults(to: false)
             }
         }
+
+        // BIG-455: per-visit geocode fields (streetAddress already existed; locality +
+        // countryCode make placeless visits reachable by city/country search, and give
+        // trip geo-bucketing an edge-visit path that works without a Place). Existing
+        // installs get them here; fresh installs get them from defineTimelineItemVisitTable.
+        migrator.registerMigration("TimelineItemVisit.geocodeFields") { db in
+            try? db.alter(table: "TimelineItemVisit") { table in
+                table.add(column: "locality", .text).indexed()
+                table.add(column: "countryCode", .text).indexed()
+            }
+        }
     }
 }
