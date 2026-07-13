@@ -235,7 +235,7 @@ public enum OldLocoKitImporter {
             return try LegacyPlace.fetchAll(db)
         }
         
-        print("Read \(legacyPlaces.count) places from ArcApp database")
+        Log.info("Read \(legacyPlaces.count) places from ArcApp database", subsystem: .importing)
         
         // Import places in batches
         let batchSize = 500
@@ -314,7 +314,7 @@ public enum OldLocoKitImporter {
             return try query.fetchAll(db)
         }
         
-        print("Read \(legacyItems.count) timeline items from LocoKit database")
+        Log.info("Read \(legacyItems.count) timeline items from LocoKit database", subsystem: .importing)
         
         let totalCount = legacyItems.count
         
@@ -425,7 +425,7 @@ public enum OldLocoKitImporter {
         }
         
         // Restore edge relationships
-        print("Restoring timeline item edge relationships")
+        Log.info("Restoring timeline item edge relationships", subsystem: .importing)
         try await edgeManager.restoreEdgeRelationships { progressPercentage in
             // Update progress (second half of process)
             progress = 0.5 + (progressPercentage / 2)
@@ -506,7 +506,7 @@ public enum OldLocoKitImporter {
             return (minRowId, maxRowId, count)
         }
         
-        print("Found \(totalCount) non-deleted samples (rowid range: \(minRowId)-\(maxRowId))")
+        Log.info("Found \(totalCount) non-deleted samples (rowid range: \(minRowId)-\(maxRowId))", subsystem: .importing)
 
         let batchSize = 1000
         var currentRowId = resumeFromRowId.map { $0 + 1 } ?? minRowId
