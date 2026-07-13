@@ -51,7 +51,7 @@ public enum BackgroundTasksManager {
         guard ProcessInfo.processInfo.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue else { return }
 
         for (identifier, definition) in taskDefinitions {
-            try? Task.checkCancellation()
+            if Task.isCancelled { break }
             guard LocomotionManager.highlander.recordingState != .recording else { break }
             guard ProcessInfo.processInfo.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue else { break }
 
@@ -108,7 +108,12 @@ public enum BackgroundTasksManager {
         } catch {
             await updateTaskStateFor(identifier: identifier, to: .unfinished)
             await scheduleTask(identifier: identifier)
-            Log.error(error, subsystem: .tasks)
+            if error is CancellationError {
+                // normal lifecycle (eg app backgrounded mid foreground-catchup), not a failure
+                Log.info("\(definition.displayName): cancelled, will resume next run", subsystem: .tasks)
+            } else {
+                Log.error(error, subsystem: .tasks)
+            }
         }
     }
 
@@ -217,32 +222,30 @@ public enum BackgroundTasksManager {
 
     private static func updateTaskStateFor(identifier: String, to state: TaskStatus.TaskState) async {
         guard let taskDefinition = taskDefinitions[identifier] else { return }
+        let minimumDelay = taskDefinition.minimumDelay
 
+        // uncancellable: this is teardown bookkeeping that must land even (especially) when
+        // the surrounding task has been cancelled — a cancellable write here silently fails
+        // during background-cancellation, leaving TaskStatus stuck at .running, which then
+        // trips the already-running guards and blocks all future runs (BIG-568 find)
         do {
-            guard let status = try await getTaskStatusFor(identifier: identifier) else {
-                // no existing TaskStatus, so create and save a new one
-                var newStatus = TaskStatus(
-                    identifier: identifier,
-                    state: state,
-                    minimumDelay: taskDefinition.minimumDelay,
-                    lastUpdated: .now
-                )
-                update(taskStatus: &newStatus, state: state)
-                let statusToInsert = newStatus
-                try await Database.pool.write {
-                    try statusToInsert.insert($0)
-                }
-                return
-            }
-
-            let currentState = state
-            try await Database.pool.write { [status] db in
-                var mutableStatus = status
-                try mutableStatus.updateChanges(db) { status in
-                    Self.update(taskStatus: &status, state: currentState)
+            try await Database.pool.uncancellableWrite { db in
+                if let status = try TaskStatus.fetchOne(db, key: identifier) {
+                    var mutableStatus = status
+                    try mutableStatus.updateChanges(db) { status in
+                        Self.update(taskStatus: &status, state: state)
+                    }
+                } else {
+                    var newStatus = TaskStatus(
+                        identifier: identifier,
+                        state: state,
+                        minimumDelay: minimumDelay,
+                        lastUpdated: .now
+                    )
+                    Self.update(taskStatus: &newStatus, state: state)
+                    try newStatus.insert(db)
                 }
             }
-
         } catch {
             Log.error(error, subsystem: .tasks)
         }
