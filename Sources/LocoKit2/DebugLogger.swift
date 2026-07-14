@@ -163,11 +163,27 @@ public enum Log {
             fileLock.lock()
             defer { fileLock.unlock() }
             do {
+                // BIG-633: time-only line timestamps are ambiguous in multiday session
+                // files — emit a day marker at session start and each local-midnight
+                // rollover. File-only (console has its own dates); the UTC offset makes
+                // timezone changes visible across travel.
+                let now = Date()
+                if nextDayRollover == nil || now >= nextDayRollover! {
+                    try Log.dayMarkerLine(for: now).appendLineTo(Log.sessionLogFileURL)
+                    nextDayRollover = Calendar.current.nextDate(
+                        after: now,
+                        matching: DateComponents(hour: 0, minute: 0, second: 0),
+                        matchingPolicy: .nextTime
+                    ) ?? now.addingTimeInterval(.hours(24))
+                }
                 try line.appendLineTo(Log.sessionLogFileURL)
             } catch {
                 os_log("Couldn't write to log file", type: .error)
             }
         }
+
+        // only touched under fileLock (writeToFile)
+        nonisolated(unsafe) private var nextDayRollover: Date?
     }
 
     // MARK: - Fib marker timer (MainActor — needs run loop for Timer)
@@ -278,6 +294,23 @@ public enum Log {
     }()
 
     // MARK: - Private
+
+    /// BIG-633: `===== 2026-07-06 Mon (UTC+2) =====`. Formatter built fresh per call
+    /// (once per day at most) so day + offset both read the CURRENT timezone rather
+    /// than one cached at launch.
+    private static func dayMarkerLine(for date: Date) -> String {
+        let tz = TimeZone.current
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd EEE"
+        formatter.timeZone = tz
+        let offsetSeconds = tz.secondsFromGMT(for: date)
+        let hours = offsetSeconds / 3600
+        let minutes = abs(offsetSeconds % 3600) / 60
+        let offset = minutes == 0
+            ? String(format: "UTC%+d", hours)
+            : String(format: "UTC%+d:%02d", hours, minutes)
+        return "===== \(formatter.string(from: date)) (\(offset)) ====="
+    }
 
     private static func format(_ message: String, subsystem: Subsystem? = nil, level: String? = nil) -> String {
         let timestamp = timestampFormatter.string(from: .now)
