@@ -17,6 +17,17 @@ public enum OldLocoKitImporter {
     public private(set) static var currentPhase: ImportPhase?
     public private(set) static var progress: Double = 0
 
+    /// BIG-621: the last completed import found no timeline data in the legacy source (the
+    /// fresh-v3-on-new-phone shape). In-memory one-shot: drives the app's "no old data found"
+    /// cover in-session; a relaunch lands in a clean no-migration state anyway (no state row,
+    /// coverage gate false), so nothing needs to persist.
+    public private(set) static var lastCompletionWasEmptySource = false
+
+    /// BIG-621: user has seen the empty-source outcome — clear it so the cover stops showing.
+    public static func acknowledgeEmptySourceCompletion() {
+        lastCompletionWasEmptySource = false
+    }
+
     // MARK: - Database connections
     
     private static var arcAppDatabase: DatabasePool?
@@ -64,6 +75,7 @@ public enum OldLocoKitImporter {
         currentPhase = .connecting
         progress = 0
         importDateRange = dateRange
+        lastCompletionWasEmptySource = false
 
         // save initial states and disable observation/recording during import
         wasObserving = TimelineObserver.highlander.enabled
@@ -113,6 +125,7 @@ public enum OldLocoKitImporter {
         importInProgress = true
         progress = 0
         importDateRange = dateRange
+        lastCompletionWasEmptySource = false
 
         // save initial states and disable observation/recording during import
         wasObserving = TimelineObserver.highlander.enabled
@@ -163,6 +176,23 @@ public enum OldLocoKitImporter {
         // Import Timeline Items (from LocoKit.sqlite)
         currentPhase = .importingTimelineItems
         let (itemsCount, importedItemIds, itemDisabledStates) = try await importTimelineItems()
+
+        // BIG-621: a source with zero timeline items is the fresh-v3-on-new-phone shape —
+        // complete gracefully before the samples phase (whose orphan machinery has no business
+        // running against a zero-item source) and flag the outcome for the app to present.
+        // The in-window read count is only the trigger; the authoritative check is whole-source
+        // emptiness (nil earliest non-deleted item), because the app always imports with the
+        // BIG-629 dedup window (distantPast → earliestLocoKit2DataDate) — zero items in-window
+        // against a NON-empty source (parallel-era-only data) must complete silently instead,
+        // since "no old data found" would be false there.
+        if itemsCount == 0, await legacyEarliestItemDate() == nil {
+            Log.info("OldLocoKitImporter completed: no timeline data found in legacy source (\(placesCount) places)", subsystem: .importing)
+            lastCompletionWasEmptySource = true
+            try await OldLocoKitImportState.clear()
+            cleanupAndReset()
+            return
+        }
+
         try await OldLocoKitImportState.updatePhase(.samples)
 
         // Import Samples (from LocoKit.sqlite)
