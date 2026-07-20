@@ -62,6 +62,12 @@ extension Database {
                 Database.defineDriftProfileTable(table)
             }
 
+            // MARK: - DailyRecordingStats
+
+            try db.create(table: "DailyRecordingStats") { table in
+                Database.defineDailyRecordingStatsTable(table)
+            }
+
             // MARK: - TimelineItem
 
             try db.create(table: "TimelineItemBase") { table in
@@ -261,6 +267,22 @@ extension Database {
     }
 
     // MARK: - Shared Table Definitions
+
+    static func defineDailyRecordingStatsTable(_ table: TableDefinition) {
+        table.primaryKey("dayKey", .text)
+        table.column("lastSaved", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
+        table.column("utcOffset", .integer).notNull().defaults(to: 0)
+        table.column("secondsRecording", .double).notNull().defaults(to: 0)
+        table.column("secondsSleeping", .double).notNull().defaults(to: 0)
+        table.column("secondsWakeup", .double).notNull().defaults(to: 0)
+        table.column("secondsStandby", .double).notNull().defaults(to: 0)
+        table.column("restartCount", .integer).notNull().defaults(to: 0)
+        table.column("wakeupCount", .integer).notNull().defaults(to: 0)
+        table.column("wakeupTimeoutCount", .integer).notNull().defaults(to: 0)
+        table.column("chainStallCount", .integer).notNull().defaults(to: 0)
+        table.column("appLaunchCount", .integer).notNull().defaults(to: 0)
+        table.column("samplesRecorded", .integer).notNull().defaults(to: 0)
+    }
 
     static func defineDriftProfileTable(_ table: TableDefinition) {
         table.primaryKey("id", .text)

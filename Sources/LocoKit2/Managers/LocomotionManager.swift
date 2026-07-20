@@ -50,6 +50,7 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     public private(set) var recordingState: RecordingState = .off {
         didSet {
+            RecordingStats.recordStateChange(to: recordingState)
             Task { await appGroup?.save() }
             for continuation in stateContinuations.values {
                 continuation.yield(recordingState)
@@ -310,6 +311,8 @@ public final class LocomotionManager: @unchecked Sendable {
         if recordingState == .wakeup { return }
         if recordingState == .recording { return }
 
+        RecordingStats.increment(.wakeup)
+
         locationManager.startUpdatingLocation()
 
         // if in standby, do standby specific checks then exit early
@@ -507,6 +510,7 @@ public final class LocomotionManager: @unchecked Sendable {
             Log.info("Wakeup timed out (no location data received) — back to sleep (cycle: \(String(format: "%.1f", cycleDuration))s)", subsystem: .locomotion)
         }
 
+        RecordingStats.increment(.wakeupTimeout)
         stopTheWakeupTimeoutTimer()
         startSleeping()
     }
@@ -529,6 +533,7 @@ public final class LocomotionManager: @unchecked Sendable {
         guard lastRaw.timestamp.age > 60 else { return }
 
         Log.info("Restarting location manager (last raw: \(Int(lastRaw.timestamp.age))s ago)", subsystem: .locomotion)
+        RecordingStats.increment(.restart)
         locationManager.stopUpdatingLocation()
         locationManager.startUpdatingLocation()
         lastLocationManagerRestart = .now
@@ -655,6 +660,7 @@ public final class LocomotionManager: @unchecked Sendable {
         guard recordingState == .sleeping || recordingState == .wakeup else { return }
         guard let last = lastChainActivity, last.age > chainStallThreshold else { return }
         Log.error("Sleep/wakeup chain stalled \(Int(last.age))s in \(recordingState) — re-arming", subsystem: .locomotion)
+        RecordingStats.increment(.chainStall)
         startSleeping()
     }
 

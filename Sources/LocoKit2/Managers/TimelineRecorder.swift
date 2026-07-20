@@ -342,7 +342,9 @@ public enum TimelineRecorder {
             try await Database.pool.write { [sample] in
                 try sample.insert($0)
             }
-            
+
+            RecordingStats.incrementSamples()
+
             await processSample(sample)
 
             // reset the fallback

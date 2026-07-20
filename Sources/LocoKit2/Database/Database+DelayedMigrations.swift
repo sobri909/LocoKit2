@@ -296,5 +296,11 @@ extension Database {
                 table.add(column: "countryCode", .text).indexed()
             }
         }
+
+        migrator.registerMigration("DailyRecordingStats") { db in
+            try? db.create(table: "DailyRecordingStats") { table in
+                Database.defineDailyRecordingStatsTable(table)
+            }
+        }
     }
 }
