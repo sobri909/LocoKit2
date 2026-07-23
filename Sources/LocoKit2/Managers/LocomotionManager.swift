@@ -463,9 +463,11 @@ public final class LocomotionManager: @unchecked Sendable {
             // Trip 3 — iOS keeps delivering the same cached CLLocation on
             // every location-update callback without running fresh GPS/cell.
             // Already called in the .recording case; extending here so
-            // sleep-cycle wakeups can also detect + try to recover. Internal
-            // 60s throttle prevents over-firing across rapid wakeup cycles.
-            requestLocationIfStale()
+            // sleep-cycle wakeups can also detect + try to recover.
+            // BIG-624: 70s staleness (not 60) so the 60s max sleep cycle doesn't
+            // guarantee a restart-per-wakeup, + fruitless-streak backoff for
+            // bad-signal marathons. See requestLocationIfStale's doc comment.
+            requestLocationIfStale(stalenessThreshold: 70, backoffOnFruitless: true)
 
             if !sleepState.shouldBeSleeping {
                 // Kalman says outside — genuine movement detected
@@ -518,25 +520,53 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Location staleness handling
 
     private var lastLocationManagerRestart: Date?
+    private var fruitlessRestartStreak: Int = 0
 
-    private func requestLocationIfStale() {
-        // don't restart more than once per 60 seconds
-        if let lastRestart = lastLocationManagerRestart, lastRestart.age < 60 {
-            return
-        }
-
+    /// BIG-624: staleness threshold and throttle are context-dependent.
+    /// - .recording keeps the original flat 60s/60s (the BIG-567 stale-fix-serving
+    ///   recovery matters most there — underground trips etc; untouched).
+    /// - .wakeup passes 70s staleness: at the 60s max sleep cycle, lastRaw is ~60s
+    ///   old at every wakeup BY CONSTRUCTION (sleeping rejects raws), so a 60s
+    ///   threshold forced a stop/start of a manager that startWakeup() had started
+    ///   milliseconds earlier — ~1,000 redundant full-accuracy spin-ups/day.
+    /// - .wakeup also enables backoff: when restarts produce nothing (bad-signal
+    ///   bedroom marathons — restarts with last-raw ages >300s in field logs), the
+    ///   throttle grows 60s → 2m → 5m → 10m, reset by any fresh raw. Keyed on
+    ///   "is the insisting working?", so it stays eager wherever restarts succeed.
+    private func requestLocationIfStale(stalenessThreshold: TimeInterval = 60, backoffOnFruitless: Bool = false) {
         guard let lastRaw = lastRawLocation else {
             // no location yet but we started recently - wait for natural delivery
             return
         }
 
-        guard lastRaw.timestamp.age > 60 else { return }
+        guard lastRaw.timestamp.age > stalenessThreshold else { return }
 
-        Log.info("Restarting location manager (last raw: \(Int(lastRaw.timestamp.age))s ago)", subsystem: .locomotion)
+        // any fresh raw since the last restart resets the fruitless streak
+        if let lastRestart = lastLocationManagerRestart, lastRaw.timestamp > lastRestart {
+            fruitlessRestartStreak = 0
+        }
+
+        let throttle: TimeInterval
+        if backoffOnFruitless {
+            switch fruitlessRestartStreak {
+            case 0: throttle = 60
+            case 1: throttle = 120
+            case 2: throttle = 300
+            default: throttle = 600
+            }
+        } else {
+            throttle = 60
+        }
+        if let lastRestart = lastLocationManagerRestart, lastRestart.age < throttle {
+            return
+        }
+
+        Log.info("Restarting location manager (last raw: \(Int(lastRaw.timestamp.age))s ago, streak: \(fruitlessRestartStreak))", subsystem: .locomotion)
         RecordingStats.increment(.restart)
         locationManager.stopUpdatingLocation()
         locationManager.startUpdatingLocation()
         lastLocationManagerRestart = .now
+        fruitlessRestartStreak += 1  // provisional — reset by the next fresh raw
     }
 
     // MARK: - Timer handling
