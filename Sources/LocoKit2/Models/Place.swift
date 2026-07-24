@@ -39,6 +39,10 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     public var googlePrimaryType: String?
     public var foursquarePlaceId: String?
     public var foursquareCategoryId: Int?
+    // Foursquare V2 string category id (e.g. "4bf58dd8d48988d116941735").
+    // Populated only for places imported from pre-AT4 Arc history; null for all
+    // new places since the Foursquare V2 API is deprecated.
+    public var foursquareCategoryV2Id: String?
 
     public var rtreeId: Int64?
     
@@ -238,6 +242,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         case googlePrimaryType
         case foursquarePlaceId
         case foursquareCategoryId
+        case foursquareCategoryV2Id
 
         case visitCount
         case visitDays
@@ -268,6 +273,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         public static let googlePrimaryType = Column(CodingKeys.googlePrimaryType)
         public static let foursquarePlaceId = Column(CodingKeys.foursquarePlaceId)
         public static let foursquareCategoryId = Column(CodingKeys.foursquareCategoryId)
+        public static let foursquareCategoryV2Id = Column(CodingKeys.foursquareCategoryV2Id)
         public static let visitCount = Column(CodingKeys.visitCount)
         public static let visitDays = Column(CodingKeys.visitDays)
         public static let lastVisitDate = Column(CodingKeys.lastVisitDate)
@@ -283,7 +289,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
             id, lastSaved, source, latitude, longitude, radiusMean, radiusSD,
             secondsFromGMT, name, streetAddress, countryCode, locality, isStale,
             rtreeId, mapboxPlaceId, mapboxCategory, mapboxMakiIcon, googlePlaceId,
-            googlePrimaryType, foursquarePlaceId, foursquareCategoryId,
+            googlePrimaryType, foursquarePlaceId, foursquareCategoryId, foursquareCategoryV2Id,
             visitCount, visitDays, lastVisitDate
         ]
     }
@@ -318,6 +324,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         googlePrimaryType = try container.decodeIfPresent(String.self, forKey: .googlePrimaryType)
         foursquarePlaceId = try container.decodeIfPresent(String.self, forKey: .foursquarePlaceId)
         foursquareCategoryId = try container.decodeIfPresent(Int.self, forKey: .foursquareCategoryId)
+        foursquareCategoryV2Id = try container.decodeIfPresent(String.self, forKey: .foursquareCategoryV2Id)
         
         // stats
         visitCount = try container.decodeIfPresent(Int.self, forKey: .visitCount) ?? 0
@@ -358,6 +365,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         googlePrimaryType = row["googlePrimaryType"]
         foursquarePlaceId = row["foursquarePlaceId"]
         foursquareCategoryId = row["foursquareCategoryId"]
+        foursquareCategoryV2Id = row["foursquareCategoryV2Id"]
 
         // stats
         visitCount = row["visitCount"]
@@ -408,6 +416,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         container["googlePrimaryType"] = googlePrimaryType
         container["foursquarePlaceId"] = foursquarePlaceId
         container["foursquareCategoryId"] = foursquareCategoryId
+        container["foursquareCategoryV2Id"] = foursquareCategoryV2Id
 
         // stats
         container["visitCount"] = visitCount

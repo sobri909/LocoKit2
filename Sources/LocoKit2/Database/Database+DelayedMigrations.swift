@@ -302,5 +302,13 @@ extension Database {
                 Database.defineDailyRecordingStatsTable(table)
             }
         }
+
+        // BIG-459: restore the Foursquare V2 string category id dropped at AT4 design time.
+        // Existing installs get it here; fresh installs get it from the Place create block.
+        migrator.registerMigration("Place.foursquareCategoryV2Id") { db in
+            try? db.alter(table: "Place") { table in
+                table.add(column: "foursquareCategoryV2Id", .text)
+            }
+        }
     }
 }
