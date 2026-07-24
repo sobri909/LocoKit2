@@ -205,6 +205,72 @@ extension TimelineProcessor {
         }
     }
 
+    /// Disable a CLUSTER of items in one transaction, healing once at the end.
+    ///
+    /// Serial disableItem() calls over a cluster are self-defeating: each call's
+    /// trailing heal runs while the rest of the cluster is still enabled, so the
+    /// processor edge-steals/merges between restored originals and the not-yet-
+    /// disabled remainder (BIG-645's import-removal livelock). Batching means the
+    /// heal sees only the coherent end state — with the whole cluster disabled,
+    /// its samples are disabled too and processing cannot touch them.
+    public static func disableItems(itemIds: [String]) async throws {
+        guard !itemIds.isEmpty else { return }
+        let batchIds = Set(itemIds)
+
+        let reenabledItemIds = try await Database.pool.write { db -> [String] in
+            var reenabledIds: [String] = []
+
+            for itemId in itemIds {
+                let request = TimelineItem
+                    .itemBaseRequest(includeSamples: false)
+                    .filter { $0.id == itemId }
+                guard var item = try request.asRequest(of: TimelineItem.self).fetchOne(db) else {
+                    Log.error("disableItems(): Item not found: \(itemId)", subsystem: .timeline)
+                    continue
+                }
+
+                guard !item.disabled else { continue }
+
+                guard let dateRange = item.dateRange else {
+                    Log.error("disableItems(): Item has no date range: \(item.debugShortId)", subsystem: .timeline)
+                    continue
+                }
+
+                // disable item (trigger auto-syncs samples)
+                try item.base.updateChanges(db) {
+                    $0.disabled = true
+                }
+
+                // re-enable overlapping disabled items — excluding fellow batch
+                // members (mid-batch, earlier iterations' items are disabled and
+                // would otherwise be resurrected by later iterations' ranges)
+                let disabledRequest = TimelineItem
+                    .itemBaseRequest(includeSamples: false)
+                    .filter { $0.deleted == false && $0.disabled == true }
+                    .filter { !batchIds.contains($0.id) }
+                    .filter { $0.startDate < dateRange.end && $0.endDate > dateRange.start }
+                let overlappingDisabledItems = try disabledRequest.asRequest(of: TimelineItem.self).fetchAll(db)
+
+                for var overlappingItem in overlappingDisabledItems {
+                    guard !reenabledIds.contains(overlappingItem.id) else { continue }
+                    try overlappingItem.base.updateChanges(db) {
+                        $0.disabled = false
+                    }
+                    reenabledIds.append(overlappingItem.id)
+                }
+            }
+
+            Log.info("disableItems(): Disabled \(itemIds.count) item(s), re-enabled \(reenabledIds.count)", subsystem: .timeline)
+
+            return reenabledIds
+        }
+
+        // single heal pass over the coherent end state
+        if !reenabledItemIds.isEmpty {
+            await process(itemIds: reenabledItemIds)
+        }
+    }
+
     // MARK: - Helpers
 
     /// Create a new enabled item from a portion of an existing item's samples
