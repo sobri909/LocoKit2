@@ -32,6 +32,12 @@ internal final class Merge: Hashable, Sendable {
         guard await isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
             return .impossible
         }
+        // NB: the betweener's content is deliberately not scored here. This is NOT a
+        // gap (it's been repeatedly misdiagnosed as one): betweener-carrying merges
+        // are only ever constructed when BOTH neighbours' keepnessScore strictly
+        // exceeds the betweener's (collectBridgeMerges / collectAdjacentMerges in
+        // TimelineProcessor+Merges.swift), so the betweener consult happens one
+        // layer up, at collection time. Keeper-sized items never enter a bridge.
         return await keeper.scoreForConsuming(deadman)
     }
 
