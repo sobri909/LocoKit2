@@ -366,6 +366,18 @@ public enum TimelineRecorder {
             return
         }
 
+        /** stale current item — recording went dark (app termination etc). don't link the
+            new item to it, regardless of state match; leave the edges broken so that edge
+            healing can insert a Data Gap item between them (BIG-444). threshold shared with
+            edge healing's own gap-vs-connect line, so sub-threshold holes get direct
+            connected there, same as linking here would have **/
+        if let lastKnown = workingItem.dateRange?.end,
+           sample.date.timeIntervalSince(lastKnown) >= TimelineProcessor.edgeHealingThreshold {
+            let newItemBase = await createTimelineItem(from: sample)
+            currentItemId = newItemBase.id
+            return
+        }
+
         let previouslyMoving = !workingItem.isVisit
         let currentlyMoving = sample.movingState != .stationary
 
