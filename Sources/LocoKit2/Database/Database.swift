@@ -35,6 +35,15 @@ public final class Database: @unchecked Sendable {
         return try! DatabasePool(path: dbUrl.path, configuration: config)
     }()
 
+    /// Close and nil the legacy pool ahead of legacy database deletion (BIG-321).
+    /// The nil assignment marks the lazy var initialised, so later accesses return
+    /// nil instead of lazily recreating the pool (GRDB creates a missing db file
+    /// on pool init, which would resurrect an empty LocoKit.sqlite post-deletion).
+    public func closeLegacyPool() {
+        try? legacyPool?.close()
+        legacyPool = nil
+    }
+
     private lazy var config: Configuration = {
         var config = Configuration()
         config.busyMode = .timeout(30)
