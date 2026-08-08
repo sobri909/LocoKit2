@@ -104,7 +104,10 @@ extension TimelineProcessor {
 
         if speedIsSlow != otherSpeedIsSlow { return nil }
 
-        if !excluding.contains(otherEdge), otherEdge.classifiedActivityType == activityType {
+        // effective type (confirmed ?? classified), so user confirmations are respected in steal
+        // decisions (BIG-585). Side effect: a boundary between two fully confirmed trips of
+        // different types becomes steal-frozen — sample level cleanup there is segment splitting
+        if !excluding.contains(otherEdge), otherEdge.activityType == activityType {
             try await otherEdge.assignTo(itemId: tripItem.id)
             return otherEdge
         }
