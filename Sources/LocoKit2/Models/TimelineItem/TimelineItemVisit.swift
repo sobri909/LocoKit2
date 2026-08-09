@@ -134,17 +134,26 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
                 // only update immediately if user-confirmed and visit count is low
                 if confirm && place.visitCount < 30 {
-                    await place.updateVisitStats()
+                    // mirror markStale's db write into the local copy, so
+                    // updateVisitStats' diff-based updateChanges sees the
+                    // isStale clear as a real diff (BIG-669: a stale local
+                    // snapshot omitted the clear, leaving the place flagged
+                    // for a redundant background recompute)
+                    var stalePlace = place
+                    stalePlace.isStale = true
+                    await stalePlace.updateVisitStats()
                 }
-                
+
                 if let previousPlaceId {
                     do {
                         let previousPlace = try await Database.pool.read { try Place.fetchOne($0, id: previousPlaceId) }
-                        if let previousPlace {
+                        if var previousPlace {
                             await previousPlace.markStale()
-                            
+
                             // same immediate update criteria for previous place
                             if confirm && previousPlace.visitCount < 30 {
+                                // same BIG-669 mirror as above
+                                previousPlace.isStale = true
                                 await previousPlace.updateVisitStats()
                             }
                         }
