@@ -1,73 +1,179 @@
+advertising agency, advertising, marketing, office
+african restaurant, african food, restaurant
 airport
-historic site, historic
-hotel, motel, tourism, lodging
-convenience store, minimart, bodega, corner store, shop, convenience, convenience shop, mini mart
-waterfall, viewpoint
-coffee, cafe
-bridge, man made
-sporting goods, sporting, sporting good, shop, sports store
-cafe, coffee, tea, tea house
 airport lounge
-restaurant, food
-rail station, train station
-pharmacy
-computer, electronic, electronics, shop
-variety shop, shop, variety
-taxi, taxi stand
-supermarket, shop, groceries, grocery, market, super
-port, ferry, man made
-parking, parking lot
-outdoors, attraction, tourism
-monument, landmark, historic
-marina, port, ferry, leisure
-hotel resort, resort, lodging
-gym, fitness center, leisure
-grocery, shop
-gas station, fuel, gas
-fast food
-discount store
-department store, department, shop, home appliance
-clothing, accessories, apparel, shop, clothes
-chair ski lift, ski, tourism
-business, service, building
-bus station, bus stop, bus
-buddhist, buddhism, place of worship
-botanical garden, garden, botanical, leisure, gardener
-beach, natural
-bank, finance, financial
-travel lounge, lounge
-tourist information, services, tourism, information
-thai restaurant, thai food, restaurant
-temple, place of worship
-surfing beach, natural, surf, beach
-stationery, shop
-snack, fast food
-smoke shop, smoke, shop
-shopping center, mall, shopping mall, shop
-science museum, science, museum, tourism
-religious, religion
-police station, law enforcement
-playground, leisure
-pizza, pizza parlor, restaurant
-park, leisure
-mosque, muslim, islam, place of worship
-market, marketplace, supermarket
-landscaping, landscape, lawn care, contractor, outdoor, shop
-indian restaurant, indian food, restaurant
-ice cream, ice cream parlor, dessert, craft, shop
-hostel, tourism, lodging
-history museum, history, historical, museum, tourism
-hiking, trailhead, hike, hiking trailhead
-government agency, office
-fried chicken, chicken, fast food
-french restaurant, french food, restaurant
-food court, fast food
-farmers market, farmers, market
-donut, shop
-cocktail bar, cocktail, bar, alcohol
-cemetery, graveyard, mausoleum, landuse
-cellphone, phone repair, mobile phone, shop
-business, service
-bed and breakfast, bnb, tourism, lodging
-baseball field, baseball, sports centre, leisure
 airport services, airport shop, shop
+american restaurant, american food, restaurant
+antique, collectibles, shop
+art gallery, art galleries, galleries, painting, art, gallery, tourism
+art museum, art, museum, painting, art gallery, art galleries, galleries, gallery, museum, tourism
+asian restaurant, asian food, restaurant
+atm, abm, mac, cash point, minibank
+auto repair, car repair, body shop, shop
+automotive dealer, automotive dealership, automotive sales, auto dealer,  auto dealership, auto sales, car dealer, car dealership, car sales, dealership, shop, automotive leasing, leasing, automotive sales
+bagel, shop
+bakery, shop
+bank, finance, financial
+bar, pub, alcohol, liquor, beer
+baseball field, baseball, sports centre, leisure
+baseball stadium, baseball, leisure
+beach bar, beach, bar, alcohol
+beach, natural
+bed and breakfast, bnb, tourism, lodging
+beer, wine, spirit, alcohol, booze, shop
+bicycle rental, shop
+bookstore, book shop, shop
+botanical garden, garden, botanical, leisure, gardener
+breakfast spot
+brewery, beer, craft
+bridge, man made
+bubble tea
+buddhist, buddhism, place of worship
+burger joint
+bus station, bus stop, bus
+business, service
+business, service, building
+business, service, office
+cafe, coffee, tea, tea house
+cafe, tea, tea house
+cajun restaurant, cajun food, restaurant
+campground, camping, tourism, lodging
+car rental, truck rental, shop
+car wash, car, wash, automobile, auto, shop
+caribbean restaurant, caribbean food, restaurant
+cellphone, phone repair, mobile phone, shop
+cemetery, graveyard, mausoleum, landuse
+chair ski lift, ski, tourism
+chinese restaurant, chinese food, restaurant
+clothing, accessories, apparel, shop, clothes
+cocktail bar, cocktail, bar, alcohol
+coffee, cafe
+college art building, building
+college classrooms, building
+college quad, quad, college, leisure
+college student center, college
+college, university
+computer, electronic, electronics, shop
+concert hall
+confectionery, confection, sweets, candy store, candy, candies, chocolatier, chocolate, craft, shop
+convenience store, minimart, bodega, corner store, shop, convenience, convenience shop, mini mart
+coworking space, office
+cuban restaurant, cuban food, caribbean restaurant, caribbean food, restaurant
+deli, shop
+department store, department, shop, home appliance
+dim sum, dim sum restaurant, chinese restaurant, chinese food, restaurant
+diner, restaurant
+discount store
+dive bar, bar, alcohol
+donut, shop
+dumpling, dumpling restaurant, restaurant
+eastern european restaurant, eastern european, eastern
+education, school
+ethiopian restaurant, ethiopian food, restaurant
+event space, events venue
+eye doctor, optometrist, doctor, physician
+falafel, falafel restaurant, restaurant
+farmers market, farmers, market
+fast food
+fish market, shop
+florist, flowers, flower shop, shop
+food and drink, shop
+food court, fast food
+french restaurant, french food, restaurant
+fried chicken, chicken, fast food
+fruit vegetable shop, shop
+furniture, home store, decor, shop
+garden, leisure, gardener
+gas station, fuel, gas
+gastropub
+gay bar, bar, alcohol
+gift, novelty, shop, gift shop
+gluten free, gluten free restaurant, gluten free food, restaurant
+gourmet, shop
+government agency, office
+greek restaurant, greek food, restaurant
+grocery, shop
+gym, fitness center, leisure
+hiking, trailhead, hike, hiking trailhead
+hindu, place of worship, hindu temples
+historic site, historic
+history museum, history, historical, museum, tourism
+hospital, clinic, medical center
+hostel, tourism, lodging
+hotel resort, resort, lodging
+hotel, motel, tourism, lodging
+ice cream, ice cream parlor, dessert, craft, shop
+indian restaurant, indian food, restaurant
+indie theatre, indie theater
+israeli restaurant, israeli food, middle eastern restaurant, middle eastern food, restaurant
+italian restaurant, italian food, restaurant
+japanese restaurant, japanese food, restaurant
+juice bar, restaurant
+landscaping, landscape, lawn care, contractor, outdoor, shop
+libraries, library
+mall, shop
+marina, port, ferry, leisure
+market, marketplace, supermarket
+mediterranean restaurant, mediterranean food, restaurant
+memorial site, historic
+mexican restaurant, mexican food, restaurant
+middle eastern restaurant, middle eastern food, restaurant
+monument, landmark, historic
+mosque, muslim, islam, place of worship
+mountain, peak, natural
+new american restaurant, new american food, restaurant
+ngo, charity, non-profit, nonprofit, non profit, not for profit, office
+nightclub, club, night club, disco
+noodles, asian restaurant, asian food, restaurant
+nursery, garden, garden center, shop
+organic grocery, shop
+outdoors, attraction, tourism
+outlet store, outlet shop, bargain, shop
+park
+park, leisure
+parking, parking lot
+pharmacy
+photo, frame, framing, shop
+photography lab, photo lab, shop
+piano nightclub, nightclub, club
+pizza, pizza parlor, restaurant
+playground, leisure
+police station, law enforcement
+port, ferry, man made
+post office, mail
+public artwork, art, tourism
+rail station, train station
+ramen, japanese restaurant, japanese food, restaurant
+religious, religion
+restaurant, food
+salad, fast food, healthy food, health food
+sandwich, fast food
+science museum, science, museum, tourism
+seafood, seafood restaurant, restaurant
+shopping center, mall, shopping mall, shop
+smoke shop, smoke, shop
+snack, fast food
+soba, japanese restaurant, japanese food, restaurant
+southern soul food, southern soul food restaurant, restaurant
+sporting goods, sporting, sporting good, shop, sports store
+sports bar, sports, bar, alcohol
+state park, tourism
+stationery, shop
+supermarket, shop, groceries, grocery, market, super
+surfing beach, natural, surf, beach
+sushi restaurant, sushi, japanese restaurant, japanese food, restaurant
+szechuan restaurant, szechuan food, chinese restaurant, chinese food, restaurant
+taco, mexican restaurant, mexican food, restaurant
+taxi, taxi stand
+temple, place of worship
+thai restaurant, thai food, restaurant
+theatre, theater, music, show venue, concert, concert hall
+tourist information, services, tourism, information
+travel lounge, lounge
+turkish restaurant, turkish food, restaurant
+variety shop, shop, variety
+vegetarian, vegan, vegetarian food, vegan food, vegetarian restaurant, vegan restaurant, restaurant
+vietnamese restaurant, vietnamese food, restaurant
+vintage, thrift, second-hand, second hand, shop
+waterfall, viewpoint
+wine bar, wine, bar, alcohol
