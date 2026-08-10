@@ -44,6 +44,11 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     // new places since the Foursquare V2 API is deprecated.
     public var foursquareCategoryV2Id: String?
 
+    // User override for the resolved place category (BIG-513). Stores a
+    // PlaceCategory rawValue (Google primaryType vocabulary, or an
+    // "arc_"-prefixed private category). Wins over all provider data.
+    public var userCategory: String?
+
     public var rtreeId: Int64?
     
     public static let rtree = belongsTo(PlaceRTree.self, using: ForeignKey(["rtreeId"]))
@@ -76,6 +81,20 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     
     public var isPrivate: Bool {
         return sourceDatabases.isEmpty
+    }
+
+    // The resolved place category: user override first, then provider data
+    // in provider-quality order (BIG-513). An unparseable userCategory falls
+    // through to provider data rather than blanking the category.
+    // Foursquare V3 (foursquareCategoryId) is deliberately absent from the
+    // chain: no V3 mapping exists, the V3 API is never coming back, and
+    // observed real-world coverage is zero.
+    public var category: PlaceCategory? {
+        if let userCategory, let resolved = PlaceCategory(rawValue: userCategory) { return resolved }
+        if let googlePrimaryType, let resolved = PlaceCategory(googlePrimaryType: googlePrimaryType) { return resolved }
+        if let foursquareCategoryV2Id, let resolved = PlaceCategory(foursquareV2Id: foursquareCategoryV2Id) { return resolved }
+        if let mapboxCategory, let resolved = PlaceCategory(mapboxCategory: mapboxCategory) { return resolved }
+        return nil
     }
     
     public var countryName: String? {
@@ -243,6 +262,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         case foursquarePlaceId
         case foursquareCategoryId
         case foursquareCategoryV2Id
+        case userCategory
 
         case visitCount
         case visitDays
@@ -274,6 +294,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         public static let foursquarePlaceId = Column(CodingKeys.foursquarePlaceId)
         public static let foursquareCategoryId = Column(CodingKeys.foursquareCategoryId)
         public static let foursquareCategoryV2Id = Column(CodingKeys.foursquareCategoryV2Id)
+        public static let userCategory = Column(CodingKeys.userCategory)
         public static let visitCount = Column(CodingKeys.visitCount)
         public static let visitDays = Column(CodingKeys.visitDays)
         public static let lastVisitDate = Column(CodingKeys.lastVisitDate)
@@ -290,7 +311,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
             secondsFromGMT, name, streetAddress, countryCode, locality, isStale,
             rtreeId, mapboxPlaceId, mapboxCategory, mapboxMakiIcon, googlePlaceId,
             googlePrimaryType, foursquarePlaceId, foursquareCategoryId, foursquareCategoryV2Id,
-            visitCount, visitDays, lastVisitDate
+            userCategory, visitCount, visitDays, lastVisitDate
         ]
     }
 
@@ -325,7 +346,8 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         foursquarePlaceId = try container.decodeIfPresent(String.self, forKey: .foursquarePlaceId)
         foursquareCategoryId = try container.decodeIfPresent(Int.self, forKey: .foursquareCategoryId)
         foursquareCategoryV2Id = try container.decodeIfPresent(String.self, forKey: .foursquareCategoryV2Id)
-        
+        userCategory = try container.decodeIfPresent(String.self, forKey: .userCategory)
+
         // stats
         visitCount = try container.decodeIfPresent(Int.self, forKey: .visitCount) ?? 0
         visitDays = try container.decodeIfPresent(Int.self, forKey: .visitDays) ?? 0
@@ -366,6 +388,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         foursquarePlaceId = row["foursquarePlaceId"]
         foursquareCategoryId = row["foursquareCategoryId"]
         foursquareCategoryV2Id = row["foursquareCategoryV2Id"]
+        userCategory = row["userCategory"]
 
         // stats
         visitCount = row["visitCount"]
@@ -417,6 +440,7 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         container["foursquarePlaceId"] = foursquarePlaceId
         container["foursquareCategoryId"] = foursquareCategoryId
         container["foursquareCategoryV2Id"] = foursquareCategoryV2Id
+        container["userCategory"] = userCategory
 
         // stats
         container["visitCount"] = visitCount

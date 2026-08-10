@@ -1,0 +1,73 @@
+airport
+historic site, historic
+hotel, motel, tourism, lodging
+convenience store, minimart, bodega, corner store, shop, convenience, convenience shop, mini mart
+waterfall, viewpoint
+coffee, cafe
+bridge, man made
+sporting goods, sporting, sporting good, shop, sports store
+cafe, coffee, tea, tea house
+airport lounge
+restaurant, food
+rail station, train station
+pharmacy
+computer, electronic, electronics, shop
+variety shop, shop, variety
+taxi, taxi stand
+supermarket, shop, groceries, grocery, market, super
+port, ferry, man made
+parking, parking lot
+outdoors, attraction, tourism
+monument, landmark, historic
+marina, port, ferry, leisure
+hotel resort, resort, lodging
+gym, fitness center, leisure
+grocery, shop
+gas station, fuel, gas
+fast food
+discount store
+department store, department, shop, home appliance
+clothing, accessories, apparel, shop, clothes
+chair ski lift, ski, tourism
+business, service, building
+bus station, bus stop, bus
+buddhist, buddhism, place of worship
+botanical garden, garden, botanical, leisure, gardener
+beach, natural
+bank, finance, financial
+travel lounge, lounge
+tourist information, services, tourism, information
+thai restaurant, thai food, restaurant
+temple, place of worship
+surfing beach, natural, surf, beach
+stationery, shop
+snack, fast food
+smoke shop, smoke, shop
+shopping center, mall, shopping mall, shop
+science museum, science, museum, tourism
+religious, religion
+police station, law enforcement
+playground, leisure
+pizza, pizza parlor, restaurant
+park, leisure
+mosque, muslim, islam, place of worship
+market, marketplace, supermarket
+landscaping, landscape, lawn care, contractor, outdoor, shop
+indian restaurant, indian food, restaurant
+ice cream, ice cream parlor, dessert, craft, shop
+hostel, tourism, lodging
+history museum, history, historical, museum, tourism
+hiking, trailhead, hike, hiking trailhead
+government agency, office
+fried chicken, chicken, fast food
+french restaurant, french food, restaurant
+food court, fast food
+farmers market, farmers, market
+donut, shop
+cocktail bar, cocktail, bar, alcohol
+cemetery, graveyard, mausoleum, landuse
+cellphone, phone repair, mobile phone, shop
+business, service
+bed and breakfast, bnb, tourism, lodging
+baseball field, baseball, sports centre, leisure
+airport services, airport shop, shop

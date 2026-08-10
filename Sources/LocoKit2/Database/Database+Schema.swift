@@ -41,6 +41,7 @@ extension Database {
                 table.column("foursquarePlaceId", .text).indexed()
                 table.column("foursquareCategoryId", .integer)
                 table.column("foursquareCategoryV2Id", .text)
+                table.column("userCategory", .text)
 
                 table.column("visitCount", .integer).notNull().indexed()
                 table.column("visitDays", .integer).notNull()

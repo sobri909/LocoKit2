@@ -310,5 +310,14 @@ extension Database {
                 table.add(column: "foursquareCategoryV2Id", .text)
             }
         }
+
+        // BIG-513: user override for the resolved place category. Stores a
+        // PlaceCategory rawValue. Existing installs get it here; fresh installs
+        // get it from the Place create block.
+        migrator.registerMigration("Place.userCategory") { db in
+            try? db.alter(table: "Place") { table in
+                table.add(column: "userCategory", .text)
+            }
+        }
     }
 }
