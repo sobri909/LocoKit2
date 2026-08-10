@@ -100,6 +100,10 @@ public final class LocomotionManager: @unchecked Sendable {
     @MainActor
     public private(set) var lastUndergroundResult: UndergroundDetector.EvaluationResult?
 
+    /// BIG-607 diagnostic only — throttles the regime-non-engagement log line to
+    /// streak changes. Strip with that logging when BIG-607 closes.
+    private var lastLoggedUndergroundStreak: Int?
+
     // MARK: -
 
     public func locationUpdates() -> AsyncStream<CLLocation> {
@@ -395,6 +399,24 @@ public final class LocomotionManager: @unchecked Sendable {
         } else {
             // normal path: apply drift inflation before Kalman as before
             kalmanInput = await applyDriftInflation(to: location) ?? location
+
+            // BIG-607: temporary diagnostic companion to the in-regime line above.
+            // Non-engagement was previously INVISIBLE — the regime only logs raws
+            // it reshaped, so a metro ride that never engaged left no trace of WHY
+            // (dyang886's Shanghai bundles, 2026-08-05: nine consecutive wakeup
+            // timeouts across a ride, zero regime lines, no way to tell which
+            // predicate leg was missing). Only high-hAcc raws, and only when the
+            // streak changes, so a stationary hour can't flood the file. Strip
+            // alongside the in-regime line when BIG-607 closes.
+            if location.horizontalAccuracy > 100,
+               undergroundResult.consecutiveInvalidVelocityCount != lastLoggedUndergroundStreak {
+                lastLoggedUndergroundStreak = undergroundResult.consecutiveInvalidVelocityCount
+                let avg = undergroundResult.rollingHAccAvg.map { "\(Int($0))" } ?? "nil"
+                let sustained = undergroundResult.sustainedDuration.map { "\(Int($0))s" } ?? "0s"
+                let predicate = undergroundResult.predicateMatched
+                    ? "matched \(sustained)" : "unmatched"
+                Log.info("BIG-607 regime NOT engaged — raw hAcc \(Int(location.horizontalAccuracy))m, rollingAvg \(avg)m, invalidVelocity streak \(undergroundResult.consecutiveInvalidVelocityCount), predicate \(predicate), state \(recordingState)", subsystem: .locomotion)
+            }
         }
 
         await kalmanFilter.add(location: kalmanInput)

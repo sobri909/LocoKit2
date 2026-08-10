@@ -46,17 +46,40 @@ public actor UndergroundDetector {
     /// the Kalman follows the raw stream (rather than drifting toward it / locking
     /// to origin), high enough that noisy underground fixes don't get traced
     /// faithfully. History: 20m (traced noise, jagged paths) → 100m (1.4.0, not
-    /// enough for the noisiest lines — five forum voices) → 500m (1.5.0). The
-    /// 2026-07-06 sim sweep (docs/diagnostics/BIG-607/) showed 500 roughly halves
-    /// jaggedness on dense-cadence noisy lines, costs little on good lines, and
-    /// can't origin-lock (the lock needed the zero-velocity anchor, which the
+    /// enough for the noisiest lines — five forum voices) → 500m (1.5.0) →
+    /// 1000m (2026-08-05, Shanghai field data). The 2026-07-06 sim sweep
+    /// (docs/diagnostics/BIG-607/) showed 500 roughly halves jaggedness on
+    /// dense-cadence noisy lines, costs little on good lines, and can't
+    /// origin-lock (the lock needed the zero-velocity anchor, which the
     /// speedAccuracy relaxation below removes). NOTE: on sparse-cadence lines
     /// (per-minute fixes) the clamp value barely matters — covariance growth
     /// between fixes swamps it. Sparse-line jaggedness needs different levers
     /// (intake ordering guard; regime warmup lag). Still provisional, tuned
     /// against real metro reports via the raw-hAcc logging in
     /// LocomotionManager.add(location:).
-    private let reshapeClampHAcc: CLLocationAccuracy = 500.0
+    ///
+    /// 500 → 1000 rationale (dyang886's Shanghai bundles, 489 in-regime raws
+    /// measured): median raw hAcc **1426m**, p90 2000m, max 2980m — 93% of them
+    /// above 1000m. Clamping those to 500 told the Kalman they were ~3x better
+    /// than they were. Re-running the preserved harness against that profile:
+    /// jaggedness ×8.50 → ×5.20 and mean deviation 436m → 335m, i.e. on a line
+    /// this noisy a higher clamp improves BOTH smoothness and accuracy. The
+    /// cost lands only on good lines (σ=150m regression scenario: mean dev
+    /// 125m → 210m, while still getting smoother) — bounded, and the noisy
+    /// case is the one generating reports.
+    ///
+    /// Why NOT simply make the clamp relative to the rolling hAcc average
+    /// (the direction previously floated on BIG-607): it wouldn't help. Good
+    /// lines and bad lines report the SAME 1000-3000m hAcc — the difference
+    /// is whether the coordinates are genuinely that scattered (Shanghai) or
+    /// actually well-placed despite the pessimistic self-report (Bangkok,
+    /// BIG-150). Nothing in the raw distinguishes those two, so scaling trust
+    /// to reported noise scales it identically for both. The only
+    /// discriminator we currently have is a human looking at a rendered path
+    /// and judging "yes, that's where the line runs" vs "no it isn't", which
+    /// points at collated per-city/per-line feedback rather than a cleverer
+    /// formula over the same blind inputs.
+    private let reshapeClampHAcc: CLLocationAccuracy = 1000.0
 
     /// Reshape: override speedAccuracy to this value (MUST be < 20 sentinel
     /// to bypass invalidVelocity check). Removes the zero-velocity-with-0.01-
