@@ -264,6 +264,12 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         case foursquareCategoryV2Id
         case userCategory
 
+        // export-only: the RESOLVED category (Place.category rawValue), so
+        // external consumers get the provider-mapping result without
+        // reimplementing the mapping tables (BIG-514). Derived, so the
+        // decoder deliberately ignores it on import.
+        case category
+
         case visitCount
         case visitDays
         case lastVisitDate
@@ -358,6 +364,52 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
         leavingTimes = nil
         visitDurations = nil
         occupancyTimes = nil
+    }
+
+    // MARK: - Custom Encoder
+
+    // Custom because the export carries the RESOLVED category alongside the
+    // stored fields (BIG-514) — a computed property can't ride CodingKeys
+    // synthesis. Mirrors synthesized behaviour exactly for the stored fields
+    // (encodeIfPresent for optionals). GRDB persistence is unaffected: Place
+    // uses hand-written row methods, so this is JSON-only.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        // core fields
+        try container.encode(id, forKey: .id)
+        try container.encode(lastSaved, forKey: .lastSaved)
+        try container.encode(source, forKey: .source)
+        try container.encode(latitude, forKey: .latitude)
+        try container.encode(longitude, forKey: .longitude)
+        try container.encode(radiusMean, forKey: .radiusMean)
+        try container.encode(radiusSD, forKey: .radiusSD)
+        try container.encodeIfPresent(secondsFromGMT, forKey: .secondsFromGMT)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(streetAddress, forKey: .streetAddress)
+        try container.encodeIfPresent(countryCode, forKey: .countryCode)
+        try container.encodeIfPresent(locality, forKey: .locality)
+        try container.encode(isStale, forKey: .isStale)
+        try container.encodeIfPresent(rtreeId, forKey: .rtreeId)
+
+        // external place ids
+        try container.encodeIfPresent(mapboxPlaceId, forKey: .mapboxPlaceId)
+        try container.encodeIfPresent(mapboxCategory, forKey: .mapboxCategory)
+        try container.encodeIfPresent(mapboxMakiIcon, forKey: .mapboxMakiIcon)
+        try container.encodeIfPresent(googlePlaceId, forKey: .googlePlaceId)
+        try container.encodeIfPresent(googlePrimaryType, forKey: .googlePrimaryType)
+        try container.encodeIfPresent(foursquarePlaceId, forKey: .foursquarePlaceId)
+        try container.encodeIfPresent(foursquareCategoryId, forKey: .foursquareCategoryId)
+        try container.encodeIfPresent(foursquareCategoryV2Id, forKey: .foursquareCategoryV2Id)
+        try container.encodeIfPresent(userCategory, forKey: .userCategory)
+
+        // resolved category (derived; not decoded on import)
+        try container.encodeIfPresent(category?.rawValue, forKey: .category)
+
+        // stats
+        try container.encode(visitCount, forKey: .visitCount)
+        try container.encode(visitDays, forKey: .visitDays)
+        try container.encodeIfPresent(lastVisitDate, forKey: .lastVisitDate)
     }
 
     // MARK: - FetchableRecord

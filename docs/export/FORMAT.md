@@ -8,7 +8,7 @@
 - Patch versions make backward-compatible fixes
 
 ### Version History
-- **2.4.0**: Added `Place.userCategory` (user override for the resolved place category; PlaceCategory rawValue, Google primaryType vocabulary)
+- **2.4.0**: Added `Place.userCategory` (user override for the resolved place category; PlaceCategory rawValue, Google primaryType vocabulary) and `Place.category` (the resolved category — user override falling back through provider mappings; derived on export, ignored on import)
 - **2.3.0**: Added `Place.foursquareCategoryV2Id` (legacy Foursquare V2 string category id, restored for places carried over from pre-AT4 Arc history)
 - **2.2.0**: Added gzip compression for sample files (samples/*.json.gz)
 - **2.1.0**: Changed date encoding from numeric (seconds since reference date) to ISO8601 strings
@@ -178,6 +178,7 @@ Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying
   foursquareCategoryId: number | null     // Foursquare V3 numeric category id
   foursquareCategoryV2Id: string | null   // Foursquare V2 string category id 
   userCategory: string | null             // User category override (PlaceCategory rawValue)
+  category: string | null                 // Resolved category (derived: userCategory > google > foursquareV2 > mapbox; ignored on import)
 }
 ```
 
