@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate LocoKit2 PlaceCategory sources from Yinon's gists (BIG-513).
 
-Inputs (same dir): google-taxonomy.txt, fsq-v2-map.swift, mapbox-observed.txt
+Inputs (same dir): google-taxonomy.txt, fsq-v2-map.swift, fsq-v3-to-v2.txt,
+                   mapbox-observed.txt
 Outputs (same dir): PlaceCategory.swift, PlaceCategory+FoursquareV2.swift,
-                    PlaceCategory+Mapbox.swift
+                    PlaceCategory+FoursquareV3.swift, PlaceCategory+Mapbox.swift
 Validation is hard-failing: unknown mapping targets or Swift-keyword
 collisions abort generation.
 """
@@ -179,6 +180,96 @@ if nil_entries:
 out.append('    ]')
 out.append('}')
 open('PlaceCategory+FoursquareV2.swift', 'w').write('\n'.join(out) + '\n')
+
+# ── PlaceCategory+FoursquareV3.swift ────────────────────────────────────
+# V3 ids are 5-digit numerics that map 1:1 onto V2 ids. We deliberately do
+# NOT author a V3 -> Google table: the only V3 input is the V3->V2 pairing,
+# and the V2 table above stays the single source of category *semantics*.
+# The two hops are composed HERE, at generation time, so the shipped Swift
+# is one flat [Int: String] lookup and any V3 id pointing at a V2 id we
+# can't resolve is reported now rather than silently missing at runtime.
+v2_by_id = {fid: (gtype, comment, inline) for comment, fid, gtype, inline in mapped}
+v2_nil_ids = {fid for _, fid, _, _ in nil_entries}
+
+try:
+    v3_src = open('fsq-v3-to-v2.txt').read()
+except FileNotFoundError:
+    sys.exit('missing fsq-v3-to-v2.txt (V3 numeric id <-> V2 hex id pairs, one per line)')
+
+# Strict tab-separated "<5-digit V3 id>\t<24-hex V2 id>", one pair per line.
+# Deliberately unforgiving: a tolerant parser would silently drop a mangled
+# line and quietly shrink the table, which is exactly the failure this file
+# can't afford — a missing entry just looks like an uncategorised place at
+# runtime. Malformed lines abort instead. Blank lines and #-comments are the
+# only latitude.
+v3_pairs = {}   # v3 int id -> v2 hex id
+v2_seen = {}    # v2 hex id -> v3 int id (the pairing is 1:1 in both directions)
+malformed = []
+for n, line in enumerate(v3_src.splitlines(), 1):
+    if not line.strip() or line.lstrip().startswith('#'): continue
+    m = re.match(r'^(\d{5})\t([0-9a-f]{24})$', line)
+    if not m:
+        malformed.append((n, line))
+        continue
+    v3, v2 = int(m.group(1)), m.group(2)
+    assert v3 not in v3_pairs, f'fsq-v3-to-v2.txt:{n}: duplicate V3 id {v3}'
+    assert v2 not in v2_seen, f'fsq-v3-to-v2.txt:{n}: V2 id {v2} already paired with V3 {v2_seen[v2]}'
+    v3_pairs[v3], v2_seen[v2] = v2, v3
+if malformed:
+    for n, line in malformed[:10]:
+        print(f'fsq-v3-to-v2.txt:{n}: malformed: {line!r}', file=sys.stderr)
+    sys.exit(f'{len(malformed)} malformed line(s) in fsq-v3-to-v2.txt (expected "<5-digit V3 id>\\t<24-hex V2 id>")')
+
+v3_mapped = []    # (v3 id, google type, v2 id, comment, inline)
+v3_skipped = []   # (v3 id, v2 id, reason)
+for v3, v2 in sorted(v3_pairs.items()):
+    if v2 in v2_by_id:
+        gtype, comment, inline = v2_by_id[v2]
+        v3_mapped.append((v3, gtype, v2, comment, inline))
+    else:
+        v3_skipped.append((v3, v2, 'no Google equivalent' if v2 in v2_nil_ids else 'V2 id not in V2 table'))
+
+out = [f'''//
+//  PlaceCategory+FoursquareV3.swift
+//  LocoKit2
+//
+//  Created by Claude on {date.today().isoformat()}
+//
+//  GENERATED FILE — regenerate via Scripts/placecategory/generate_placecategory.py
+//  (BIG-513). Foursquare V3 numeric category id -> Google primaryType
+//  ({len(v3_mapped)} mappings). Composed at generation time from two inputs:
+//  the V3 -> V2 id pairing (fsq-v3-to-v2.txt, 1:1) and the V2 -> Google
+//  table in PlaceCategory+FoursquareV2.swift. That table remains the single
+//  source of category semantics — edit it, regenerate, and this file follows,
+//  so the two can never drift. Each entry's trailing comment records the V2
+//  id it hopped through, so the composition stays auditable here.
+//
+//  Values are raw strings (not PlaceCategory literals) to keep the
+//  type-checker's cost trivial on a {len(v3_mapped)}-entry literal; validity is
+//  guaranteed at generation time instead.
+//
+
+extension PlaceCategory {{
+
+    init?(foursquareV3Id: Int) {{
+        guard let raw = Self.foursquareV3Map[foursquareV3Id] else {{ return nil }}
+        self.init(rawValue: raw)
+    }}
+
+    static let foursquareV3Map: [Int: String] = [''']
+for v3, gtype, v2, comment, inline in v3_mapped:
+    parts = [v2]
+    if comment: parts.append(comment)
+    if inline: parts.append(inline)
+    out.append(f'        {v3}: "{gtype}",  // {" — ".join(parts)}')
+if v3_skipped:
+    out.append('')
+    out.append('        // V3 ids whose V2 target resolves to nothing:')
+    for v3, v2, reason in v3_skipped:
+        out.append(f'        // {v3} -> {v2}  ({reason})')
+out.append('    ]')
+out.append('}')
+open('PlaceCategory+FoursquareV3.swift', 'w').write('\n'.join(out) + '\n')
 
 # ── PlaceCategory+Mapbox.swift ──────────────────────────────────────────
 # Keyword table authored against the observed vocabulary of a real mature
@@ -460,6 +551,9 @@ open('PlaceCategory+Mapbox.swift', 'w').write('\n'.join(out) + '\n')
 n_cases = len(all_types) + len(ARC_PRIVATE)
 print(f'PlaceCategory.swift: {n_cases} cases ({len(all_types)} Google + {len(ARC_PRIVATE)} Arc-private), {len(groups)+1} groups')
 print(f'FoursquareV2: {len(mapped)} mappings, {len(nil_entries)} nil entries footnoted')
+print(f'FoursquareV3: {len(v3_mapped)} mappings via V2, {len(v3_skipped)} skipped')
+for v3, v2, reason in v3_skipped:
+    print(f'  skipped: {v3} -> {v2} ({reason})')
 print(f'Mapbox: {len(MAPBOX_KEYWORDS)} keywords; observed coverage {len(observed)-len(unmatched)}/{len(observed)}')
 for u in unmatched:
     print(f'  unmatched: {u}')

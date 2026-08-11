@@ -178,7 +178,7 @@ Session completion flags (`itemsCompleted`, etc) indicate whether all qualifying
   foursquareCategoryId: number | null     // Foursquare V3 numeric category id
   foursquareCategoryV2Id: string | null   // Foursquare V2 string category id 
   userCategory: string | null             // User category override (PlaceCategory rawValue)
-  category: string | null                 // Resolved category (derived: userCategory > google > foursquareV2 > mapbox; ignored on import)
+  category: string | null                 // Resolved category (derived: userCategory > google > foursquareV2 > foursquareV3 > mapbox; ignored on import)
 }
 ```
 
