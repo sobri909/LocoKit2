@@ -273,7 +273,7 @@ open('PlaceCategory+FoursquareV3.swift', 'w').write('\n'.join(out) + '\n')
 
 # ── PlaceCategory+Mapbox.swift ──────────────────────────────────────────
 # Keyword table authored against the observed vocabulary of a real mature
-# DB (179 distinct compound strings, see mapbox-observed.txt). Resolution
+# DB (196 distinct compound strings, see mapbox-observed.txt). Resolution
 # walks the *input string's* comma-separated tokens left to right and takes
 # the first one present here — Mapbox leads with its most specific term, so
 # "dim sum, dim sum restaurant, chinese restaurant" lands on dim sum. Order
@@ -309,6 +309,7 @@ MAPBOX_KEYWORDS = {
     'ethiopian restaurant': 'ethiopian_restaurant',
     'ethiopian food': 'ethiopian_restaurant',
     'french restaurant': 'french_restaurant', 'french food': 'french_restaurant',
+    'german restaurant': 'german_restaurant', 'german food': 'german_restaurant',
     'greek restaurant': 'greek_restaurant', 'greek food': 'greek_restaurant',
     'indian restaurant': 'indian_restaurant', 'indian food': 'indian_restaurant',
     'israeli restaurant': 'israeli_restaurant', 'israeli food': 'israeli_restaurant',
@@ -320,6 +321,7 @@ MAPBOX_KEYWORDS = {
     'mexican restaurant': 'mexican_restaurant', 'mexican food': 'mexican_restaurant',
     'middle eastern restaurant': 'middle_eastern_restaurant',
     'middle eastern food': 'middle_eastern_restaurant',
+    'spanish restaurant': 'spanish_restaurant', 'spanish food': 'spanish_restaurant',
     'thai restaurant': 'thai_restaurant', 'thai food': 'thai_restaurant',
     'turkish restaurant': 'turkish_restaurant', 'turkish food': 'turkish_restaurant',
     'vietnamese restaurant': 'vietnamese_restaurant',
@@ -342,6 +344,7 @@ MAPBOX_KEYWORDS = {
     'vegan': 'vegan_restaurant', 'vegan restaurant': 'vegan_restaurant',
     'vegan food': 'vegan_restaurant',
     'fried chicken': 'chicken_restaurant', 'chicken': 'chicken_restaurant',
+    'tapas': 'tapas_restaurant', 'tapas restaurant': 'tapas_restaurant',
     'juice bar': 'juice_shop', 'salad': 'salad_shop', 'sandwich': 'sandwich_shop',
     'deli': 'deli',
 
@@ -391,6 +394,7 @@ MAPBOX_KEYWORDS = {
     'pet store': 'pet_store', 'florist': 'florist', 'gift': 'gift_shop',
     'antique': 'store', 'collectibles': 'store', 'stationery': 'store',
     'smoke shop': 'store', 'variety shop': 'store',
+    'luggage store': 'store', 'luggage shop': 'store', 'luggage': 'store',
     'photography lab': 'store', 'photo lab': 'store', 'photo': 'store',
     'framing': 'store', 'frame': 'store',
 
@@ -406,6 +410,7 @@ MAPBOX_KEYWORDS = {
     'dealership': 'car_dealer',
     'gas station': 'gas_station', 'fuel': 'gas_station',
     'parking': 'parking', 'parking lot': 'parking',
+    'rest area': 'rest_stop', 'rest stop': 'rest_stop', 'pitstop': 'rest_stop',
 
     # ── transportation ──
     'airport': 'airport', 'airport lounge': 'airport',
@@ -415,6 +420,7 @@ MAPBOX_KEYWORDS = {
     'bus station': 'bus_station', 'bus stop': 'bus_stop',
     'taxi': 'taxi_stand', 'taxi stand': 'taxi_stand',
     'port': 'ferry_terminal', 'ferry': 'ferry_terminal', 'marina': 'marina',
+    'boating': 'marina', 
 
     # ── lodging ──
     'hotel': 'hotel', 'motel': 'motel', 'lodging': 'lodging',
@@ -438,13 +444,15 @@ MAPBOX_KEYWORDS = {
     'concert hall': 'concert_hall', 'concert': 'concert_hall',
     'music': 'live_music_venue', 'show venue': 'event_venue',
     'event space': 'event_venue', 'events venue': 'event_venue',
-    'zoo': 'zoo', 'aquarium': 'aquarium', 'playground': 'playground',
+    'zoo': 'zoo', 'aquarium': 'aquarium', 'planetarium': 'planetarium',
+    'playground': 'playground',
     'outdoors': 'tourist_attraction', 'attraction': 'tourist_attraction',
     'tourist information': 'visitor_center',
 
     # ── natural features and outdoors ──
     'park': 'park', 'state park': 'state_park',
     'garden': 'garden', 'botanical garden': 'botanical_garden',
+    'nursery': 'garden_center', 'garden center': 'garden_center',
     'beach': 'beach', 'surfing beach': 'beach', 'surf': 'beach',
     'mountain': 'mountain_peak', 'peak': 'mountain_peak',
     'waterfall': 'scenic_spot', 'viewpoint': 'scenic_spot',
@@ -475,7 +483,8 @@ MAPBOX_KEYWORDS = {
     'religion': 'place_of_worship', 'temple': 'place_of_worship',
     'church': 'church', 'mosque': 'mosque', 'muslim': 'mosque',
     'islam': 'mosque', 'buddhist': 'buddhist_temple',
-    'buddhism': 'buddhist_temple',
+    'buddhism': 'buddhist_temple', 'hindu': 'hindu_temple',
+    'hindu temples': 'hindu_temple',
 
     # ── government and civic ──
     'government agency': 'government_office', 'police station': 'police',
@@ -496,6 +505,8 @@ MAPBOX_KEYWORDS = {
     'nonprofit': 'non_profit_organization',
     'non profit': 'non_profit_organization',
     'not for profit': 'non_profit_organization',
+    'tour': 'tour_agency', 'travel agent': 'travel_agency',
+    'travel agency': 'travel_agency',
     'landscaping': 'general_contractor', 'contractor': 'general_contractor',
     'laundry': 'laundry', 'hair': 'hair_salon', 'barber': 'barber_shop',
 }

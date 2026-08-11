@@ -3,6 +3,7 @@ african restaurant, african food, restaurant
 airport
 airport lounge
 airport services, airport shop, shop
+alpine hut, alpine, hut, lodging, tourism
 american restaurant, american food, restaurant
 antique, collectibles, shop
 art gallery, art galleries, galleries, painting, art, gallery, tourism
@@ -20,8 +21,11 @@ baseball stadium, baseball, leisure
 beach bar, beach, bar, alcohol
 beach, natural
 bed and breakfast, bnb, tourism, lodging
+beer bar, beer, bar, alcohol
 beer, wine, spirit, alcohol, booze, shop
 bicycle rental, shop
+boarding house, tourism, lodging
+boating
 bookstore, book shop, shop
 botanical garden, garden, botanical, leisure, gardener
 breakfast spot
@@ -45,6 +49,8 @@ cellphone, phone repair, mobile phone, shop
 cemetery, graveyard, mausoleum, landuse
 chair ski lift, ski, tourism
 chinese restaurant, chinese food, restaurant
+church, christian, place of worship
+clothing, accessories, apparel, shop
 clothing, accessories, apparel, shop, clothes
 cocktail bar, cocktail, bar, alcohol
 coffee, cafe
@@ -61,6 +67,7 @@ coworking space, office
 cuban restaurant, cuban food, caribbean restaurant, caribbean food, restaurant
 deli, shop
 department store, department, shop, home appliance
+design, office, design office, business, service
 dim sum, dim sum restaurant, chinese restaurant, chinese food, restaurant
 diner, restaurant
 discount store
@@ -87,6 +94,7 @@ garden, leisure, gardener
 gas station, fuel, gas
 gastropub
 gay bar, bar, alcohol
+german restaurant, german food, restaurant
 gift, novelty, shop, gift shop
 gluten free, gluten free restaurant, gluten free food, restaurant
 gourmet, shop
@@ -111,6 +119,8 @@ japanese restaurant, japanese food, restaurant
 juice bar, restaurant
 landscaping, landscape, lawn care, contractor, outdoor, shop
 libraries, library
+liquor, shop
+luggage store, luggage, shop, luggage shop
 mall, shop
 marina, port, ferry, leisure
 market, marketplace, supermarket
@@ -121,6 +131,7 @@ middle eastern restaurant, middle eastern food, restaurant
 monument, landmark, historic
 mosque, muslim, islam, place of worship
 mountain, peak, natural
+museum, tourism
 new american restaurant, new american food, restaurant
 ngo, charity, non-profit, nonprofit, non profit, not for profit, office
 nightclub, club, night club, disco
@@ -132,11 +143,13 @@ outlet store, outlet shop, bargain, shop
 park
 park, leisure
 parking, parking lot
+pastry, confectionery, craft, shop
 pharmacy
 photo, frame, framing, shop
 photography lab, photo lab, shop
 piano nightclub, nightclub, club
 pizza, pizza parlor, restaurant
+planetarium, museum, planet, space, museum, tourism
 playground, leisure
 police station, law enforcement
 port, ferry, man made
@@ -145,11 +158,13 @@ public artwork, art, tourism
 rail station, train station
 ramen, japanese restaurant, japanese food, restaurant
 religious, religion
+rest area, rest stop, pitstop
 restaurant, food
 salad, fast food, healthy food, health food
 sandwich, fast food
 science museum, science, museum, tourism
 seafood, seafood restaurant, restaurant
+shoes, apparel, shop
 shopping center, mall, shopping mall, shop
 smoke shop, smoke, shop
 snack, fast food
@@ -164,10 +179,12 @@ surfing beach, natural, surf, beach
 sushi restaurant, sushi, japanese restaurant, japanese food, restaurant
 szechuan restaurant, szechuan food, chinese restaurant, chinese food, restaurant
 taco, mexican restaurant, mexican food, restaurant
+tapas, tapas restaurant, spanish restaurant, spanish food, restaurant
 taxi, taxi stand
 temple, place of worship
 thai restaurant, thai food, restaurant
 theatre, theater, music, show venue, concert, concert hall
+tour, travel agent
 tourist information, services, tourism, information
 travel lounge, lounge
 turkish restaurant, turkish food, restaurant
