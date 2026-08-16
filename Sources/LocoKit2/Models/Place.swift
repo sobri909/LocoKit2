@@ -86,13 +86,11 @@ public struct Place: FetchableRecord, PersistableRecord, Identifiable, Codable, 
     // The resolved place category: user override first, then provider data
     // in provider-quality order (BIG-513). An unparseable userCategory falls
     // through to provider data rather than blanking the category.
-    // Foursquare V3 (foursquareCategoryId) is deliberately absent from the
-    // chain: no V3 mapping exists, the V3 API is never coming back, and
-    // observed real-world coverage is zero.
     public var category: PlaceCategory? {
         if let userCategory, let resolved = PlaceCategory(rawValue: userCategory) { return resolved }
         if let googlePrimaryType, let resolved = PlaceCategory(googlePrimaryType: googlePrimaryType) { return resolved }
         if let foursquareCategoryV2Id, let resolved = PlaceCategory(foursquareV2Id: foursquareCategoryV2Id) { return resolved }
+        if let foursquareCategoryId, let resolved = PlaceCategory(foursquareV3Id: foursquareCategoryId) { return resolved }
         if let mapboxCategory, let resolved = PlaceCategory(mapboxCategory: mapboxCategory) { return resolved }
         return nil
     }
