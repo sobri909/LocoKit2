@@ -9,7 +9,10 @@ Validation is hard-failing: unknown mapping targets or Swift-keyword
 collisions abort generation.
 """
 import re, sys
-from datetime import date
+# Pinned so regeneration is byte-reproducible on any day (caught in PR #7 review:
+# date.today() headers made 'byte-identical regeneration' true only on generation
+# day). For generated files the header date is the lineage's origin, not last regen.
+GENERATED_DATE = '2026-08-10'
 
 SWIFT_KEYWORDS = {
     'associatedtype','class','deinit','enum','extension','fileprivate','func',
@@ -66,7 +69,7 @@ out.append(f'''//
 //  PlaceCategory.swift
 //  LocoKit2
 //
-//  Created by Claude on {date.today().isoformat()}
+//  Created by Claude on {GENERATED_DATE}
 //
 //  GENERATED FILE — regenerate via Scripts/placecategory/generate_placecategory.py
 //  (BIG-513). Canonical taxonomy: Google Places primaryType vocabulary
@@ -144,7 +147,7 @@ out = [f'''//
 //  PlaceCategory+FoursquareV2.swift
 //  LocoKit2
 //
-//  Created by Claude on {date.today().isoformat()}
+//  Created by Claude on {GENERATED_DATE}
 //
 //  GENERATED FILE — regenerate via Scripts/placecategory/generate_placecategory.py
 //  (BIG-513). Foursquare V2 category id -> Google primaryType, from
@@ -233,7 +236,7 @@ out = [f'''//
 //  PlaceCategory+FoursquareV3.swift
 //  LocoKit2
 //
-//  Created by Claude on {date.today().isoformat()}
+//  Created by Claude on {GENERATED_DATE}
 //
 //  GENERATED FILE — regenerate via Scripts/placecategory/generate_placecategory.py
 //  (BIG-513). Foursquare V3 numeric category id -> Google primaryType
@@ -524,7 +527,7 @@ out = [f'''//
 //  PlaceCategory+Mapbox.swift
 //  LocoKit2
 //
-//  Created by Claude on {date.today().isoformat()}
+//  Created by Claude on {GENERATED_DATE}
 //
 //  GENERATED FILE — regenerate via Scripts/placecategory/generate_placecategory.py
 //  (BIG-513). Mapbox category strings are compound comma-separated keyword

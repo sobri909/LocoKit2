@@ -2,7 +2,7 @@
 //  PlaceCategory+Mapbox.swift
 //  LocoKit2
 //
-//  Created by Claude on 2026-08-11
+//  Created by Claude on 2026-08-10
 //
 //  GENERATED FILE — regenerate via Scripts/placecategory/generate_placecategory.py
 //  (BIG-513). Mapbox category strings are compound comma-separated keyword
