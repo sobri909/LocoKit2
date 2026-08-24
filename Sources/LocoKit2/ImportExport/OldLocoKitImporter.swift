@@ -46,21 +46,105 @@ public enum OldLocoKitImporter {
         return locoKitExists && arcAppExists
     }
 
-    // cached per launch: the legacy db only ever gains newer data
-    private static var cachedLegacyEarliestItemDate: Date??
+    // MARK: - Migration completeness analysis (BIG-664 V2)
 
-    /// earliest non-deleted item date in the legacy LocoKit database (BIG-629)
-    public static func legacyEarliestItemDate() async -> Date? {
-        if let cached = cachedLegacyEarliestItemDate { return cached }
-        guard let legacyPool = Database.legacyPool else { return nil }
-        let earliest = try? await legacyPool.read { db -> Date? in
-            let request = LegacyItem
+    public struct MigrationAnalysis: Sendable {
+        public let legacyItemCount: Int
+        /// legacy items older than AT4's earliest recording that are absent from AT4 —
+        /// data the import WOULD have fetched and didn't. The gate signal.
+        public let absentInWindow: Int
+        /// legacy items from the parallel-running era (>= AT4's earliest recording),
+        /// absent BY DESIGN — the import's dedup window never fetches them. Diagnostic only.
+        public let absentAfterCutoff: Int
+        public let absentInWindowBySource: [String: Int]
+        public let absentInWindowEarliest: Date?
+        public let absentInWindowLatest: Date?
+        public let at4EarliestRecorded: Date?
+        public var migratedCount: Int { legacyItemCount - absentInWindow - absentAfterCutoff }
+    }
+
+    // cached per launch; reset when an import starts (a completed import changes the answer)
+    private static var cachedMigrationAnalysis: MigrationAnalysis??
+
+    /// Id-existence migration completeness probe (BIG-664 V2). Migrated items keep their
+    /// legacy itemId (insert onConflict .ignore), so "legacy ids absent from AT4" is
+    /// provenance-exact — immune to source stamps, bogus legacy dates, and AT4-era native
+    /// GPX/HealthKit imports, all of which broke the date-window heuristic in the field.
+    /// The AT4 side counts ALL rows including deleted/disabled: presence proves migration,
+    /// and later user deletes or merges must not reopen the gates.
+    /// The absent set's legacy source distribution + date span is logged — that line is the
+    /// field diagnostic for whatever the date-window gate was misreading on a given device.
+    public static func migrationAnalysis() async -> MigrationAnalysis? {
+        if let cached = cachedMigrationAnalysis { return cached }
+        guard hasOldArcTimelineData, let legacyPool = Database.legacyPool else {
+            cachedMigrationAnalysis = .some(nil)
+            return nil
+        }
+        let at4Ids = try? await Database.pool.read { db in
+            try Set(String.fetchAll(db, TimelineItemBase.select(TimelineItemBase.Columns.id, as: String.self)))
+        }
+        guard let at4Ids else { cachedMigrationAnalysis = .some(nil); return nil }
+
+        // The import itself fetches with the BIG-629 dedup window (distantPast → AT4's
+        // earliest RECORDED data), so legacy items newer than that cutoff are unmigrated
+        // by design on any device that ran both apps in parallel — they must not count
+        // against completeness. Same recorded-samples anchor as the import's window:
+        // processing plants LocoKit2-source rows at historic dates, so an item only
+        // anchors the cutoff if it holds a LocoKit2 sample from an active recording state.
+        let cutoff: Date? = try? await Database.pool.read { db in
+            let recordedSamples = TimelineItemBase.samples
+                .filter(Column("source") == "LocoKit2" && Column("recordingState") != RecordingState.off.rawValue)
+            let request = TimelineItemBase
+                .filter { $0.source == "LocoKit2" }
                 .filter { $0.deleted == false }
+                .joining(required: recordedSamples)
                 .select { min($0.startDate) }
             return try request.asRequest(of: Date.self).fetchOne(db)
         }
-        cachedLegacyEarliestItemDate = .some(earliest ?? nil)
-        return earliest ?? nil
+
+        // values extracted inside the read closure: GRDB's Row isn't Sendable
+        // (conformance unavailable under the iOS 27 SDK's stricter checking)
+        let legacyRows = try? await legacyPool.read { db -> [(itemId: String, source: String?, startDate: Date?)] in
+            let rows = try Row.fetchAll(db, LegacyItem
+                .filter(Column("deleted") == false)
+                .select(Column("itemId"), Column("source"), Column("startDate")))
+            return rows.map { ($0["itemId"], $0["source"], $0["startDate"]) }
+        }
+        guard let legacyRows else { cachedMigrationAnalysis = .some(nil); return nil }
+
+        var absentInWindow = 0
+        var absentAfterCutoff = 0
+        var absentInWindowBySource: [String: Int] = [:]
+        var absentInWindowEarliest: Date?
+        var absentInWindowLatest: Date?
+        for row in legacyRows {
+            if at4Ids.contains(row.itemId) { continue }
+            // nil-date absents count in-window: they're the broken-row shape the import
+            // may have skipped, which is exactly what the gate should surface, not hide
+            if let cutoff, let startDate = row.startDate, startDate >= cutoff {
+                absentAfterCutoff += 1
+                continue
+            }
+            absentInWindow += 1
+            absentInWindowBySource[row.source ?? "NULL", default: 0] += 1
+            if let startDate = row.startDate {
+                if absentInWindowEarliest == nil || startDate < absentInWindowEarliest! { absentInWindowEarliest = startDate }
+                if absentInWindowLatest == nil || startDate > absentInWindowLatest! { absentInWindowLatest = startDate }
+            }
+        }
+
+        let analysis = MigrationAnalysis(
+            legacyItemCount: legacyRows.count,
+            absentInWindow: absentInWindow, absentAfterCutoff: absentAfterCutoff,
+            absentInWindowBySource: absentInWindowBySource,
+            absentInWindowEarliest: absentInWindowEarliest, absentInWindowLatest: absentInWindowLatest,
+            at4EarliestRecorded: cutoff
+        )
+        let sources = absentInWindowBySource.sorted { $0.value > $1.value }
+            .map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+        Log.info("Migration analysis: legacy=\(analysis.legacyItemCount), migrated=\(analysis.migratedCount), absentInWindow=\(absentInWindow) [\(sources)] span=\(absentInWindowEarliest?.description ?? "-")..\(absentInWindowLatest?.description ?? "-"), absentAfterCutoff=\(absentAfterCutoff) (cutoff=\(cutoff?.description ?? "none"))", subsystem: .importing)
+        cachedMigrationAnalysis = .some(analysis)
+        return analysis
     }
 
     // MARK: - Public interface
@@ -69,8 +153,9 @@ public enum OldLocoKitImporter {
         guard !importInProgress else {
             throw ImportExportError.importAlreadyInProgress
         }
-        
+
         let startTime = Date()
+        cachedMigrationAnalysis = nil // a completed import changes the id-existence answer (BIG-664)
         importInProgress = true
         currentPhase = .connecting
         progress = 0
@@ -122,6 +207,7 @@ public enum OldLocoKitImporter {
         }
 
         let startTime = Date()
+        cachedMigrationAnalysis = nil // a completed import changes the id-existence answer (BIG-664)
         importInProgress = true
         progress = 0
         importDateRange = dateRange
@@ -262,11 +348,11 @@ public enum OldLocoKitImporter {
         // complete gracefully before the samples phase (whose orphan machinery has no business
         // running against a zero-item source) and flag the outcome for the app to present.
         // The in-window read count is only the trigger; the authoritative check is whole-source
-        // emptiness (nil earliest non-deleted item), because the app always imports with the
+        // emptiness (zero non-deleted legacy items), because the app always imports with the
         // BIG-629 dedup window (distantPast → earliestLocoKit2DataDate) — zero items in-window
         // against a NON-empty source (parallel-era-only data) must complete silently instead,
         // since "no old data found" would be false there.
-        if itemsCount == 0, await legacyEarliestItemDate() == nil {
+        if itemsCount == 0, await migrationAnalysis()?.legacyItemCount ?? 0 == 0 {
             Log.info("OldLocoKitImporter completed: no timeline data found in legacy source (\(placesCount) places)", subsystem: .importing)
             lastCompletionWasEmptySource = true
             try await OldLocoKitImportState.clear()
