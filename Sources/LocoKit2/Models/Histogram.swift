@@ -145,10 +145,18 @@ public struct Histogram: Hashable, Sendable, Codable {
 
     // MARK: - FD calc
 
+    /// Upper bound on bins. The Freedman–Diaconis width is IQR-driven, so a distribution whose
+    /// middle half is near-identical (a mostly-stationary trip's sample speeds after a segments
+    /// cleanup) yields a near-zero width and a bin count in the millions — `Array(repeating:count:)`
+    /// then aborts (BIG-717 device crash, 2026-09-09). No chart can show more than a few dozen bins.
+    static let maxBins = 100
+
     private static func numberOfBins(for values: [Double]) -> Int {
         let proposedWidth = computeBinWidth(for: values)
         guard let max = values.max(), let min = values.min() else { return 1 }
-        return Int(ceil((max - min) / proposedWidth))
+        let proposed = ceil((max - min) / proposedWidth)
+        guard proposed.isFinite, proposed >= 1 else { return 1 }
+        return Int(Swift.min(proposed, Double(maxBins)))
     }
 
     private static func computeBinWidth(for values: [Double]) -> Double {
