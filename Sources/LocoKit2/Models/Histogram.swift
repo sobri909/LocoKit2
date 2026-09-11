@@ -67,7 +67,10 @@ public struct Histogram: Hashable, Sendable, Codable {
         return Histogram(values: intervals)
     }
 
-    public init?(values: [Double]) {
+    /// - Parameter maxBins: cap on the Freedman-Diaconis bin count. FD sizes bins from the IQR,
+    ///   so a tight cluster inside a wide range (a flight's cruise speeds across 0-900 km/h) can
+    ///   ask for ~90 bins; callers with a bounded display pass something smaller (BIG-697)
+    public init?(values: [Double], maxBins: Int = Histogram.maxBins) {
         guard let minValue = values.min(), let maxValue = values.max() else { return nil }
 
         // if all values are equal, create a single zero-width bin
@@ -76,7 +79,7 @@ public struct Histogram: Hashable, Sendable, Codable {
             return
         }
 
-        let binCount = Self.numberOfBins(for: values)
+        let binCount = Self.numberOfBins(for: values, maxBins: maxBins)
         let binWidth = (maxValue - minValue) / Double(binCount)
 
         // create fixed array of empty bins
@@ -172,14 +175,14 @@ public struct Histogram: Hashable, Sendable, Codable {
     /// middle half is near-identical (a mostly-stationary trip's sample speeds after a segments
     /// cleanup) yields a near-zero width and a bin count in the millions — `Array(repeating:count:)`
     /// then aborts (BIG-717 device crash, 2026-09-09). No chart can show more than a few dozen bins.
-    static let maxBins = 100
+    public static let maxBins = 100
 
-    private static func numberOfBins(for values: [Double]) -> Int {
+    private static func numberOfBins(for values: [Double], maxBins: Int) -> Int {
         let proposedWidth = computeBinWidth(for: values)
         guard let max = values.max(), let min = values.min() else { return 1 }
         let proposed = ceil((max - min) / proposedWidth)
         guard proposed.isFinite, proposed >= 1 else { return 1 }
-        return Int(Swift.min(proposed, Double(maxBins)))
+        return Int(Swift.min(proposed, Double(Swift.max(maxBins, 1))))
     }
 
     private static func computeBinWidth(for values: [Double]) -> Double {
