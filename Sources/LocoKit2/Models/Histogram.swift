@@ -33,6 +33,29 @@ public struct Histogram: Hashable, Sendable, Codable {
         bins = []
     }
 
+    /// Build from pre-computed bins. Lets a caller count a second population into an
+    /// existing histogram's bin edges (e.g. the low-confidence overlay on a trip's speeds
+    /// histogram, BIG-697) so the two line up bar for bar.
+    public init(bins: [Bin]) {
+        self.bins = bins
+    }
+
+    /// Counts `values` into this histogram's bin edges, returning a histogram with identical
+    /// bins. Values outside the range are clamped into the first/last bin rather than dropped,
+    /// so a second population wider than the first still shows up, pinned at the edges
+    /// (the same treatment the trip charts give out-of-axis low-confidence points).
+    public func counting(_ values: [Double]) -> Histogram {
+        guard let first = bins.first, let width = binWidth, width > 0 else {
+            return Histogram(bins: bins.map { Bin(start: $0.start, end: $0.end, count: values.count) })
+        }
+        var counts = Array(repeating: 0, count: bins.count)
+        for value in values {
+            let bucket = Int((value - first.start) / width)
+            counts[min(max(bucket, 0), bins.count - 1)] += 1
+        }
+        return Histogram(bins: zip(bins, counts).map { Bin(start: $0.start, end: $0.end, count: $1) })
+    }
+
     public static func forTimeOfDay(dates: [Date], timeZone: TimeZone = .current) -> Histogram? {
         var calendar = Calendar.current
         calendar.timeZone = timeZone
