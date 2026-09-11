@@ -47,13 +47,18 @@ internal final class Merge: Hashable, Sendable {
         if keeper.disabled || deadman.disabled || betweener?.disabled == true { return false }
         if keeper.locked || deadman.locked || betweener?.locked == true { return false }
 
-        // check 2: items are in a valid merge pattern and result won't be circular or same-neighbor
+        // check 2: items are in a valid merge pattern and result won't be circular or same-neighbor.
+        // The same-neighbor checks compare the edge the keeper would inherit against the keeper's
+        // other edge — only when the inherited edge is a real id. Two nils are not the same neighbor:
+        // an island whose outer edges are both open (keeper at one end, deadman at the other) is
+        // perfectly mergeable, and a plain `==` on the optionals rejected it for months, leaving
+        // GPX-removal residue that no delete or heal could ever touch (BIG-714).
         if let betweener {
             // keeper -> betweener -> deadman
             if keeper.base.nextItemId == betweener.id, betweener.base.nextItemId == deadman.id {
                 // keeper will inherit deadman's nextItemId
                 if deadman.base.nextItemId == keeper.id { return false }
-                if deadman.base.nextItemId == keeper.base.previousItemId {
+                if let inherited = deadman.base.nextItemId, inherited == keeper.base.previousItemId {
                     Log.error("Merge rejected: would create same-neighbor edges on keeper", subsystem: .timeline)
                     return false
                 }
@@ -64,7 +69,7 @@ internal final class Merge: Hashable, Sendable {
             if deadman.base.nextItemId == betweener.id, betweener.base.nextItemId == keeper.id {
                 // keeper will inherit deadman's previousItemId
                 if deadman.base.previousItemId == keeper.id { return false }
-                if deadman.base.previousItemId == keeper.base.nextItemId {
+                if let inherited = deadman.base.previousItemId, inherited == keeper.base.nextItemId {
                     Log.error("Merge rejected: would create same-neighbor edges on keeper", subsystem: .timeline)
                     return false
                 }
@@ -76,7 +81,7 @@ internal final class Merge: Hashable, Sendable {
             if keeper.base.nextItemId == deadman.id {
                 // keeper will inherit deadman's nextItemId
                 if deadman.base.nextItemId == keeper.id { return false }
-                if deadman.base.nextItemId == keeper.base.previousItemId {
+                if let inherited = deadman.base.nextItemId, inherited == keeper.base.previousItemId {
                     Log.error("Merge rejected: would create same-neighbor edges on keeper", subsystem: .timeline)
                     return false
                 }
@@ -87,7 +92,7 @@ internal final class Merge: Hashable, Sendable {
             if deadman.base.nextItemId == keeper.id {
                 // keeper will inherit deadman's previousItemId
                 if deadman.base.previousItemId == keeper.id { return false }
-                if deadman.base.previousItemId == keeper.base.nextItemId {
+                if let inherited = deadman.base.previousItemId, inherited == keeper.base.nextItemId {
                     Log.error("Merge rejected: would create same-neighbor edges on keeper", subsystem: .timeline)
                     return false
                 }
