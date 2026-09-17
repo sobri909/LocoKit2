@@ -213,12 +213,19 @@ extension TimelineProcessor {
     /// disabled remainder (BIG-645's import-removal livelock). Batching means the
     /// heal sees only the coherent end state — with the whole cluster disabled,
     /// its samples are disabled too and processing cannot touch them.
+    ///
+    /// Already-disabled ids are accepted: they're skipped for the disable but still
+    /// excluded from the re-enable pass, so a caller whose cluster has disabled
+    /// members that must STAY disabled passes the whole cluster, not just its
+    /// enabled part (the re-enable pass is otherwise blind to who owns what — BIG-714).
     public static func disableItems(itemIds: [String]) async throws {
         guard !itemIds.isEmpty else { return }
         let batchIds = Set(itemIds)
 
         let reenabledItemIds = try await Database.pool.write { db -> [String] in
             var reenabledIds: [String] = []
+            var disabledCount = 0
+            var alreadyDisabledCount = 0
 
             for itemId in itemIds {
                 let request = TimelineItem
@@ -229,7 +236,10 @@ extension TimelineProcessor {
                     continue
                 }
 
-                guard !item.disabled else { continue }
+                guard !item.disabled else {
+                    alreadyDisabledCount += 1
+                    continue
+                }
 
                 guard let dateRange = item.dateRange else {
                     Log.error("disableItems(): Item has no date range: \(item.debugShortId)", subsystem: .timeline)
@@ -240,6 +250,7 @@ extension TimelineProcessor {
                 try item.base.updateChanges(db) {
                     $0.disabled = true
                 }
+                disabledCount += 1
 
                 // re-enable overlapping disabled items — excluding fellow batch
                 // members (mid-batch, earlier iterations' items are disabled and
@@ -260,7 +271,7 @@ extension TimelineProcessor {
                 }
             }
 
-            Log.info("disableItems(): Disabled \(itemIds.count) item(s), re-enabled \(reenabledIds.count)", subsystem: .timeline)
+            Log.info("disableItems(): Disabled \(disabledCount) of \(itemIds.count) item(s) (\(alreadyDisabledCount) already disabled), re-enabled \(reenabledIds.count)", subsystem: .timeline)
 
             return reenabledIds
         }
