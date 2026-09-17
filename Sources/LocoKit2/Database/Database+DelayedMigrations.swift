@@ -181,6 +181,12 @@ extension Database {
             Log.info("LocomotionSample table rebuild completed in \(String(format: "%.1f", -start.timeIntervalSinceNow))s", subsystem: .database)
         }
 
+        // ⚠️ A table rebuild (create _new / copy / drop / rename) drops EVERY trigger on the table,
+        // and nothing recreates them. Any rebuild migration must recreate all of the table's triggers
+        // after the rename, from shared static creator functions — see the LocomotionSample rebuild
+        // above, which does this correctly. This one did NOT: TimelineItemVisit_AFTER_UPDATE_lastSaved_UNCHANGED
+        // was lost on every install (BIG-748; restore migration pending). Verify against sqlite_master
+        // on a real DB after any rebuild, never by reading this file.
         migrator.registerMigration("TimelineItemVisit.nullableCoordinates") { db in
             // recreate table with nullable coordinates and constraint
             try? db.create(table: "TimelineItemVisit_new") { table in
