@@ -56,67 +56,13 @@ extension Database {
             try? db.execute(sql: "DROP TRIGGER IF EXISTS LocomotionSample_BEFORE_UPDATE_disabled_check")
             try? db.execute(sql: "DROP TRIGGER IF EXISTS TimelineItemBase_BEFORE_UPDATE_disabled_check")
 
-            // create auto-sync trigger: when item.disabled changes, cascade to all samples
-            try? db.execute(sql: """
-                CREATE TRIGGER TimelineItemBase_AFTER_UPDATE_disabled_sync
-                AFTER UPDATE OF disabled ON TimelineItemBase
-                WHEN NEW.disabled != OLD.disabled
-                BEGIN
-                    UPDATE LocomotionSample
-                    SET disabled = NEW.disabled
-                    WHERE timelineItemId = NEW.id;
-                END;
-                """)
-
-            // create sample-side constraints: prevent assigning samples with wrong disabled state
-            try? db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_BEFORE_INSERT_disabled_check
-                BEFORE INSERT ON LocomotionSample
-                BEGIN
-                    SELECT RAISE(ABORT, 'Sample disabled state must match parent item disabled state')
-                    FROM TimelineItemBase
-                    WHERE id = NEW.timelineItemId
-                    AND disabled != NEW.disabled;
-                END;
-                """)
-
-            try? db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_BEFORE_UPDATE_disabled_check
-                BEFORE UPDATE OF disabled, timelineItemId ON LocomotionSample
-                BEGIN
-                    SELECT RAISE(ABORT, 'Sample disabled state must match parent item disabled state')
-                    FROM TimelineItemBase
-                    WHERE id = NEW.timelineItemId
-                    AND disabled != NEW.disabled;
-                END;
-                """)
+            // the replacement regime: item→sample cascade + sample-side guards, from the registry
+            try? Database.createTriggers(family: .disabledSync, in: db)
         }
 
         migrator.registerMigration("sample_deleted_item_guard") { db in
             // prevent assigning samples to deleted items
-            try? db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_BEFORE_INSERT_deleted_check
-                BEFORE INSERT ON LocomotionSample
-                WHEN NEW.timelineItemId IS NOT NULL
-                BEGIN
-                    SELECT RAISE(ABORT, 'Cannot assign sample to a deleted item')
-                    FROM TimelineItemBase
-                    WHERE id = NEW.timelineItemId
-                    AND deleted = 1;
-                END;
-                """)
-
-            try? db.execute(sql: """
-                CREATE TRIGGER LocomotionSample_BEFORE_UPDATE_deleted_check
-                BEFORE UPDATE OF timelineItemId ON LocomotionSample
-                WHEN NEW.timelineItemId IS NOT NULL AND OLD.timelineItemId IS NOT NEW.timelineItemId
-                BEGIN
-                    SELECT RAISE(ABORT, 'Cannot assign sample to a deleted item')
-                    FROM TimelineItemBase
-                    WHERE id = NEW.timelineItemId
-                    AND deleted = 1;
-                END;
-                """)
+            try? Database.createTriggers(family: .deletedGuards, in: db)
         }
 
         migrator.registerMigration("orphan_samples_from_deleted_items") { db in
@@ -141,13 +87,14 @@ extension Database {
             Log.info("Starting LocomotionSample table rebuild (BIG-341)", subsystem: .database)
             let start = Date()
 
-            try? db.create(table: "LocomotionSample_new") { table in
-                Database.defineLocomotionSampleTable(table)
-            }
-
+            // Table rebuilds go through the helper, which puts back what SQLite drops with the
+            // table (triggers, explicit indexes) and renames the derived indexes that keep a
+            // `_new_` prefix after the rename. See Database+SchemaRegistry.swift (BIG-748).
             // explicit column names to prevent position-based mismatch (BIG-382)
-            try? db.execute(sql: """
-                INSERT INTO LocomotionSample_new
+            do {
+            try Database.rebuildTable("LocomotionSample", in: db, define: Database.defineLocomotionSampleTable) { newTable in
+                """
+                INSERT INTO \(newTable)
                 (id, lastSaved, rtreeId, date, source, sourceVersion, secondsFromGMT,
                  movingState, recordingState, disabled, timelineItemId,
                  latitude, longitude, altitude, horizontalAccuracy, verticalAccuracy,
@@ -160,42 +107,35 @@ extension Database {
                  speed, course, stepHz, xyAcceleration, zAcceleration,
                  heartRate, classifiedActivityType, confirmedActivityType
                 FROM LocomotionSample
-                """)
-
-            try? db.drop(table: "LocomotionSample")
-            try? db.rename(table: "LocomotionSample_new", to: "LocomotionSample")
-
-            // recreate composite index (rtreeId index name fixed by LocomotionSample_fix_rtreeId_index migration)
-            try? db.create(
-                index: "LocomotionSample_on_date_rtreeId_confirmedActivityType_xyAcceleration_zAcceleration_stepHz",
-                on: "LocomotionSample",
-                columns: ["date", "rtreeId", "confirmedActivityType", "xyAcceleration", "zAcceleration", "stepHz"]
-            )
-
-            // recreate all sample triggers (dropped with the old table)
-            try Database.createSampleTriggers(db)
-            try Database.createSampleRTreeTriggers(db)
-            try Database.createSampleLastSavedTrigger(db)
-            try Database.createSampleGuardTriggers(db)
+                """
+            }
+            } catch {
+                // rethrow: GRDB rolls the migration back and retries next launch. A half-done
+                // rebuild must never commit (the old per-step try? could do exactly that).
+                Log.error("LocomotionSample table rebuild failed: \(error)", subsystem: .database)
+                throw error
+            }
 
             Log.info("LocomotionSample table rebuild completed in \(String(format: "%.1f", -start.timeIntervalSinceNow))s", subsystem: .database)
         }
 
-        // ⚠️ A table rebuild (create _new / copy / drop / rename) drops EVERY trigger on the table,
-        // and nothing recreates them. Any rebuild migration must recreate all of the table's triggers
-        // after the rename, from shared static creator functions — see the LocomotionSample rebuild
-        // above, which does this correctly. This one did NOT: TimelineItemVisit_AFTER_UPDATE_lastSaved_UNCHANGED
-        // was lost on every install (BIG-748; restore migration pending). Verify against sqlite_master
-        // on a real DB after any rebuild, never by reading this file.
+        // BIG-748: as shipped (2026-06 → 2026-09) this rebuild did NOT recreate the table's
+        // trigger, so every install lost TimelineItemVisit_AFTER_UPDATE_lastSaved_UNCHANGED and
+        // kept three `TimelineItemVisit_new_on_*` indexes. Now routed through the helper (fresh
+        // installs come out right); existing installs are repaired by schema_registry_repair below.
         migrator.registerMigration("TimelineItemVisit.nullableCoordinates") { db in
-            // recreate table with nullable coordinates and constraint
-            try? db.create(table: "TimelineItemVisit_new") { table in
-                Database.defineTimelineItemVisitTable(table)
-            }
-
-            // copy data, converting null island coordinates to NULL
-            try? db.execute(sql: """
-                INSERT INTO TimelineItemVisit_new
+            // recreate table with nullable coordinates and constraint,
+            // copying data with null island coordinates converted to NULL.
+            // Explicit column list (BIG-382): the definition has since grown locality +
+            // countryCode, so on a fresh install the new table is wider than the eleven columns
+            // that existed when this migration shipped — a positional INSERT … SELECT threw
+            // there, and the old per-step `try?` dropped and renamed regardless (BIG-748).
+            do {
+            try Database.rebuildTable("TimelineItemVisit", in: db, define: Database.defineTimelineItemVisitTable) { newTable in
+                """
+                INSERT INTO \(newTable)
+                (itemId, lastSaved, latitude, longitude, radiusMean, radiusSD,
+                 placeId, confirmedPlace, uncertainPlace, customTitle, streetAddress)
                 SELECT
                     itemId,
                     lastSaved,
@@ -209,11 +149,12 @@ extension Database {
                     customTitle,
                     streetAddress
                 FROM TimelineItemVisit
-                """)
-
-            // drop old table and rename new
-            try? db.drop(table: "TimelineItemVisit")
-            try? db.rename(table: "TimelineItemVisit_new", to: "TimelineItemVisit")
+                """
+            }
+            } catch {
+                Log.error("TimelineItemVisit table rebuild failed: \(error)", subsystem: .database)
+                throw error
+            }
         }
 
         migrator.registerMigration("LocomotionSample_lastSaved_index") { db in
@@ -271,14 +212,8 @@ extension Database {
                 Database.defineDriftProfileTable(table)
             }
 
-            try? db.execute(sql: """
-                CREATE TRIGGER DriftProfile_AFTER_UPDATE_lastSaved_UNCHANGED
-                AFTER UPDATE ON DriftProfile
-                WHEN NEW.lastSaved IS OLD.lastSaved
-                BEGIN
-                    UPDATE DriftProfile SET lastSaved = CURRENT_TIMESTAMP WHERE id = NEW.id;
-                END;
-                """)
+            // fresh installs already have this from "Initial lastSaved triggers"; IF NOT EXISTS
+            try? Database.createTrigger(named: "DriftProfile_AFTER_UPDATE_lastSaved_UNCHANGED", in: db)
         }
 
         // BIG-598: escape-valve fields for the v3-import loop (attempt counter + last error
@@ -323,6 +258,31 @@ extension Database {
         migrator.registerMigration("Place.userCategory") { db in
             try? db.alter(table: "Place") { table in
                 table.add(column: "userCategory", .text)
+            }
+        }
+
+        // BIG-748: bring every existing install's schema back to the registry — restores the
+        // visit table's lastSaved trigger (lost by the nullableCoordinates rebuild), renames the
+        // seven `_new_`-prefixed indexes both rebuilds left behind, and recreates any explicit
+        // index or LocoKit2 trigger that is missing. Idempotent; a no-op on a fresh install.
+        // foreignKeyChecks: .immediate — no table is dropped or renamed here, so the migration
+        // can skip GRDB's deferred whole-database foreign-key scan (a large share of the cost on
+        // big DBs: 76.6 s with it vs the index rebuilds alone on a 7.5M-sample copy).
+        // Never throws out: this sits upstream of every Arc migration, and a repair that could
+        // not complete is reported by the audit, not allowed to block the chain.
+        migrator.registerMigration("schema_registry_repair", foreignKeyChecks: .immediate) { db in
+            do {
+                let before = try Database.auditSchema(in: db)
+                if !before.isClean {
+                    Log.info("schema_registry_repair: \(before.summary)", subsystem: .database)
+                }
+                try Database.ensureSchema(in: db)
+                let after = try Database.auditSchema(in: db)
+                if !after.isClean {
+                    Log.error("schema_registry_repair left defects: \(after.summary)", subsystem: .database)
+                }
+            } catch {
+                Log.error("schema_registry_repair: \(error)", subsystem: .database)
             }
         }
     }
