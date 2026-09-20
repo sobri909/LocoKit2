@@ -49,7 +49,12 @@ extension TimelineProcessor {
             return
         }
 
-        // Step 1: SQL-level adoption into existing items
+        // Step 1: SQL-level adoption into existing items. Enabled orphans only, the
+        // same filter the entry guard and adoptableCount apply: without it, the moment
+        // one enabled orphan exists this UPDATE also re-homes the ~17k disabled
+        // LocoKit1-era orphans into whatever disabled items span them (224 in one
+        // GPX-removal pass on a real device copy, BIG-746) — samples LocoKit1 orphaned
+        // on purpose and that are meant to stay put
         if adoptableCount > 0 {
             let adopted = try await Database.pool.write { db -> Int in
                 try db.execute(sql: """
@@ -57,16 +62,17 @@ extension TimelineProcessor {
                     SET timelineItemId = (
                         SELECT id FROM TimelineItemBase
                         WHERE deleted = 0
-                        AND disabled = LocomotionSample.disabled
+                        AND disabled = 0
                         AND startDate <= LocomotionSample.date
                         AND endDate >= LocomotionSample.date
                         LIMIT 1
                     )
                     WHERE timelineItemId IS NULL
+                    AND disabled = 0
                     AND EXISTS (
                         SELECT 1 FROM TimelineItemBase
                         WHERE deleted = 0
-                        AND disabled = LocomotionSample.disabled
+                        AND disabled = 0
                         AND startDate <= LocomotionSample.date
                         AND endDate >= LocomotionSample.date
                     )
