@@ -13,7 +13,7 @@
 
 extension PlaceCategory {
 
-    init?(googlePrimaryType: String) {
+    public init?(googlePrimaryType: String) {
         if let direct = PlaceCategory(rawValue: googlePrimaryType) {
             self = direct
             return
@@ -27,7 +27,7 @@ extension PlaceCategory {
     }
 
     // old Places-API type -> modern primaryType
-    static let legacyGoogleAliases: [String: String] = [
+    public static let legacyGoogleAliases: [String: String] = [
         "grocery_or_supermarket": "supermarket",
     ]
 }
