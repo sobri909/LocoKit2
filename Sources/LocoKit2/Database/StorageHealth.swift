@@ -27,7 +27,7 @@ public final class StorageHealth {
     public static let clearFloor: TimeInterval = 60
 
     public private(set) var storageFull = false
-    public private(set) var lastFailure: Date?
+    private var lastFailure: Date?
 
     private var episodeStart: Date?
 

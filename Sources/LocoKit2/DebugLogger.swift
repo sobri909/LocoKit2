@@ -50,12 +50,12 @@ public enum Log {
     }
 
     /// BIG-745: the caller's file and function ride along, so a swallowed error names the
-    /// operation that threw it — 57 `catch { Log.error(error, subsystem: .database) }` sites
-    /// used to emit an identical line with no caller context, which is why a user's log
-    /// could show eleven SQLITE_FULL commits and never say which writes they were.
+    /// operation that threw it — every `catch { Log.error(error, subsystem: …) }` site used to
+    /// emit an identical line with no caller context, which is why a user's log could show
+    /// eleven SQLITE_FULL commits and never say which writes they were. `#fileID` keeps its
+    /// module prefix: the two repos share file names.
     public static func error(_ error: Error, subsystem: Subsystem, function: String = #function, fileID: String = #fileID) {
-        let file = fileID.split(separator: "/").last.map(String.init) ?? fileID
-        self.error("\(error) — in \(file) \(function)", subsystem: subsystem)
+        self.error("\(error) — in \(fileID) \(function)", subsystem: subsystem)
     }
 
     /// console only - no file write, for high-volume debug output
