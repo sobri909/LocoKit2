@@ -27,7 +27,9 @@ public final class Database: @unchecked Sendable {
         } else {
             dbUrl = appGroupDbUrl ?? appContainerDbUrl
         }
-        return try! DatabasePool(path: dbUrl.path, configuration: config)
+        let pool = try! DatabasePool(path: dbUrl.path, configuration: config)
+        StorageHealthMonitor.observeCommits(on: pool)  // BIG-745
+        return pool
     }()
 
     public private(set) lazy var legacyPool: DatabasePool? = {
