@@ -301,6 +301,15 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: -
 
     private init() {
+        // BIG-764: the CLLocationManagers below deliver delegate callbacks only on the run loop
+        // of the thread that creates them. Off-main creation is SILENT breakage — no
+        // authorization callback, no location updates, no recording — so say so loudly.
+        // Not a trap: taking the app down at launch is worse than a logged fault. The app
+        // pins creation to main in ArcTimelineEditorApp.init(); this catches the next caller
+        // that forgets.
+        if !Thread.isMainThread {
+            Log.error("LocomotionManager created OFF the main thread — CLLocationManager callbacks will not be delivered. \(Thread.current)", subsystem: .locomotion)
+        }
         locationDelegate = Delegate(parent: self)
         locationManager.delegate = locationDelegate
         sleepLocationManager.delegate = locationDelegate
