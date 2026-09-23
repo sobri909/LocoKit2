@@ -208,13 +208,15 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Authorisation
 
     public func requestLocationAuthorization() {
+        locationManager.requestAlwaysAuthorization()
+        #if targetEnvironment(simulator)
         // BIG-764: the stored status is delegate-fed, and the iOS 27 simulator never delivers
         // locationManagerDidChangeAuthorization — not even the initial callback — so the app's
         // view stayed .notDetermined while locationd held a decision, and onboarding's Continue
-        // was dead with no way out. Read the manager directly before the request, then poll it
-        // until a decision lands. On device the delegate fires first and this changes nothing.
-        locationAuthorizationStatus = locationManager.authorizationStatus
-        locationManager.requestAlwaysAuthorization()
+        // was dead with no way out. Poll the manager directly until a decision lands.
+        // SIMULATOR ONLY: a synchronous authorizationStatus read on main blocks while locationd
+        // is cold — on a real phone launched straight after a reboot that was a white screen and
+        // a launch-watchdog kill, twice in a row (2026-09-23). On device the delegate works.
         Task { @MainActor in
             for _ in 0..<120 {
                 try? await Task.sleep(for: .milliseconds(500))
@@ -225,6 +227,7 @@ public final class LocomotionManager: @unchecked Sendable {
                 if status != .notDetermined { return }
             }
         }
+        #endif
     }
 
     public func requestMotionAuthorization() async {
@@ -313,9 +316,12 @@ public final class LocomotionManager: @unchecked Sendable {
         locationDelegate = Delegate(parent: self)
         locationManager.delegate = locationDelegate
         sleepLocationManager.delegate = locationDelegate
+        #if targetEnvironment(simulator)
         // BIG-764: seed from the manager rather than wait for a delegate callback the
-        // simulator may never send; the delegate remains the live path on device
+        // simulator never sends. SIMULATOR ONLY — see requestLocationAuthorization(): this
+        // read blocks main on a cold locationd, and here it runs before the first frame.
         locationAuthorizationStatus = locationManager.authorizationStatus
+        #endif
     }
 
     // MARK: - State changes
