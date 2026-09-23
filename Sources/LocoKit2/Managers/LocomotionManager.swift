@@ -208,7 +208,23 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Authorisation
 
     public func requestLocationAuthorization() {
+        // BIG-764: the stored status is delegate-fed, and the iOS 27 simulator never delivers
+        // locationManagerDidChangeAuthorization — not even the initial callback — so the app's
+        // view stayed .notDetermined while locationd held a decision, and onboarding's Continue
+        // was dead with no way out. Read the manager directly before the request, then poll it
+        // until a decision lands. On device the delegate fires first and this changes nothing.
+        locationAuthorizationStatus = locationManager.authorizationStatus
         locationManager.requestAlwaysAuthorization()
+        Task { @MainActor in
+            for _ in 0..<120 {
+                try? await Task.sleep(for: .milliseconds(500))
+                let status = self.locationManager.authorizationStatus
+                if status != self.locationAuthorizationStatus {
+                    self.locationAuthorizationStatus = status
+                }
+                if status != .notDetermined { return }
+            }
+        }
     }
 
     public func requestMotionAuthorization() async {
@@ -288,6 +304,9 @@ public final class LocomotionManager: @unchecked Sendable {
         locationDelegate = Delegate(parent: self)
         locationManager.delegate = locationDelegate
         sleepLocationManager.delegate = locationDelegate
+        // BIG-764: seed from the manager rather than wait for a delegate callback the
+        // simulator may never send; the delegate remains the live path on device
+        locationAuthorizationStatus = locationManager.authorizationStatus
     }
 
     // MARK: - State changes
