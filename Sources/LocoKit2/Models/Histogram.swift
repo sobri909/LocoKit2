@@ -50,8 +50,14 @@ public struct Histogram: Hashable, Sendable, Codable {
         }
         var counts = Array(repeating: 0, count: bins.count)
         for value in values {
-            let bucket = Int((value - first.start) / width)
-            counts[min(max(bucket, 0), bins.count - 1)] += 1
+            // BIG-767: clamp in Double BEFORE converting. `Int(Double)` traps on NaN, ±inf, or
+            // anything past Int.max — and a second population counted into bins built from a
+            // near-constant first one (bin width a few ULPs wide) puts an ordinary 30 m/s at
+            // ~1e19. That was a fatal on the trip details screen, 1.7.1 on iOS 27.
+            let raw = (value - first.start) / width
+            guard !raw.isNaN else { continue }
+            let bucket = Int(min(max(raw, 0), Double(bins.count - 1)))
+            counts[bucket] += 1
         }
         return Histogram(bins: zip(bins, counts).map { Bin(start: $0.start, end: $0.end, count: $1) })
     }
@@ -71,6 +77,8 @@ public struct Histogram: Hashable, Sendable, Codable {
     ///   so a tight cluster inside a wide range (a flight's cruise speeds across 0-900 km/h) can
     ///   ask for ~90 bins; callers with a bounded display pass something smaller (BIG-697)
     public init?(values: [Double], maxBins: Int = Histogram.maxBins) {
+        // BIG-767: a NaN or infinite value poisons min/max and every division below
+        let values = values.filter { $0.isFinite }
         guard let minValue = values.min(), let maxValue = values.max() else { return nil }
 
         // if all values are equal, create a single zero-width bin
@@ -87,16 +95,12 @@ public struct Histogram: Hashable, Sendable, Codable {
         
         // bucket values into bins
         for value in values {
-            var bucket = Int((value - minValue) / binWidth)
-
-            // handle edge case where value exactly equals maxValue
-            if bucket == binCount {
-                bucket = binCount - 1
-            }
-            
-            if bucket >= 0 && bucket < binCount {
-                counts[bucket] += 1
-            }
+            // clamp in Double before converting (BIG-767); the max value lands on binCount
+            // and is folded into the last bin, as before
+            let raw = (value - minValue) / binWidth
+            guard raw.isFinite else { continue }
+            let bucket = Int(min(max(raw, 0), Double(binCount - 1)))
+            counts[bucket] += 1
         }
         
         // create final bins with proper start/end/count
