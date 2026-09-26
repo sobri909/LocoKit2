@@ -270,20 +270,12 @@ extension Database {
         // big DBs: 76.6 s with it vs the index rebuilds alone on a 7.5M-sample copy).
         // Never throws out: this sits upstream of every Arc migration, and a repair that could
         // not complete is reported by the audit, not allowed to block the chain.
-        migrator.registerMigration("schema_registry_repair", foreignKeyChecks: .immediate) { db in
-            do {
-                let before = try Database.auditSchema(in: db)
-                if !before.isClean {
-                    Log.info("schema_registry_repair: \(before.summary)", subsystem: .database)
-                }
-                try Database.ensureSchema(in: db)
-                let after = try Database.auditSchema(in: db)
-                if !after.isClean {
-                    Log.error("schema_registry_repair left defects: \(after.summary)", subsystem: .database)
-                }
-            } catch {
-                Log.error("schema_registry_repair: \(error)", subsystem: .database)
-            }
-        }
+        // BIG-792: as shipped in 1.7.1 this ran the repair inside a catch-all, so a CREATE INDEX
+        // that failed on a full disk (after its DROP had succeeded) was tolerated and COMMITTED,
+        // leaving a 7 GB samples table with no index on timelineItemId and nothing able to see
+        // it. The repair now runs at launch, after migrations, outside the migrator
+        // (`Database.repairSchemaIfNeeded()`), so it can neither block later migrations nor
+        // commit a half-state. Kept as an identifier so applied lists stay valid; a no-op.
+        migrator.registerMigration("schema_registry_repair", foreignKeyChecks: .immediate) { _ in }
     }
 }

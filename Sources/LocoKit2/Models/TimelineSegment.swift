@@ -103,11 +103,16 @@ public final class TimelineSegment: Sendable {
             objectKey: dateRange.description,
             rejectDuplicates: true
         ) else {
-            Log.debug("Skipping duplicate TimelineSegment.fetchItems()", subsystem: .timeline)
+            // info, not debug: a bundle has to show a segment starved by its own in-flight fetch
+            // (BIG-789) — but on exactly such a device this fires every second, so once a minute
+            if logDuplicateSkip(.fetch) {
+                Log.info("Skipping duplicate TimelineSegment.fetchItems() (\(dateRange.start.formatted(date: .abbreviated, time: .omitted)))", subsystem: .timeline)
+            }
             return
         }
         defer { OperationRegistry.endOperation(handle) }
-        
+
+        let start = Date()
         do {
             let items = try await Database.pool.read { [dateRange] db in
                 let request = TimelineItem
@@ -118,6 +123,13 @@ public final class TimelineSegment: Sendable {
                 return try request.asRequest(of: TimelineItem.self).fetchAll(db)
             }
             await update(from: items)
+
+            // BIG-789: a day view that takes minutes to load was invisible in every bundle
+            let elapsed = -start.timeIntervalSinceNow
+            if elapsed > 2 {
+                let sampleCount = timelineItems?.reduce(0) { $0 + ($1.samples?.count ?? 0) } ?? 0
+                Log.info("TimelineSegment.fetchItems() took \(String(format: "%.1f", elapsed))s: \(items.count) items, \(sampleCount) samples, \(dateRange.start.formatted(date: .abbreviated, time: .omitted))", subsystem: .timeline)
+            }
 
         } catch is CancellationError {
             // CancellationError is fine here; can ignore
@@ -130,6 +142,20 @@ public final class TimelineSegment: Sendable {
     @ObservationIgnored
     nonisolated(unsafe)
     private var lastCurrentItemId: String?
+
+    private enum DuplicateSkip { case fetch, classify }
+
+    @ObservationIgnored
+    nonisolated(unsafe)
+    private var lastDuplicateSkipLog: [DuplicateSkip: Date] = [:]
+
+    /// One duplicate-skip line per minute per segment and kind: enough to show a starved
+    /// segment in a bundle, not enough to fill the log file on the device it is meant to diagnose.
+    private func logDuplicateSkip(_ kind: DuplicateSkip) -> Bool {
+        if let last = lastDuplicateSkipLog[kind], last.age < 60 { return false }
+        lastDuplicateSkipLog[kind] = .now
+        return true
+    }
 
     private func update(from updatedItems: [TimelineItem]) async {
         guard let handle = OperationRegistry.startOperation(.timeline, operation: "TimelineSegment.update(from:)", objectKey: dateRange.description) else { return }
@@ -163,7 +189,12 @@ public final class TimelineSegment: Sendable {
         
         // early return if we're not supposed to modify the items at all
         guard shouldReprocessOnUpdate else { return }
-        guard UIApplication.shared.applicationState == .active else { return }
+        guard UIApplication.shared.applicationState == .active else {
+            // BIG-789: on a slow day view the load outlives the foreground session that started
+            // it, and nothing was classified or processed for days with no line saying why
+            Log.info("TimelineSegment.update(from:) skipped classify/process: app not active (\(newItems.count) items)", subsystem: .timeline)
+            return
+        }
 
         processingTask?.cancel()
         processingTask = Task {
@@ -179,16 +210,31 @@ public final class TimelineSegment: Sendable {
             objectKey: dateRange.description,
             rejectDuplicates: true
         ) else {
-            Log.debug("Skipping duplicate TimelineSegment.classify(items:)", subsystem: .timeline)
+            if logDuplicateSkip(.classify) {
+                Log.info("Skipping duplicate TimelineSegment.classify(items:) (\(dateRange.start.formatted(date: .abbreviated, time: .omitted)))", subsystem: .timeline)
+            }
             return
         }
 
         defer { OperationRegistry.endOperation(handle) }
-        
+
+        let start = Date()
         var mutableItems = items
         for index in mutableItems.indices {
-            if Task.isCancelled { return }
+            if Task.isCancelled {
+                // routine on a recording day (every refetch cancels the running pass); only a
+                // pass that had already run long is worth a line
+                let elapsed = -start.timeIntervalSinceNow
+                if elapsed > 2 {
+                    Log.info("TimelineSegment.classify(items:) cancelled after \(index)/\(items.count) items, \(String(format: "%.1f", elapsed))s", subsystem: .timeline)
+                }
+                return
+            }
             await mutableItems[index].classifySamples()
+        }
+        let elapsed = -start.timeIntervalSinceNow
+        if elapsed > 2 {
+            Log.info("TimelineSegment.classify(items:) done: \(items.count) items, \(String(format: "%.1f", elapsed))s", subsystem: .timeline)
         }
     }
 
