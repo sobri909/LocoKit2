@@ -10,17 +10,22 @@ import CoreLocation
 
 extension TimelineItem {
 
+    /// Returns the surviving samples, in date order, when anything was deleted; nil when the
+    /// item was already pruned. BIG-790: the caller holds this item's loaded samples and hands
+    /// the survivors back to them, so nothing built from the arrays (Confirm, the segments list)
+    /// can touch a deleted row before the next refetch. The delete itself marks the item via the
+    /// `LocomotionSample_AFTER_DELETE_timelineItemId` trigger.
     @TimelineActor
-    public func pruneSamples() async throws {
+    public func pruneSamples() async throws -> [LocomotionSample]? {
         if isVisit {
-            try await pruneVisitSamples()
+            return try await pruneVisitSamples()
         } else {
-            try await pruneTripSamples()
+            return try await pruneTripSamples()
         }
     }
 
     @TimelineActor
-    public func pruneTripSamples() async throws {
+    public func pruneTripSamples() async throws -> [LocomotionSample]? {
         guard isTrip, let trip = trip, let samples else {
             throw TimelineError.invalidItem("Can only prune Trips with samples")
         }
@@ -43,9 +48,10 @@ extension TimelineItem {
             return (coordinate, sample.date, index)
         }
 
-        guard points.count > 2 else { return }
+        guard points.count > 2 else { return nil }
 
         let keepIndices = PathSimplifier.simplify(coordinates: points, maxInterval: maxInterval, epsilon: epsilon)
+        guard keepIndices.count < sortedSamples.count else { return nil }
 
         try await Database.pool.write { db in
             for (index, sample) in sortedSamples.enumerated() {
@@ -55,15 +61,14 @@ extension TimelineItem {
             }
         }
 
-        if keepIndices.count < sortedSamples.count {
-            let survivors = keepIndices.sorted().map { sortedSamples[$0] }
-            var maxGapSeconds: TimeInterval = 0
-            for i in 1..<survivors.count {
-                let gap = survivors[i].date.timeIntervalSince(survivors[i-1].date)
-                if gap > maxGapSeconds { maxGapSeconds = gap }
-            }
-            Log.info("pruneTripSamples() \(debugShortId): \(keepIndices.count)/\(sortedSamples.count) samples (\(activityType.displayName)), maxGap: \(String(format: "%.0f", maxGapSeconds))s", subsystem: .timeline)
+        let survivors = keepIndices.sorted().map { sortedSamples[$0] }
+        var maxGapSeconds: TimeInterval = 0
+        for i in 1..<survivors.count {
+            let gap = survivors[i].date.timeIntervalSince(survivors[i-1].date)
+            if gap > maxGapSeconds { maxGapSeconds = gap }
         }
+        Log.info("pruneTripSamples() \(debugShortId): \(keepIndices.count)/\(sortedSamples.count) samples (\(activityType.displayName)), maxGap: \(String(format: "%.0f", maxGapSeconds))s", subsystem: .timeline)
+        return survivors
     }
 
     // MARK: - Visit pruning
@@ -79,11 +84,11 @@ extension TimelineItem {
     /// - Higher accuracy samples are preferentially retained
     /// - Idempotent: re-running on already-pruned data produces no changes
     @TimelineActor
-    private func pruneVisitSamples() async throws {
+    private func pruneVisitSamples() async throws -> [LocomotionSample]? {
         guard isVisit, let dateRange = dateRange, let samples = samples else {
             throw TimelineError.invalidItem("Can only prune Visits with samples")
         }
-        guard samples.count > 2 else { return }
+        guard samples.count > 2 else { return nil }
 
         let startEdgeEnd = dateRange.start + .minutes(20)
         let endEdgeStart = dateRange.end - .minutes(20)
@@ -150,7 +155,7 @@ extension TimelineItem {
             Log.debug("pruneVisitSamples() \(debugShortId): \(working.count) samples, maxGap: \(String(format: "%.0f", maxGapSeconds))s (no change)", subsystem: .timeline)
         }
 
-        if totalDeleted == 0 { return }
+        if totalDeleted == 0 { return nil }
 
         // delete pruned samples from the database
         let survivorIds = Set(working.map { $0.id })
@@ -161,6 +166,7 @@ extension TimelineItem {
                 }
             }
         }
+        return working
     }
 
 }

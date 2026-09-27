@@ -358,6 +358,8 @@ extension Database {
         case clean
         case repaired(seconds: Double)
         case postponed(neededBytes: Int64, availableBytes: Int64)
+        /// Triggers were created; index drops and builds wait for a launch with `indexWork: true`.
+        case deferred
         case failed(String)
     }
 
@@ -486,7 +488,11 @@ extension Database {
     /// index in flight, and peak disk is about one index rather than all of them at once. A
     /// postponed build logs one loud line and is retried at the next launch for the price of an
     /// audit; the previous shape spent ~20 s per launch on a CREATE INDEX that could not succeed.
-    public func repairSchemaIfNeeded(whileRepairing: @Sendable (Bool) async -> Void = { _ in }) async -> SchemaRepairOutcome {
+    /// `indexWork: false` (a background launch, which iOS suspends within ~30 s) still creates
+    /// missing triggers — milliseconds, and BIG-790's sample reuse depends on one being present
+    /// in whatever process the user eventually opens — but leaves drops and index builds for a
+    /// foreground launch and returns `.deferred`.
+    public func repairSchemaIfNeeded(indexWork: Bool = true, whileRepairing: @Sendable (Bool) async -> Void = { _ in }) async -> SchemaRepairOutcome {
         let audit: SchemaAudit
         let plan: SchemaRepairPlan
         do {
@@ -499,11 +505,16 @@ extension Database {
             return .failed("\(error)")
         }
 
-        await whileRepairing(true)
+        // The cover is for index work, which scales with table size. A trigger-only repair (a
+        // new registry trigger reaching every install at its next launch, BIG-790) is a
+        // sqlite_master write in milliseconds; no cover, or every device flashes it once.
+        let indexWorkPlanned = !plan.drops.isEmpty || !plan.builds.isEmpty
+        let doIndexWork = indexWork && indexWorkPlanned
+        if doIndexWork { await whileRepairing(true) }
         let start = Date()
         var outcome: SchemaRepairOutcome = .repaired(seconds: 0)
 
-        if !plan.drops.isEmpty {
+        if doIndexWork, !plan.drops.isEmpty {
             do {
                 try await pool.write { db in for drop in plan.drops { try Database.drop(drop, in: db) } }
             } catch {
@@ -513,7 +524,7 @@ extension Database {
         }
 
         var rowCounts: [String: Int] = [:]
-        for build in plan.builds {
+        for build in (doIndexWork ? plan.builds : []) {
             guard case .repaired = outcome else { break }
             if rowCounts[build.table] == nil {
                 rowCounts[build.table] = (try? await pool.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM \"\(build.table)\"") }) ?? 0
@@ -542,6 +553,12 @@ extension Database {
         }
 
         let seconds = -start.timeIntervalSinceNow
+        if !indexWork, indexWorkPlanned, case .repaired = outcome {
+            // the after-audit would report the untouched index defects as an error; they are
+            // expected here and the next foreground launch takes them
+            Log.info("schema repair: background launch — triggers done in \(String(format: "%.1f", seconds))s; \(plan.drops.count) drops and \(plan.builds.count) index builds wait for a foreground launch", subsystem: .database)
+            return .deferred
+        }
         if let after = try? await pool.read({ try Database.auditSchema(in: $0) }) {
             if after.isClean {
                 Log.info("schema repair: repaired in \(String(format: "%.1f", seconds))s", subsystem: .database)
@@ -550,7 +567,7 @@ extension Database {
             }
         }
         if case .repaired = outcome { outcome = .repaired(seconds: seconds) }
-        await whileRepairing(false)
+        if doIndexWork { await whileRepairing(false) }
         return outcome
     }
 

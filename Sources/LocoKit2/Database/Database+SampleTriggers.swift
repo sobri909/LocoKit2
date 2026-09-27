@@ -75,6 +75,22 @@ extension Database {
             END;
             """),
 
+        // BIG-790: a DELETE is a samples change too. Pruning (the only deleter that leaves the
+        // item alive) never marked the item, so a day view that reused its loaded samples kept
+        // the deleted ones, and a Confirm built from them rolled back on recordNotFound. Dates
+        // are deliberately NOT recomputed here (see the UNSET trigger above); only the flag.
+        // `AND samplesChanged = 0` so a prune's hundreds of deletes touch the item row once,
+        // not once per sample (the base table's lastSaved trigger fires on every update).
+        TriggerDefinition(name: "LocomotionSample_AFTER_DELETE_timelineItemId", table: "LocomotionSample", family: .sampleDates, body: """
+            AFTER DELETE ON LocomotionSample
+            WHEN OLD.timelineItemId IS NOT NULL
+            BEGIN
+                UPDATE TimelineItemBase
+                SET samplesChanged = 1
+                WHERE id = OLD.timelineItemId AND samplesChanged = 0;
+            END;
+            """),
+
         TriggerDefinition(name: "LocomotionSample_AFTER_UPDATE_activityType_or_disabled", table: "LocomotionSample", family: .sampleDates, body: """
              AFTER UPDATE OF confirmedActivityType, classifiedActivityType, disabled ON LocomotionSample
              WHEN NEW.timelineItemId IS NOT NULL AND

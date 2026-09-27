@@ -74,7 +74,13 @@ public final class TimelineSegment: Sendable {
             guard !prunedItemIds.contains(item.id) else { continue }
             prunedItemIds.insert(item.id)
             do {
-                try await item.pruneSamples()
+                // BIG-790: keep the loaded arrays honest the moment the deletes commit; the
+                // trigger marks the item for the next refetch, this covers the window before it.
+                // Looked up by id at write time: a fetch may have replaced the array meanwhile.
+                if let survivors = try await item.pruneSamples(),
+                   let index = self.timelineItems?.firstIndex(where: { $0.id == item.id }) {
+                    self.timelineItems?[index].samples = survivors
+                }
             } catch {
                 Log.error(error, subsystem: .timeline)
             }
@@ -173,8 +179,10 @@ public final class TimelineSegment: Sendable {
             } else {
                 let oldItem = oldItems.first { $0.id == newItem.id }
 
-                // copy over existing samples if item hasn't changed
-                if let oldItem, let samples = oldItem.samples, !newItem.hasChanged(from: oldItem) {
+                // copy over existing samples if item hasn't changed. Stored parts only: newItem
+                // was fetched without samples, and a samples change is the samplesChanged
+                // branch above (BIG-790)
+                if let oldItem, let samples = oldItem.samples, !newItem.hasChanged(from: oldItem, comparingSamples: false) {
                     newItems[index].samples = samples
 
                 } else { // need to fetch samples

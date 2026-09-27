@@ -498,13 +498,18 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
     
     // MARK: - Change detection
 
-    public func hasChanged(from other: TimelineItem?) -> Bool {
+    /// `comparingSamples: false` compares the stored parts only. BIG-790: an item fetched with
+    /// `includeSamples: false` has nil samples, so comparing them against a loaded item is always
+    /// "changed" — which made TimelineSegment's sample-reuse path unreachable. A change to the
+    /// samples themselves is signalled by `samplesChanged` (set by the sample triggers on insert,
+    /// update and delete), which the caller checks first.
+    public func hasChanged(from other: TimelineItem?, comparingSamples: Bool = true) -> Bool {
         guard let other else { return true }
         if base != other.base { return true }
         if isVisit, visit != other.visit { return true }
         if isTrip, trip != other.trip { return true }
         if place != other.place { return true }
-        if samples != other.samples { return true }
+        if comparingSamples, samples != other.samples { return true }
         return false
     }
 
