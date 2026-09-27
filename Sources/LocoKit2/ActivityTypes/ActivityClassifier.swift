@@ -44,7 +44,9 @@ public enum ActivityClassifier {
         var remainingWeight = 1.0
 
         for classifier in classifiers {
-            let results = await classifier.classify(sample)
+            // nil = no answer from this model (file missing, load failed, timed out, cancelled);
+            // skip it rather than merge an empty result in (BIG-791)
+            guard let results = await classifier.classify(sample) else { continue }
 
             if combinedResults == nil {
                 combinedResults = results
@@ -71,7 +73,12 @@ public enum ActivityClassifier {
             if remainingWeight <= 0 { break }
         }
 
-        if let combinedResults {
+        // BIG-791: a cancelled pass returns nothing, and only a result with an actual best
+        // match is worth remembering. Caching an empty result made the sample unclassifiable
+        // for the rest of the process (every later call returned the empty result instantly),
+        // and MergeScores reads this same cache, so a poisoned day under-merged.
+        if Task.isCancelled { return nil }
+        if let combinedResults, combinedResults.bestMatch != nil {
             cache.setObject(combinedResults, forKey: sample.id as NSString)
         }
 
@@ -108,6 +115,12 @@ public enum ActivityClassifier {
             }
 
             guard let results = await results(for: sample) else {
+                // BIG-791: a nil mid-loop can mean "no model for this sample" (fine, skip) or
+                // that the pass was cancelled / the app went to the background (the outer
+                // guard runs once, at entry). The latter must not become a partial combined
+                // result written onto the trip's uncertainty.
+                if Task.isCancelled { return nil }
+                if await UIApplication.shared.applicationState == .background { return nil }
                 continue
             }
 
@@ -121,6 +134,10 @@ public enum ActivityClassifier {
                 }
             }
         }
+
+        // no sample answered (every model marked unavailable, say): that is no answer, not an
+        // all-zero one that would be written onto the trip as "uncertain" (BIG-791 review)
+        if perSampleResults.isEmpty { return nil }
 
         var finalResults: [ClassifierResultItem] = []
 

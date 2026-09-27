@@ -164,7 +164,7 @@ public enum ActivityTypesManager {
             if let model {
                 guard let handle = OperationRegistry.startOperation(
                     .activityTypes,
-                    operation: "ActivityTypesManager.updateModel(geoKey:)",
+                    operation: updateOperationName,
                     objectKey: model.geoKey,
                     rejectDuplicates: true,
                     maxConcurrent: maxConcurrentModelUpdates
@@ -192,6 +192,13 @@ public enum ActivityTypesManager {
     }
     
     static let maxConcurrentModelUpdates = 3
+    static let updateOperationName = "ActivityTypesManager.updateModel(geoKey:)"
+    static let immediateUpdateOperationName = "ActivityTypesManager.immediateUpdate"
+
+    /// Immediate (foreground-triggered) updates: one at a time. A training run fetches up to
+    /// 250k samples and builds a boosted-tree model; three of those while the user scrolls a
+    /// new region is a memory question (BIG-794 review). The background loop keeps its cap.
+    static let maxImmediateModelUpdates = 1
 
     public static func processModelUpdate(model: ActivityTypesModel, fileMissing: Bool = false) {
         guard model.needsUpdate else { return }
@@ -199,9 +206,23 @@ public enum ActivityTypesManager {
         let shouldUpdateImmediately = fileMissing || (model.depth == 2 && model.completenessScore < 0.1)
 
         if shouldUpdateImmediately {
-            guard OperationRegistry.highlander.operationCount(for: .activityTypes) < maxConcurrentModelUpdates else { return }
+            // BIG-794: the slot is claimed HERE, synchronously, under its own operation name.
+            // The old gate counted the whole .activityTypes category (classification passes
+            // register there too, so three of them blocked every immediate update), and a
+            // count-then-spawn check let several models from one refreshModels pass each see
+            // zero and all start training (review). updateModel's own maxConcurrent stays
+            // as the cap for the background loop.
+            guard let slot = OperationRegistry.startOperation(
+                .activityTypes,
+                operation: immediateUpdateOperationName,
+                objectKey: model.geoKey,
+                maxConcurrent: maxImmediateModelUpdates
+            ) else { return }
             let geoKey = model.geoKey
-            Task(priority: .utility) { await updateModel(geoKey: geoKey) }
+            Task(priority: .utility) {
+                defer { OperationRegistry.endOperation(slot) }
+                await updateModel(geoKey: geoKey)
+            }
         }
     }
 

@@ -173,17 +173,25 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
     }
 
     private func markNeedsUpdate(fileMissing: Bool = false) async {
-        if needsUpdate { return }
-        
+        // BIG-794 review: a missing file always records the need (the in-memory copy's
+        // `needsUpdate` can be stale against the database after a skipped or failed build,
+        // and the immediate gate may be closed) and always asks for the immediate path
+        if needsUpdate, !fileMissing { return }
+
         do {
-            try await Database.pool.write { db in
-                var mutableSelf = self
+            // BIG-794: `self` is a value copy; the flagged copy has to be the one handed on,
+            // or processModelUpdate's `guard model.needsUpdate` sees the stale false and the
+            // repair this exists to trigger never fires
+            var flagged = self
+            try await Database.pool.write { [flagged] db in
+                var mutableSelf = flagged
                 try mutableSelf.updateChanges(db) {
                     $0.needsUpdate = true
                 }
             }
-            
-            await ActivityTypesManager.processModelUpdate(model: self, fileMissing: fileMissing)
+            flagged.needsUpdate = true
+
+            await ActivityTypesManager.processModelUpdate(model: flagged, fileMissing: fileMissing)
 
         } catch {
             Log.error(error, subsystem: .database)
@@ -204,51 +212,90 @@ public struct ActivityTypesModel: FetchableRecord, PersistableRecord, Identifiab
     
     // MARK: - Classification
     
+    /// nil means "no answer": the model file is missing, the predictor failed to load, the
+    /// prediction failed or timed out, or the task was cancelled. BIG-791: it used to return an
+    /// EMPTY result for all of those, which the classifier then cached per sample, so a
+    /// cancelled pass (every swipe away from a day mid-classify) left its samples
+    /// unclassifiable for the rest of the process — and merge scoring read the same cache.
+    /// An unusable model is marked in `MLModelCache` and skipped until the mark expires or a
+    /// rebuild clears it, so nothing here runs once per sample per pass.
     @ActivityTypesActor
-    public func classify(_ sample: LocomotionSample) async -> ClassifierResults {
+    public func classify(_ sample: LocomotionSample) async -> ClassifierResults? {
+        if MLModelCache.isMarkedUnavailable(filename: filename) { return nil }
+
         let predictor: ModelPredictor
         do {
             guard let p = try MLModelCache.predictorFor(filename: filename) else {
-                Task { await markNeedsUpdate(fileMissing: true) }
-                return ClassifierResults(resultItems: [])
+                MLModelCache.markUnavailable(filename: filename)
+                // a model that has never been built has no file yet, which is expected; a
+                // file that WAS built (accuracyScore is set only by a successful build, and
+                // cleared by a skipped one) and is gone is the error — a storage-full
+                // episode, say
+                if accuracyScore != nil {
+                    Log.error("ActivityTypesModel.classify: model file missing: \(filename)", subsystem: .activitytypes)
+                } else {
+                    Log.info("ActivityTypesModel.classify: model not yet built: \(filename)", subsystem: .activitytypes)
+                }
+                requestRebuildIfOwned()
+                return nil
             }
             predictor = p
         } catch {
+            // an unreadable or corrupt file: same treatment as missing, so it is rebuilt
+            // rather than retried on every sample (BIG-791 review)
+            MLModelCache.markUnavailable(filename: filename)
             Log.error(error, subsystem: .activitytypes)
-            return ClassifierResults(resultItems: [])
+            requestRebuildIfOwned()
+            return nil
         }
 
         let input = sample.coreMLFeatureProvider
         let modelFilename = filename
 
-        // race prediction against timeout — prediction runs on ModelPredictor's
-        // actor (serial per model, off @ActivityTypesActor), timeout frees us if hung
-        return await withTaskGroup(of: ClassifierResults?.self) { group in
+        // race prediction against timeout — prediction runs on ModelPredictor's actor
+        // (serial per model, off @ActivityTypesActor). Which child wins matters: only a real
+        // timeout evicts and marks the model; a failed prediction is just no answer, and a
+        // cancelled parent is neither (BIG-791 review).
+        enum Outcome { case answered(ClassifierResults), failed, timedOut }
+        return await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
                 do {
                     let scores = try await predictor.predict(from: input)
-                    return self.results(from: scores)
+                    return .answered(self.results(from: scores))
                 } catch {
                     Log.error(error, subsystem: .activitytypes)
-                    return ClassifierResults(resultItems: [])
+                    return .failed
                 }
             }
             group.addTask {
                 try? await Task.sleep(for: .seconds(30))
-                return nil
+                return .timedOut
             }
 
-            let result = await group.next() ?? nil
+            let outcome = await group.next()
             group.cancelAll()
 
-            // only evict if genuinely timed out, not if parent task was cancelled
-            if result == nil, !Task.isCancelled {
+            switch outcome {
+            case .answered(let results):
+                return results
+            case .timedOut where !Task.isCancelled:
+                // the mark keeps a slow model from being retried on every sample of every
+                // pass now that nothing caches its non-answer; a rebuild clears it
                 Log.info("CoreML prediction timed out (\(modelFilename)), evicting model", subsystem: .activitytypes)
                 MLModelCache.invalidateModelFor(filename: modelFilename)
+                MLModelCache.markUnavailable(filename: modelFilename)
+                return nil
+            default:
+                return nil // failed, or the parent was cancelled — never an empty stand-in
             }
-
-            return result ?? ClassifierResults(resultItems: [])
         }
+    }
+
+    /// The bundled base model ("B…") has no database row to flag, so only the built,
+    /// per-region models ask for a rebuild (BIG-791 review).
+    private func requestRebuildIfOwned() {
+        guard !geoKey.hasPrefix("B") else { return }
+        Task { await markNeedsUpdate(fileMissing: true) }
     }
     
     private func results(from scores: [Int: Double]) -> ClassifierResults {
