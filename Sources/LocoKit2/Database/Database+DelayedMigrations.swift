@@ -277,5 +277,22 @@ extension Database {
         // (`Database.repairSchemaIfNeeded()`), so it can neither block later migrations nor
         // commit a half-state. Kept as an identifier so applied lists stay valid; a no-op.
         migrator.registerMigration("schema_registry_repair", foreignKeyChecks: .immediate) { _ in }
+
+        // BIG-399: resume state for the old-app backup-set importer. Its own singleton, never
+        // the JSON restore's ImportState (no collision between two interrupted imports).
+        migrator.registerMigration("OldAppBackupImportState") { db in
+            try? db.create(table: "OldAppBackupImportState") { table in
+                table.primaryKey("id", .integer)
+                    .check { $0 == 1 }  // singleton
+                table.column("startedAt", .datetime).notNull()
+                table.column("sourceBookmark", .blob).notNull()
+                table.column("processedWeekStems", .text).notNull().defaults(to: "[]")
+                table.column("totalWeekCount", .integer).notNull().defaults(to: 0)
+                table.column("cutoffDate", .datetime)
+                table.column("noProgressAttemptCount", .integer).notNull().defaults(to: 0)
+                table.column("lastError", .text)
+                table.column("acknowledged", .boolean).notNull().defaults(to: false)
+            }
+        }
     }
 }

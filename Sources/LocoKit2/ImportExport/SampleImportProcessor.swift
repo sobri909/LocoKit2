@@ -16,6 +16,10 @@ public struct SampleBatchResult: Sendable {
     public var orphanCount: Int
     public var scenario1Count: Int
     public var scenario2Count: Int
+    /// samples the batch actually inserted (an `.ignore`'d duplicate is not counted). BIG-399's
+    /// importer reports imported-vs-already-present from this; the connection's change count
+    /// cannot serve, since triggers inflate it.
+    public var insertedCount: Int
 
     public init() {
         self.orphans = [:]
@@ -23,6 +27,7 @@ public struct SampleBatchResult: Sendable {
         self.orphanCount = 0
         self.scenario1Count = 0
         self.scenario2Count = 0
+        self.insertedCount = 0
     }
 }
 
@@ -84,6 +89,7 @@ public enum SampleImportProcessor {
             // no-op means the sample already exists in the main db with its own current home —
             // a re-run must not yank it into a freshly-created parent.
             guard db.changesCount == 1 else { continue }
+            result.insertedCount += 1
 
             if let scenario2Key {
                 result.scenario2[scenario2Key, default: []].append(sample)

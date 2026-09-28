@@ -9,6 +9,13 @@ import Foundation
 
 extension JSONDecoder {
 
+    // Parsed once, shared: the strategy closure below runs per date, and an import decodes
+    // millions of them. Building an ISO8601DateFormatter per call constructs an ICU Locale and
+    // DateFormatSymbols each time, which made a 200 MB sample corpus take over ten minutes to
+    // decode (BIG-399 harness, sampled). The format styles are value types and Sendable.
+    private static let iso8601Fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    private static let iso8601Whole = Date.ISO8601FormatStyle()
+
     /// decoder that handles both ISO8601 strings and legacy numeric dates
     public static func flexibleDateDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
@@ -17,16 +24,12 @@ extension JSONDecoder {
 
             // try ISO8601 string first (new format)
             if let string = try? container.decode(String.self) {
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-                if let date = formatter.date(from: string) {
+                if let date = try? iso8601Fractional.parse(string) {
                     return date
                 }
 
                 // try without fractional seconds
-                formatter.formatOptions = [.withInternetDateTime]
-                if let date = formatter.date(from: string) {
+                if let date = try? iso8601Whole.parse(string) {
                     return date
                 }
 
