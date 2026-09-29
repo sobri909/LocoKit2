@@ -280,7 +280,11 @@ extension Database {
 
         // BIG-399: resume state for the old-app backup-set importer. Its own singleton, never
         // the JSON restore's ImportState (no collision between two interrupted imports).
-        migrator.registerMigration("OldAppBackupImportState") { db in
+        // foreignKeyChecks: .immediate — a new table with no foreign keys, nothing dropped or
+        // renamed. Registered without it, a 13 Pro logged "Migrations completed in 93.1s" for
+        // this one migration (2026-09-29), attributed to GRDB's deferred whole-database
+        // foreign-key scan, the only large cost on that path.
+        migrator.registerMigration("OldAppBackupImportState", foreignKeyChecks: .immediate) { db in
             try? db.create(table: "OldAppBackupImportState") { table in
                 table.primaryKey("id", .integer)
                     .check { $0 == 1 }  // singleton
@@ -292,6 +296,19 @@ extension Database {
                 table.column("noProgressAttemptCount", .integer).notNull().defaults(to: 0)
                 table.column("lastError", .text)
                 table.column("acknowledged", .boolean).notNull().defaults(to: false)
+            }
+        }
+
+        // BIG-399: development builds created the table before it had a cutoffDate; this brings
+        // those installs to the shape above, and returns early everywhere else. The ALTER is not
+        // wrapped in try?: it only runs where the column is missing, so a failure there is real
+        // and must not be recorded as applied (BIG-792's shape).
+        migrator.registerMigration("OldAppBackupImportState.cutoffDate", foreignKeyChecks: .immediate) { db in
+            guard try db.tableExists("OldAppBackupImportState") else { return }
+            let columns = try db.columns(in: "OldAppBackupImportState").map(\.name)
+            guard !columns.contains("cutoffDate") else { return }
+            try db.alter(table: "OldAppBackupImportState") { table in
+                table.add(column: "cutoffDate", .datetime)
             }
         }
     }
