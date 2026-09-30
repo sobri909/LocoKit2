@@ -37,8 +37,16 @@ public final class LocomotionManager: @unchecked Sendable {
     // the long-proven baseline — CLBackgroundActivitySession keep-alive (forces the indicator)
     // + coarse 3km sleep manager, stopped during recording. Set before recording starts;
     // next-launch semantics only (no live regime swapping).
-    public var useShieldRegime: Bool = false {
-        didSet { applySleepRegimeConfig() }
+    // Default is the SHIELD regime (2026-09-30): startRecording() can run before the app has read
+    // the stored setting (a view auto-start racing runStartup(); observed on device losing by
+    // 179 ms once BIG-792 put the schema repair ahead of runStartup), and the regime the first
+    // startRecording() sees is the regime for the life of the process. A lost race must land in
+    // shield, not baseline. Baseline is now only reachable by setting this false.
+    public var useShieldRegime: Bool = true {
+        didSet {
+            Log.info("LocomotionManager.useShieldRegime = \(useShieldRegime)", subsystem: .locomotion)
+            applySleepRegimeConfig()
+        }
     }
 
     public var standbyCycleDuration: TimeInterval = 60 * 2
@@ -132,7 +140,7 @@ public final class LocomotionManager: @unchecked Sendable {
     public func startRecording() {
         if recordingState == .recording { return }
 
-        Log.info("LocomotionManager.startRecording() (was: \(recordingState))", subsystem: .locomotion)
+        Log.info("LocomotionManager.startRecording() (was: \(recordingState), regime: \(useShieldRegime ? "shield" : "baseline"))", subsystem: .locomotion)
 
         recordingState = .recording
 
@@ -790,16 +798,17 @@ public final class LocomotionManager: @unchecked Sendable {
         return manager
     }()
 
-    // Default config is the long-proven baseline (coarse 3km keep-alive, visible indicator).
-    // useShieldRegime's didSet reconfigures it into the shield regime via applySleepRegimeConfig()
-    // — the didSet is needed because this closure runs at init, before the app can set the flag.
+    // Created in the shield config, matching useShieldRegime's default: this closure runs at
+    // init, before the app can set the flag, and recording can start before it does (2026-09-30).
+    // useShieldRegime's didSet reconfigures it via applySleepRegimeConfig() if the app asks
+    // for baseline.
     @ObservationIgnored
     private let sleepLocationManager: CLLocationManager = {
         let manager = CLLocationManager()
-        manager.distanceFilter = kCLLocationAccuracyThreeKilometers
-        manager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.desiredAccuracy = 999
         manager.pausesLocationUpdatesAutomatically = false
-        manager.showsBackgroundLocationIndicator = true
+        manager.showsBackgroundLocationIndicator = false
         manager.allowsBackgroundLocationUpdates = true
         return manager
     }()
@@ -807,8 +816,8 @@ public final class LocomotionManager: @unchecked Sendable {
     // BIG-617: sleep-manager config per regime. Shield = the DTS-prescribed compliant session
     // (desiredAccuracy 999 — just under the magic 1000 — distanceFilter None, no indicator),
     // which shields the app so the recording manager can keep its wanted df=3. Baseline = the
-    // coarse config that shipped for months. Only called via useShieldRegime's didSet, which
-    // is set once at launch before recording starts (next-launch semantics).
+    // coarse config that shipped for months. Called via useShieldRegime's didSet
+    // (next-launch semantics).
     private func applySleepRegimeConfig() {
         if useShieldRegime {
             sleepLocationManager.desiredAccuracy = 999
