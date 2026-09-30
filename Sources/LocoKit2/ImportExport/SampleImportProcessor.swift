@@ -105,9 +105,13 @@ public enum SampleImportProcessor {
     }
 
     /// Log batch results if there were any issues found.
-    public static func logBatchResults(_ result: SampleBatchResult) {
+    /// `orphansExpected`: the old-app backup-set import routinely meets samples whose item file
+    /// lives in another set (BIG-399), so it reports orphans at info; everywhere else an orphan
+    /// is a fault worth an error line.
+    public static func logBatchResults(_ result: SampleBatchResult, orphansExpected: Bool = false) {
         if result.orphanCount > 0 {
-            Log.error("Orphaned \(result.orphanCount) samples with missing parent items", subsystem: .importing)
+            let line = "Orphaned \(result.orphanCount) samples with missing parent items"
+            if orphansExpected { Log.info(line, subsystem: .importing) } else { Log.error(line, subsystem: .importing) }
         }
         if result.scenario1Count > 0 {
             Log.info("Normalized \(result.scenario1Count) samples (scenario 1: item.disabled=true, sample.disabled=false)", subsystem: .importing)

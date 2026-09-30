@@ -16,8 +16,9 @@ import GRDB
 ///
 /// The checkpoint is the list of sample-week stems already processed: each week is one
 /// transaction, so a resume re-runs the current week idempotently (insert-or-ignore) and skips
-/// the rest. The source folder is kept as a security-scoped bookmark so a resume after a
-/// relaunch can reopen the user's picked folder without asking again.
+/// the rest. `sourceBookmark` is a schema leftover from before copy-first (2026-09-30) and is
+/// stored empty: import and resume read the container copy under
+/// `OldAppBackupImporter.localSourceDirectory`, never the picked folder.
 public struct OldAppBackupImportState: FetchableRecord, PersistableRecord, Codable, Sendable {
 
     public static let databaseTableName = "OldAppBackupImportState"

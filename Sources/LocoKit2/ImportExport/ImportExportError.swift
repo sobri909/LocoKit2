@@ -39,6 +39,7 @@ public enum ImportExportError: Error {
     case noBackupSetsFound          // the picked folder holds no old-app backup set, at any depth searched
     case insufficientFreeSpace      // the free-space guard refused to start
     case backupFilesNotDownloaded   // iCloud placeholders stood in for files the run needed; retry once downloaded
+    case localCopyMissing           // the container copy an import or resume reads is gone (BIG-399 copy-first)
     case invalidDatabaseSchema
     case importCancelled
     case placeImportFailed

@@ -115,10 +115,6 @@ extension LegacyBackup {
         public let url: URL
         public let stem: String
 
-        public var isDownloaded: Bool {
-            FileManager.default.fileExists(atPath: url.path)
-        }
-
         public var weekStart: Date? {
             var calendar = Calendar(identifier: .iso8601)
             calendar.timeZone = TimeZone(identifier: "UTC")!
