@@ -130,19 +130,26 @@ public enum OldAppBackupImporter {
         public let bytes: Int64          // everything that will be copied
         public let notLocalBytes: Int64  // of which still in iCloud
         public var sampleWeekSpan: (first: String, last: String)?
+        // the walk's product, carried into `startImport` so the picked folder is walked once:
+        // on a real iCloud Drive folder every listing is a round trip to the file provider
+        let sets: [LegacyBackup.BackupSet]
+        let plan: CopyPlan
     }
 
     /// Read-only look at a picked folder: the sets, their sample weeks, and the size of the
     /// copy the import would make. Throws `noBackupSetsFound` when there is nothing to import.
     /// The caller holds the security scope.
     public static func scan(_ parentURL: URL) throws -> Scan {
+        let started = Date()
+        Log.info("OldAppBackupImporter: scanning \(parentURL.lastPathComponent)", subsystem: .importing)
         let sets = LegacyBackup.BackupSet.discover(in: parentURL)
         guard !sets.isEmpty else { throw ImportExportError.noBackupSetsFound }
-        let plan = copyPlan(for: sets)
+        let plan = try copyPlan(for: sets)
         guard !plan.jobs.isEmpty else { throw ImportExportError.noBackupSetsFound }
         let weeks = weekPlan(for: sets)
-        var scan = Scan(setNames: sets.map(\.name), weekCount: weeks.count, fileCount: plan.jobs.count, bytes: plan.totalBytes, notLocalBytes: plan.notLocalBytes)
+        var scan = Scan(setNames: sets.map(\.name), weekCount: weeks.count, fileCount: plan.jobs.count, bytes: plan.totalBytes, notLocalBytes: plan.notLocalBytes, sets: sets, plan: plan)
         if let first = weeks.first?.stem, let last = weeks.last?.stem { scan.sampleWeekSpan = (first, last) }
+        Log.info("OldAppBackupImporter: scanned \(sets.count) set(s): \(plan.jobs.count) files, \(mb(plan.totalBytes)) (\(mb(plan.notLocalBytes)) not local), \(weeks.count) weeks, in \(String(format: "%.1f", Date().timeIntervalSince(started))) s", subsystem: .importing)
         return scan
     }
 
@@ -154,18 +161,16 @@ public enum OldAppBackupImporter {
     /// a user who kept the old app recording beside AT4 doesn't get those days twice. Pass the
     /// earliest AT4-recorded date, or nil for a phone AT4 has never recorded on. Overlap-aware
     /// import is a different class of importer (the GPX / workout shape) and a separate ticket.
-    public static func startImport(from parentURL: URL, before cutoff: Date?) async throws {
+    public static func startImport(_ scan: Scan, before cutoff: Date?) async throws {
         guard !importInProgress else { throw ImportExportError.importAlreadyInProgress }
 
         await beginRun()
         do {
             currentPhase = .discovering
-            let sourceSets = LegacyBackup.BackupSet.discover(in: parentURL)
-            guard !sourceSets.isEmpty else { throw ImportExportError.noBackupSetsFound }
-            Log.info("OldAppBackupImporter: \(sourceSets.count) set(s) under \(parentURL.lastPathComponent): \(sourceSets.map(\.name).joined(separator: ", ")); cutoff \(cutoff.map { "\($0)" } ?? "none")", subsystem: .importing)
+            let sourceSets = scan.sets
+            Log.info("OldAppBackupImporter: \(sourceSets.count) set(s): \(sourceSets.map(\.name).joined(separator: ", ")); cutoff \(cutoff.map { "\($0)" } ?? "none")", subsystem: .importing)
 
-            let plan = copyPlan(for: sourceSets)
-            guard !plan.jobs.isEmpty else { throw ImportExportError.noBackupSetsFound }
+            let plan = scan.plan
             try checkFreeSpace(copyBytes: plan.totalBytes, notLocalBytes: plan.notLocalBytes, sampleGzBytes: plan.sampleGzBytes)
 
             currentPhase = .copying
@@ -263,6 +268,7 @@ public enum OldAppBackupImporter {
         let source: URL       // the real name, whether or not the bytes are local yet
         let destination: URL
         let bytes: Int64      // real size, or the placeholder's declared size, or 0
+        let notLocal: Bool    // still in iCloud: asked for and waited on rather than cloned
     }
 
     struct CopyPlan: Sendable {
@@ -276,41 +282,72 @@ public enum OldAppBackupImporter {
     /// names they stand for. `TimelineRangeSummary` is never read and never copied.
     static let copiedFolders = ["TimelineItem", "Place", "Note", "LocomotionSample"]
 
-    private static func copyPlan(for sets: [LegacyBackup.BackupSet]) -> CopyPlan {
+    /// The walk is one directory listing per folder, with every value it needs prefetched by
+    /// that listing. On a real iCloud Drive folder each listing is a round trip to the file
+    /// provider, and the record folders are shallow shards (`TimelineItem/<2 hex>/<id>.json`),
+    /// so this is a few hundred calls per set; a deep enumerator asking each file for its
+    /// values one at a time was tens of thousands, and took minutes on a phone (Day 168).
+    private static let planKeys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .fileSizeKey, .ubiquitousItemDownloadingStatusKey]
+
+    private static func copyPlan(for sets: [LegacyBackup.BackupSet]) throws -> CopyPlan {
         var plan = CopyPlan()
         let fm = FileManager.default
         for (index, set) in sets.enumerated() {
             let destSet = localSourceDirectory.appendingPathComponent(String(format: "%02d-%@", index + 1, set.name), isDirectory: true)
             for folder in copiedFolders {
                 let root = set.url.appendingPathComponent(folder, isDirectory: true)
-                guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey], options: []) else { continue }
+                // a set without this record folder is normal (no notes, say); a listing that fails
+                // anywhere below it is not, and the files it would have held must not just vanish
+                // from the plan (a backup import fails loud, never half)
+                guard fm.fileExists(atPath: root.path) else { continue }
+                // (directory, its path under the set) so destinations come from components, never
+                // from string surgery on paths the provider may return with a resolved prefix
+                var pending: [(dir: URL, relative: [String])] = [(root, [folder])]
                 var planned = Set<String>()
-                for case let fileURL as URL in enumerator {
-                    guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
-                    guard let name = LegacyBackup.BackupSet.recordName(fromFilename: fileURL.lastPathComponent) else { continue }
-                    let source = fileURL.deletingLastPathComponent().appendingPathComponent(name)
-                    // a download mid-flight shows both the real file and its placeholder: one job
-                    guard planned.insert(source.path).inserted else { continue }
-                    let relative = source.path.replacingOccurrences(of: set.url.path + "/", with: "")
-                    let isPlaceholder = fileURL.lastPathComponent != name
-                    let bytes = fileSize(of: fileURL, placeholderFor: name)
-                    plan.jobs.append(CopyJob(source: source, destination: destSet.appendingPathComponent(relative), bytes: bytes))
-                    plan.totalBytes += bytes
-                    if isPlaceholder { plan.notLocalBytes += bytes }
-                    if folder == "LocomotionSample", name.hasSuffix(".json.gz") { plan.sampleGzBytes += bytes }
+                while let (dir, relative) = pending.popLast() {
+                    // not `.skipsHiddenFiles`: a macOS / simulator placeholder is a `.name.icloud` dotfile
+                    let children: [URL]
+                    do { children = try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: Array(planKeys), options: []) }
+                    catch {
+                        Log.error("OldAppBackupImporter: couldn't list \(set.name)/\(relative.joined(separator: "/")): \(error)", subsystem: .importing)
+                        throw ImportExportError.backupFilesNotDownloaded
+                    }
+                    for fileURL in children {
+                        guard let values = try? fileURL.resourceValues(forKeys: planKeys) else { continue }
+                        if values.isDirectory == true { pending.append((fileURL, relative + [fileURL.lastPathComponent])); continue }
+                        guard values.isRegularFile == true else { continue }
+                        guard let name = LegacyBackup.BackupSet.recordName(fromFilename: fileURL.lastPathComponent) else { continue }
+                        let source = fileURL.deletingLastPathComponent().appendingPathComponent(name)
+                        // a download mid-flight shows both the real file and its placeholder: one job
+                        guard planned.insert(source.path).inserted else { continue }
+                        var destination = destSet
+                        for component in relative { destination.appendPathComponent(component, isDirectory: true) }
+                        destination.appendPathComponent(name)
+                        // a Mac / simulator placeholder is the dotfile; an iOS one is the real name
+                        // with the provider saying the bytes aren't here
+                        let isDotfilePlaceholder = fileURL.lastPathComponent != name
+                        let notLocal = isDotfilePlaceholder || values.ubiquitousItemDownloadingStatus == .notDownloaded
+                        let bytes = isDotfilePlaceholder ? placeholderDeclaredSize(fileURL) : Int64(values.fileSize ?? 0)
+                        plan.jobs.append(CopyJob(source: source, destination: destination, bytes: bytes, notLocal: notLocal))
+                        plan.totalBytes += bytes
+                        if notLocal { plan.notLocalBytes += bytes }
+                        if folder == "LocomotionSample", name.hasSuffix(".json.gz") { plan.sampleGzBytes += bytes }
+                    }
                 }
             }
         }
         return plan
     }
 
-    /// A local file's size, or the size an `.icloud` placeholder declares for the file it stands
-    /// for (the placeholder is a plist carrying `NSURLFileSizeKey`). 0 when neither is readable;
-    /// the free-space guard is then optimistic by that file, which the copy itself will catch.
-    private static func fileSize(of fileURL: URL, placeholderFor name: String) -> Int64 {
-        if fileURL.lastPathComponent == name {
-            return Int64((try? fileURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
-        }
+    /// Log sizes: whole MB, or KB below one, so a few thousand tiny record files never read as "0 MB".
+    private static func mb(_ bytes: Int64) -> String {
+        bytes >= 1_048_576 ? "\(bytes / 1_048_576) MB" : "\(bytes / 1024) KB"
+    }
+
+    /// The size a `.icloud` placeholder declares for the file it stands for (the placeholder is
+    /// a plist carrying `NSURLFileSizeKey`). 0 when unreadable; the free-space guard is then
+    /// optimistic by that file, which the copy itself will catch.
+    private static func placeholderDeclaredSize(_ fileURL: URL) -> Int64 {
         guard let data = try? Data(contentsOf: fileURL),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let size = plist["NSURLFileSizeKey"] as? NSNumber else { return 0 }
@@ -318,54 +355,100 @@ public enum OldAppBackupImporter {
     }
 
     /// Copy every planned file into the container. A file already local is cloned by the file
-    /// system; one that only exists as an iCloud placeholder is asked for and waited on (the
-    /// `readCoordinated` path that Migrate's restore proved). Any file that never arrives fails
-    /// the whole copy: better told up front than a half-imported timeline.
+    /// system in plan order. The rest are asked for in bulk and then taken in whatever order
+    /// iCloud delivers them: a per-file timeout measures nothing about a queue of thousands the
+    /// daemon works through in its own order (Day 168: the first file waited 60 s and failed the
+    /// run while the queue was being served). What fails the copy is a stall, nothing landing
+    /// for `stallTimeout`; better told up front than a half-imported timeline.
+    static let stallTimeout: TimeInterval = 90
+
     private static func copySets(_ plan: CopyPlan) async throws {
         let fm = FileManager.default
-        // a previous attempt's files are kept and skipped below (same name, same size), so a
-        // retry after a failed download only fetches what is still missing
+        // a failed start removes its copy (nothing to resume without a state row), so a retry
+        // copies everything again; what a retry does reuse is iCloud's own cache of the files
+        // the first attempt downloaded, which is where the time went
         try fm.createDirectory(at: localSourceDirectory, withIntermediateDirectories: true)
 
-        // ask for everything not local before the walk, so downloads overlap the copying
+        // ask for everything not local before the walk, so downloads overlap the cloning
         var notLocal = 0
-        for job in plan.jobs where !fm.fileExists(atPath: job.source.path) {
+        for job in plan.jobs where job.notLocal {
             try? fm.startDownloadingUbiquitousItem(at: job.source)
             notLocal += 1
         }
         let total = plan.jobs.count
-        Log.info("OldAppBackupImporter: copying \(total) files (\(plan.totalBytes / 1_048_576) MB), \(notLocal) not local yet", subsystem: .importing)
+        Log.info("OldAppBackupImporter: copying \(total) files (\(mb(plan.totalBytes))), \(notLocal) not local yet (\(mb(plan.notLocalBytes)))", subsystem: .importing)
         currentWeekLabel = "0 of \(total.formatted()) files"
 
+        func copied(_ job: CopyJob) {
+            summary.filesCopied += 1
+            summary.bytesCopied += job.bytes
+            if summary.filesCopied % 200 == 0 || summary.filesCopied == total {
+                currentWeekLabel = "\(summary.filesCopied.formatted()) of \(total.formatted()) files"
+                progress = Double(summary.filesCopied) / Double(max(total, 1))
+            }
+        }
+
+        // pass one: clone what is local, in plan order (one directory create per parent)
+        var waiting: [CopyJob] = []
         var lastParent: URL?
-        for (index, job) in plan.jobs.enumerated() {
+        for job in plan.jobs {
             let parent = job.destination.deletingLastPathComponent()
             if parent != lastParent {
                 try fm.createDirectory(at: parent, withIntermediateDirectories: true)
                 lastParent = parent
             }
-            if let existing = (try? job.destination.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, job.bytes == 0 || Int64(existing) == job.bytes {
-                // copied by an earlier attempt
-            } else if fm.fileExists(atPath: job.source.path) {
-                try? fm.removeItem(at: job.destination)
-                try fm.copyItem(at: job.source, to: job.destination)
-            } else {
-                switch await iCloudCoordinator.readCoordinated(from: job.source, timeout: 60) {
-                case .data(let data):
-                    try data.write(to: job.destination)
-                case .notLocalYet, .absent, .failed:
-                    Log.error("OldAppBackupImporter: copy failed — \(job.source.lastPathComponent) never arrived from iCloud", subsystem: .importing)
-                    throw ImportExportError.backupFilesNotDownloaded
-                }
-            }
-            summary.filesCopied += 1
-            summary.bytesCopied += job.bytes
-            if index % 500 == 0 || index == total - 1 {
-                currentWeekLabel = "\((index + 1).formatted()) of \(total.formatted()) files"
-                progress = Double(index + 1) / Double(max(total, 1))
+            try? fm.removeItem(at: job.destination)
+            if job.notLocal { waiting.append(job); continue }
+            // a file the plan called local but that iCloud has since evicted (or whose status the
+            // provider never reported) joins the download queue instead of failing the run, so a
+            // wrong local / not-local call is harmless either way
+            do { try fm.copyItem(at: job.source, to: job.destination); copied(job) }
+            catch {
+                Log.info("OldAppBackupImporter: clone of \(job.source.lastPathComponent) failed (\(error.localizedDescription)); waiting for it from iCloud instead", subsystem: .importing)
+                try? fm.startDownloadingUbiquitousItem(at: job.source)
+                waiting.append(job)
             }
         }
-        Log.info("OldAppBackupImporter: copied \(summary.filesCopied) files (\(summary.bytesCopied / 1_048_576) MB)", subsystem: .importing)
+
+        // pass two: take the rest as they land, in iCloud's order, until nothing lands any more
+        var lastLanded = Date()
+        var lastKick = Date()
+        var sweeps = 0
+        while !waiting.isEmpty {
+            sweeps += 1
+            var stillWaiting: [CopyJob] = []
+            var landed = 0
+            for job in waiting {
+                let status = (try? job.source.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?.ubiquitousItemDownloadingStatus
+                guard status == .current || status == .downloaded else { stillWaiting.append(job); continue }
+                switch await iCloudCoordinator.readCoordinated(from: job.source, timeout: 5) {
+                case .data(let data):
+                    try data.write(to: job.destination)
+                    copied(job)
+                    landed += 1
+                case .notLocalYet, .absent, .failed:
+                    stillWaiting.append(job)   // the status said local; the read disagreed; ask again next sweep
+                }
+            }
+            waiting = stillWaiting
+            if landed > 0 { lastLanded = Date() }
+            if sweeps == 1 || sweeps % 10 == 0 || waiting.isEmpty {
+                Log.info("OldAppBackupImporter: sweep \(sweeps): \(landed) landed, \(waiting.count) still in iCloud, \(String(format: "%.0f", Date().timeIntervalSince(lastLanded))) s since the last arrival", subsystem: .importing)
+            }
+            guard !waiting.isEmpty else { break }
+            let sinceLanded = Date().timeIntervalSince(lastLanded)
+            if sinceLanded > stallTimeout {
+                Log.error("OldAppBackupImporter: copy stalled — nothing arrived from iCloud in \(String(format: "%.0f", sinceLanded)) s, \(waiting.count) of \(total) files still not local (first: \(waiting[0].source.lastPathComponent))", subsystem: .importing)
+                throw ImportExportError.backupFilesNotDownloaded
+            }
+            // the daemon can drop a request it never got to; ask again for the stragglers now and then
+            if Date().timeIntervalSince(lastKick) > 30 {
+                for job in waiting { try? fm.startDownloadingUbiquitousItem(at: job.source) }
+                lastKick = Date()
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        Log.info("OldAppBackupImporter: copied \(summary.filesCopied) files (\(mb(summary.bytesCopied)))", subsystem: .importing)
         progress = 0
         currentWeekLabel = nil
     }
