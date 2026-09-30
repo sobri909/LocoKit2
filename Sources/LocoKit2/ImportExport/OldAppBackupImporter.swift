@@ -121,6 +121,31 @@ public enum OldAppBackupImporter {
             .appendingPathComponent("OldAppBackupImportSource", isDirectory: true)
     }
 
+    /// What a picked folder holds, for the confirmation the app shows before anything starts
+    /// (Day 167 decision 3: the conditions go in a tap-through, not grey footer text).
+    public struct Scan: Sendable {
+        public let setNames: [String]
+        public let weekCount: Int
+        public let fileCount: Int
+        public let bytes: Int64          // everything that will be copied
+        public let notLocalBytes: Int64  // of which still in iCloud
+        public var sampleWeekSpan: (first: String, last: String)?
+    }
+
+    /// Read-only look at a picked folder: the sets, their sample weeks, and the size of the
+    /// copy the import would make. Throws `noBackupSetsFound` when there is nothing to import.
+    /// The caller holds the security scope.
+    public static func scan(_ parentURL: URL) throws -> Scan {
+        let sets = LegacyBackup.BackupSet.discover(in: parentURL)
+        guard !sets.isEmpty else { throw ImportExportError.noBackupSetsFound }
+        let plan = copyPlan(for: sets)
+        guard !plan.jobs.isEmpty else { throw ImportExportError.noBackupSetsFound }
+        let weeks = weekPlan(for: sets)
+        var scan = Scan(setNames: sets.map(\.name), weekCount: weeks.count, fileCount: plan.jobs.count, bytes: plan.totalBytes, notLocalBytes: plan.notLocalBytes)
+        if let first = weeks.first?.stem, let last = weeks.last?.stem { scan.sampleWeekSpan = (first, last) }
+        return scan
+    }
+
     /// Start a fresh import from a folder the user picked. The caller holds the security scope
     /// for the duration of this call; nothing outlives it, since everything the run needs is
     /// copied into the container before the first row is written.
