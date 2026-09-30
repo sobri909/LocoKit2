@@ -66,6 +66,7 @@ public enum OldAppBackupImporter {
         public var samplesAlreadyPresent = 0
         public var samplesDeleted = 0
         public var samplesOfDeletedItems = 0
+        public var samplesCollapsed = 0     // samples of item copies identical to a kept item's (decision 2)
         public var samplesUndecodable = 0
         public var itemsImported = 0
         public var itemsAlreadyPresent = 0
@@ -73,6 +74,7 @@ public enum OldAppBackupImporter {
         public var itemsMissingFile = 0     // referenced by a sample, no file in any set → orphan path
         public var itemsUnreferenced = 0    // file exists, no sample references it → not imported
         public var itemsUnconvertible = 0
+        public var itemsCollapsed = 0       // item copies whose samples equal another item's, point for point
         public var placesImported = 0
         public var placesAlreadyPresent = 0
         public var placesMissingFile = 0    // visit references a place no set holds → placeless visit
@@ -83,8 +85,8 @@ public enum OldAppBackupImporter {
 
         public var description: String {
             "\(sets) sets, \(filesCopied) files (\(bytesCopied / 1_048_576) MB) copied, \(weeksProcessed)/\(weeksTotal) weeks (\(weeksSkippedAfterCutoff) after cutoff); "
-            + "samples \(samplesImported) imported, \(samplesAlreadyPresent) present, \(samplesAfterCutoff) after cutoff, \(samplesDeleted) deleted, \(samplesOfDeletedItems) of deleted items, \(samplesUndecodable) undecodable; "
-            + "items \(itemsImported) imported, \(itemsAlreadyPresent) present, \(itemsDeleted) deleted, \(itemsMissingFile) missing files, \(itemsUnreferenced) unreferenced, \(itemsUnconvertible) unconvertible; "
+            + "samples \(samplesImported) imported, \(samplesAlreadyPresent) present, \(samplesAfterCutoff) after cutoff, \(samplesDeleted) deleted, \(samplesOfDeletedItems) of deleted items, \(samplesCollapsed) collapsed, \(samplesUndecodable) undecodable; "
+            + "items \(itemsImported) imported, \(itemsAlreadyPresent) present, \(itemsDeleted) deleted, \(itemsMissingFile) missing files, \(itemsUnreferenced) unreferenced, \(itemsCollapsed) collapsed, \(itemsUnconvertible) unconvertible; "
             + "places \(placesImported) imported, \(placesAlreadyPresent) present, \(placesMissingFile) missing files, \(placesUnconvertible) unconvertible; "
             + "orphans \(orphanSamples) samples → \(orphanItemsRecreated) items recreated, \(orphanIndividualItems) individual"
         }
@@ -101,6 +103,9 @@ public enum OldAppBackupImporter {
     /// items whose union record says deleted: their samples are dead data, skipped
     private static var deletedItemIds = Set<String>()
     private static var handledPlaceIds = Set<String>()
+    /// item copies collapsed onto a kept item (decision 2); their samples are dropped in every
+    /// week they appear in, so an item straddling a week boundary loses consistently
+    private static var collapsedItemIds = Set<String>()
 
     /// scenario-2 samples (disabled samples under an enabled parent) waiting for a preserved
     /// parent; flushed before each week is checkpointed, so a kill loses at most one week's
@@ -491,11 +496,26 @@ public enum OldAppBackupImporter {
             }
         }
 
+        // 1b. exact duplicates (decision 2): the old app's Moves import ran more than once for
+        //     some users, minting the same journeys under new ids. Item copies whose samples are
+        //     identical in every recorded field except their ids are one item; keep one.
+        var liveSamples = unioned.values.filter { !$0.isDeleted }
+        summary.samplesDeleted += unioned.count - liveSamples.count
+        let losers = collapseDuplicateItems(among: liveSamples, sets: sets)
+        if !losers.isEmpty {
+            collapsedItemIds.formUnion(losers)
+            handledItemIds.formUnion(losers)  // never read, never counted unreferenced
+            summary.itemsCollapsed += losers.count
+        }
+        if !collapsedItemIds.isEmpty {
+            let before = liveSamples.count
+            liveSamples.removeAll { $0.timelineItemId.map(collapsedItemIds.contains) ?? false }
+            summary.samplesCollapsed += before - liveSamples.count
+        }
+
         // 2. the items the LIVE samples reference, and the places those items reference. An
         //    item referenced only by deleted samples would land as a dateless shell (dates in
         //    LocoKit2 derive from samples), which is the class decision 1 exists to exclude.
-        let liveSamples = unioned.values.filter { !$0.isDeleted }
-        summary.samplesDeleted += unioned.count - liveSamples.count
         let referencedItemIds = Set(liveSamples.compactMap(\.timelineItemId))
         let newItemIds = referencedItemIds.subtracting(handledItemIds)
         var itemsToInsert: [LegacyItem] = []
@@ -642,6 +662,72 @@ public enum OldAppBackupImporter {
         Log.info("OldAppBackupImporter: \(stem) landed — \(samples.count) samples, \(itemsToInsert.count) items, \(placesToInsert.count) places, \(batchResult.orphanCount) orphans → \(counts.orphansRecreated + counts.orphansIndividual) items", subsystem: .importing)
     }
 
+    // MARK: - Exact-duplicate items (decision 2)
+
+    /// A sample with its identity stripped: every recorded field except `sampleId`,
+    /// `timelineItemId` and `lastSaved`, and except `secondsFromGMT`, which is the importing
+    /// phone's time zone at the moment the old app minted the sample, not a property of the
+    /// point (Tristan's three Moves imports stamped the same points -18000, -21600 and nil;
+    /// everything else, `lastSaved` included, was identical). Two samples with equal
+    /// signatures are the same recording, whatever ids the old app gave them.
+    private struct SampleSignature: Hashable {
+        let date: Date
+        let location: LegacyBackup.Sample.Location?
+        let movingState: String
+        let recordingState: String
+        let stepHz: Double?
+        let courseVariance: Double?
+        let xyAcceleration: Double?
+        let zAcceleration: Double?
+        let confirmedType: String?
+        let classifiedType: String?
+        let disabled: Bool?
+
+        init(_ s: LegacyBackup.Sample) {
+            date = s.date; location = s.location
+            movingState = s.movingState; recordingState = s.recordingState
+            stepHz = s.stepHz; courseVariance = s.courseVariance
+            xyAcceleration = s.xyAcceleration; zAcceleration = s.zAcceleration
+            confirmedType = s.confirmedType; classifiedType = s.classifiedType; disabled = s.disabled
+        }
+    }
+
+    /// Item ids whose samples (in this week) equal another item's point for point. Of each
+    /// group of identical items the one with the newest item-file `lastSaved` is kept; a tie,
+    /// or no item file at all, keeps the smallest id, which is the same answer in every week
+    /// the group appears in. Items already collapsed in an earlier week are not regrouped.
+    private static func collapseDuplicateItems(among samples: [LegacyBackup.Sample], sets: [LegacyBackup.BackupSet]) -> Set<String> {
+        var byItem: [String: [SampleSignature]] = [:]
+        for sample in samples {
+            guard let itemId = sample.timelineItemId, !collapsedItemIds.contains(itemId) else { continue }
+            byItem[itemId, default: []].append(SampleSignature(sample))
+        }
+        var groups: [[SampleSignature]: [String]] = [:]
+        for (itemId, signatures) in byItem {
+            let ordered = signatures.sorted { $0.date < $1.date }
+            groups[ordered, default: []].append(itemId)
+        }
+        var losers = Set<String>()
+        for (signatures, itemIds) in groups where itemIds.count > 1 {
+            var saved: [String: Date?] = [:]
+            for itemId in itemIds {
+                let record = readUnioned(LegacyBackup.Item.self, id: itemId, in: sets, fileURL: { $0.itemFileURL(for: itemId) }, recordId: \.itemId, lastSaved: \.lastSaved)
+                saved[itemId] = record?.lastSaved
+            }
+            let winner = itemIds.sorted { a, b in
+                switch (saved[a] ?? nil, saved[b] ?? nil) {
+                case (.some(let x), .some(let y)) where x != y: return x > y
+                case (.some, .none): return true
+                case (.none, .some): return false
+                default: return a < b
+                }
+            }.first!
+            for itemId in itemIds where itemId != winner { losers.insert(itemId) }
+            Log.info("OldAppBackupImporter: \(itemIds.count) identical item copies (\(signatures.count) samples each) — keeping \(winner)", subsystem: .importing)
+        }
+        return losers
+    }
+
     // MARK: - Reading records across sets
 
     /// Newest `lastSaved` wins; a record without `lastSaved` never overwrites one that has it
@@ -724,6 +810,7 @@ public enum OldAppBackupImporter {
         handledItemIds = []
         deletedItemIds = []
         handledPlaceIds = []
+        collapsedItemIds = []
         disabledSamplesFromEnabledParents = [:]
 
         // timeline processing and recording stay out of the way while rows land (the Migrate pattern)
