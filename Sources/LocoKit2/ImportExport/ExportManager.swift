@@ -351,19 +351,26 @@ public enum ExportManager {
         let existingManifest = loadedManifest
 
         // gather stats
-        let (placeCount, itemCount, sampleCount) = try await Database.pool.uncancellableRead { db in
+        let (placeCount, itemCount, sampleCount, excludedItemCount) = try await Database.pool.uncancellableRead { db in
             let places = try Place.fetchCount(db)
             let items = try TimelineItemBase
                 .filter { $0.startDate != nil }
                 .fetchCount(db)
+            // BIG-301: the alive nil-date items the bucketed export leaves out (same predicate as
+            // the diagnostics bundle's device-info line)
+            let excluded = try TimelineItemBase
+                .filter { $0.startDate == nil }
+                .filter { $0.deleted == false }
+                .fetchCount(db)
             let samples = try LocomotionSample.fetchCount(db)
-            return (places, items, samples)
+            return (places, items, samples, excluded)
         }
 
         let stats = ExportStats(
             placeCount: placeCount,
             itemCount: itemCount,
-            sampleCount: sampleCount
+            sampleCount: sampleCount,
+            excludedItemCount: excludedItemCount
         )
 
         let metadata = ExportMetadata(
