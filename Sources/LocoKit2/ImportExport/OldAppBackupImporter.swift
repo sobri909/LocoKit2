@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CryptoKit
 import GRDB
 import Synchronization
 
@@ -102,6 +103,9 @@ public enum OldAppBackupImporter {
         public var itemsUnreferenced = 0    // file exists, no sample references it → not imported
         public var itemsUnconvertible = 0
         public var itemsCollapsed = 0       // item copies whose samples equal another item's, point for point
+        public var itemsSplit = 0           // items cut at an empty gap of a day or more (BIG-825); counted per week they were cut in
+        public var splitPieces = 0          // the extra items those cuts made (also counted in itemsImported)
+        public var splitPiecesEmpty = 0     // of those, pieces that landed with no samples: should be zero
         public var placesImported = 0
         public var placesAlreadyPresent = 0
         public var placesMissingFile = 0    // visit references a place no set holds → placeless visit
@@ -113,7 +117,7 @@ public enum OldAppBackupImporter {
         public var description: String {
             "\(sets) sets, \(filesCopied) files (\(bytesCopied / 1_048_576) MB) copied, \(weeksProcessed)/\(weeksTotal) weeks (\(weeksSkippedAfterCutoff) after cutoff); "
             + "samples \(samplesImported) imported, \(samplesAlreadyPresent) present, \(samplesAfterCutoff) after cutoff, \(samplesDeleted) deleted, \(samplesOfDeletedItems) of deleted items, \(samplesCollapsed) collapsed, \(samplesUndecodable) undecodable, \(sampleFilesUnreadable) week files unreadable, \(weeksUnreadable.count) weeks with no readable file; "
-            + "items \(itemsImported) imported, \(itemsAlreadyPresent) present, \(itemsDeleted) deleted, \(itemsMissingFile) missing files, \(itemsUnreferenced) unreferenced, \(itemsCollapsed) collapsed, \(itemsUnconvertible) unconvertible; "
+            + "items \(itemsImported) imported, \(itemsAlreadyPresent) present, \(itemsDeleted) deleted, \(itemsMissingFile) missing files, \(itemsUnreferenced) unreferenced, \(itemsCollapsed) collapsed, \(itemsUnconvertible) unconvertible, \(itemsSplit) split at empty gaps (+\(splitPieces) pieces, \(splitPiecesEmpty) empty); "
             + "places \(placesImported) imported, \(placesAlreadyPresent) present, \(placesMissingFile) missing files, \(placesUnconvertible) unconvertible; "
             + "orphans \(orphanSamples) samples → \(orphanItemsRecreated) items recreated, \(orphanIndividualItems) individual"
         }
@@ -133,6 +137,8 @@ public enum OldAppBackupImporter {
     /// item copies collapsed onto a kept item (decision 2); their samples are dropped in every
     /// week they appear in, so an item straddling a week boundary loses consistently
     private static var collapsedItemIds = Set<String>()
+    /// item records read for a cut (BIG-825), nil for an item no set holds a live record of
+    private static var splitTemplates: [String: LegacyItem?] = [:]
 
     /// scenario-2 samples (disabled samples under an enabled parent) waiting for a preserved
     /// parent; flushed before each week is checkpointed, so a kill loses at most one week's
@@ -682,17 +688,20 @@ public enum OldAppBackupImporter {
     nonisolated private static func recreateOrphanGroups(_ groups: [String: [LocomotionSample]], db: GRDB.Database) -> (recreated: Int, individual: Int) {
         var recreated = 0, individual = 0
         for (originalItemId, samples) in groups {
-            let sorted = samples.sorted { $0.date < $1.date }
-            let stationary = sorted.filter { $0.movingState == .stationary }.count
-            let isVisit = stationary * 2 >= sorted.count
-            do {
-                try db.inSavepoint {
-                    _ = try TimelineItem.createItem(from: sorted, isVisit: isVisit, source: "LocoKit", db: db)
-                    return .commit
+            // the same cut as items with a file get (BIG-825): a group with a day-long hole in it
+            // is one item per stretch, and a two-sample group is a start / end pair, left whole
+            for sorted in runsBetweenEmptyGaps(samples.sorted { $0.date < $1.date }) {
+                let stationary = sorted.filter { $0.movingState == .stationary }.count
+                let isVisit = stationary * 2 >= sorted.count
+                do {
+                    try db.inSavepoint {
+                        _ = try TimelineItem.createItem(from: sorted, isVisit: isVisit, source: "LocoKit", db: db)
+                        return .commit
+                    }
+                    if sorted.count < TimelineItemTrip.minimumValidSamples { individual += 1 } else { recreated += 1 }
+                } catch {
+                    Log.error("OldAppBackupImporter: skipping orphan group \(originalItemId) (\(sorted.count) samples): \(error)", subsystem: .importing)
                 }
-                if sorted.count < TimelineItemTrip.minimumValidSamples { individual += 1 } else { recreated += 1 }
-            } catch {
-                Log.error("OldAppBackupImporter: skipping orphan group \(originalItemId) (\(sorted.count) samples): \(error)", subsystem: .importing)
             }
         }
         return (recreated, individual)
@@ -800,6 +809,16 @@ public enum OldAppBackupImporter {
         }
         samples.sort { $0.date < $1.date }
 
+        // 3b. an item with a day-long hole in its samples is cut there (BIG-825). The pieces are
+        //     ordinary items and go in with the week's others.
+        let split = try await splitAtEmptyGaps(&samples, weekItems: itemsToInsert, sets: sets)
+        itemsToInsert += split.pieces
+        summary.itemsSplit += split.itemsCut
+        summary.splitPieces += split.pieces.count
+        if split.itemsCut > 0 {
+            Log.info("OldAppBackupImporter: \(week.stem) cut \(split.itemsCut) item(s) at empty gaps of a day or more (+\(split.pieces.count) pieces)", subsystem: .importing)
+        }
+
         // 4. one transaction for the week
         let stem = week.stem
         let (batchResult, counts) = try await Database.pool.write { [placesToInsert, itemsToInsert, samples] db -> (SampleBatchResult, WeekCounts) in
@@ -905,7 +924,251 @@ public enum OldAppBackupImporter {
             disabledSamplesFromEnabledParents[itemId, default: []] += scenario2Samples
         }
 
+        // a piece is only made for a sample that will be stored under it; if one landed with
+        // nothing under it anyway, that is a dateless item and has to be heard about
+        if !split.pieces.isEmpty {
+            let pieceIds = split.pieces.map(\.itemId)
+            let emptyPieces = try await Database.pool.read { db in
+                try pieceIds.filter { id in
+                    // a piece whose insert failed has no row and is not an empty item
+                    try TimelineItemBase.filter(TimelineItemBase.Columns.id == id).fetchCount(db) > 0
+                        && LocomotionSample.filter(LocomotionSample.Columns.timelineItemId == id).limit(1).fetchCount(db) == 0
+                }
+            }
+            if !emptyPieces.isEmpty {
+                summary.splitPiecesEmpty += emptyPieces.count
+                Log.error("OldAppBackupImporter: \(stem) left \(emptyPieces.count) cut piece(s) with no samples: \(emptyPieces.prefix(5).joined(separator: ", "))", subsystem: .importing)
+            }
+        }
+
         Log.info("OldAppBackupImporter: \(stem) landed — \(samples.count) samples, \(itemsToInsert.count) items, \(placesToInsert.count) places, \(batchResult.orphanCount) orphans → \(counts.orphansRecreated + counts.orphansIndividual) items", subsystem: .importing)
+    }
+
+    // MARK: - Empty gaps inside an item (BIG-825)
+
+    /// An item whose samples stop and carry on a day or more later is not one item. The old app
+    /// could glue months of days into a single visit or trip (a merge gone wrong, carried through
+    /// its restores); in LocoKit2 an item is part of every day it spans, so one such item makes
+    /// years of day views load it, and the processor cannot fix it: it merges, it never splits.
+    /// The importer cuts at the hole. It is a rule about time being empty, applied where no
+    /// judgement is needed; whether the pieces are the RIGHT items is the processor's question,
+    /// a day at a time (Matt, 2026-10-02/03). Long-haul flights with no fixes run to about 13 h
+    /// between samples, which is why this is a day and not less.
+    nonisolated static let emptyGapSplitThreshold: TimeInterval = .hours(24)
+
+    private struct SplitResult {
+        var pieces: [LegacyItem] = []
+        var itemsCut = 0
+    }
+
+    /// One stretch of an item's samples: the item itself, or a piece cut from it.
+    private struct Stretch: Sendable {
+        let itemId: String
+        var start: Date
+        var end: Date
+        var sampleCount: Int
+    }
+
+    /// What the database already holds of an item this week's samples reference.
+    private struct KnownItem: Sendable {
+        var stretches: [Stretch] = []   // the item and its pieces, those that hold samples
+        var ownHasSamples = false       // the item's own id holds samples
+        var pieceRows = 0               // piece rows that exist, with or without samples: the next piece is pieceRows + 1
+        var disabled: Bool?             // the item row's current state, when there is a row
+    }
+
+    /// The id of an item's nth piece. Derived, so a resumed run and a second run over the same
+    /// sets find the rows an earlier run made instead of making more. Piece 0 is the item itself.
+    nonisolated private static func pieceId(of itemId: String, index: Int) -> String {
+        guard index > 0 else { return itemId }
+        var bytes = Array(SHA256.hash(data: Data("\(itemId)/piece/\(index)".utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x80  // well-formed as a custom (version 8) UUID
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return NSUUID(uuidBytes: bytes).uuidString
+    }
+
+    /// The item's record as the converter takes it, or nil when no set holds a live one (its
+    /// samples then take the orphan path). Read once per run per item: `readUnioned` counts and
+    /// logs undecodable copies, and a cut can be needed in many weeks.
+    private static func splitTemplate(for itemId: String, weekItems: [String: LegacyItem], sets: [LegacyBackup.BackupSet]) -> LegacyItem? {
+        if let weekItem = weekItems[itemId] { return weekItem }
+        if let cached = splitTemplates[itemId] { return cached }
+        let record = readUnioned(LegacyBackup.Item.self, id: itemId, in: sets, fileURL: { $0.itemFileURL(for: itemId) }, recordId: \.itemId, lastSaved: \.lastSaved)
+        let template = record.flatMap { $0.isDeleted ? nil : LegacyItem(backup: $0) }
+        splitTemplates[itemId] = .some(template)
+        return template
+    }
+
+    /// Reassign this week's samples to pieces wherever an item's samples have a hole of
+    /// `emptyGapSplitThreshold` or more, and return the piece items to insert.
+    ///
+    /// A sample joins the stretch it is within the threshold of, and starts a new one when there
+    /// is none. The stretches an item already has come from the database (the item and its
+    /// derived-id pieces), not from run state, so an item whose samples arrive across many weeks
+    /// is cut the same way on a fresh run, a resume, and a second run.
+    ///
+    /// A piece is only ever made for a sample that will be stored under it, so no piece lands
+    /// empty: samples already in the database are passed over (their insert is ignored and they
+    /// keep the home they have), and so are disabled samples of an enabled item (they leave for a
+    /// preserved parent, keyed by the item's own id).
+    ///
+    /// Left whole: a start / end pair (a Moves place segment came across as a start sample and
+    /// an end sample at the item's own start and end dates, however long the stay; cutting it
+    /// would leave two zero-length visits), and an item with no live record in any set (its
+    /// samples take the orphan path, which cuts its own groups).
+    private static func splitAtEmptyGaps(_ samples: inout [LocomotionSample], weekItems: [LegacyItem], sets: [LegacyBackup.BackupSet]) async throws -> SplitResult {
+        var indicesByItem: [String: [Int]] = [:]
+        for (index, sample) in samples.enumerated() {
+            if let itemId = sample.timelineItemId { indicesByItem[itemId, default: []].append(index) }
+        }
+        guard !indicesByItem.isEmpty, let weekStart = samples.first?.date, let weekEnd = samples.last?.date else { return SplitResult() }
+
+        let itemIds = Array(indicesByItem.keys)
+        let sampleIds = samples.map(\.id)
+        let (known, present): ([String: KnownItem], Set<String>) = try await Database.pool.read { db in
+            var known: [String: KnownItem] = [:]
+            for itemId in itemIds {
+                var item = KnownItem()
+                var index = 0
+                while true {
+                    let id = pieceId(of: itemId, index: index)
+                    let disabled = try Bool.fetchOne(db, TimelineItemBase
+                        .filter(TimelineItemBase.Columns.id == id)
+                        .select(TimelineItemBase.Columns.disabled))
+                    if index == 0 {
+                        item.disabled = disabled
+                    } else {
+                        // a piece is a row; the first index with no row is the end of the list.
+                        // A row with no samples under it (the processor may have moved them
+                        // since) still holds its index.
+                        guard disabled != nil else { break }
+                        item.pieceRows = index
+                    }
+                    let row = try Row.fetchOne(db, LocomotionSample
+                        .filter(LocomotionSample.Columns.timelineItemId == id)
+                        .select(min(LocomotionSample.Columns.date), max(LocomotionSample.Columns.date), count(LocomotionSample.Columns.id)))
+                    let start: Date? = row?[0]
+                    let end: Date? = row?[1]
+                    let sampleCount: Int = row?[2] ?? 0
+                    if let start, let end, sampleCount > 0 {
+                        item.stretches.append(Stretch(itemId: id, start: start, end: end, sampleCount: sampleCount))
+                        if index == 0 { item.ownHasSamples = true }
+                    }
+                    index += 1
+                }
+                if item.disabled != nil || !item.stretches.isEmpty || item.pieceRows > 0 { known[itemId] = item }
+            }
+
+            // which of this week's samples are already here. On a fresh run none are, and one
+            // indexed look at the week's date range says so.
+            var present = Set<String>()
+            let anyInRange = try LocomotionSample
+                .filter(LocomotionSample.Columns.date >= weekStart && LocomotionSample.Columns.date <= weekEnd)
+                .limit(1).fetchCount(db) > 0
+            if anyInRange {
+                for chunk in sampleIds.chunked(into: 500) {
+                    present.formUnion(try String.fetchAll(db, LocomotionSample
+                        .filter(chunk.contains(LocomotionSample.Columns.id))
+                        .select(LocomotionSample.Columns.id)))
+                }
+            }
+            return (known, present)
+        }
+
+        let weekItemsById = Dictionary(weekItems.map { ($0.itemId, $0) }, uniquingKeysWith: { first, _ in first })
+        let threshold = emptyGapSplitThreshold
+        var result = SplitResult()
+
+        for (itemId, indices) in indicesByItem {
+            let knownItem = known[itemId]
+            var stretches = knownItem?.stretches ?? []
+            var ownHasStretch = knownItem?.ownHasSamples ?? false
+            var nextPieceIndex = (knownItem?.pieceRows ?? 0) + 1
+
+            // the row's state when there is a row (it may be here from Migrate and edited since,
+            // BIG-629), else the record's
+            let itemDisabled: Bool
+            if let disabled = knownItem?.disabled {
+                itemDisabled = disabled
+            } else if let template = splitTemplate(for: itemId, weekItems: weekItemsById, sets: sets) {
+                itemDisabled = template.disabled
+            } else {
+                continue   // no row and no record: the orphan path
+            }
+
+            // the samples that will be stored under this item or a piece of it (ascending by
+            // date: `samples` is sorted)
+            let anchors = indices.filter { !present.contains(samples[$0].id) && !(samples[$0].disabled && !itemDisabled) }
+            guard !anchors.isEmpty else { continue }
+            let inSight = stretches.reduce(0) { $0 + $1.sampleCount } + anchors.count
+
+            var cut = false
+            for index in anchors {
+                let date = samples[index].date
+                if let found = stretches.firstIndex(where: { date > $0.start - threshold && date < $0.end + threshold }) {
+                    stretches[found].start = min(stretches[found].start, date)
+                    stretches[found].end = max(stretches[found].end, date)
+                    stretches[found].sampleCount += 1
+                    samples[index].timelineItemId = stretches[found].itemId
+                    continue
+                }
+                if !ownHasStretch {
+                    // nothing under the item's own id yet: this sample starts it
+                    stretches.insert(Stretch(itemId: itemId, start: date, end: date, sampleCount: 1), at: 0)
+                    ownHasStretch = true
+                    continue
+                }
+
+                guard let template = splitTemplate(for: itemId, weekItems: weekItemsById, sets: sets) else { break }
+
+                // a start / end pair: two samples in all, at the record's own start and end (a
+                // record with no dates can't say otherwise, and two samples are left whole)
+                if inSight == 2, stretches.count == 1, stretches[0].itemId == itemId, stretches[0].sampleCount == 1 {
+                    let atRecordEnds: Bool
+                    if let recordStart = template.startDate, let recordEnd = template.endDate {
+                        atRecordEnds = abs(stretches[0].start.timeIntervalSince(recordStart)) < 1 && abs(date.timeIntervalSince(recordEnd)) < 1
+                    } else {
+                        atRecordEnds = true
+                    }
+                    if atRecordEnds {
+                        stretches[0].end = date
+                        stretches[0].sampleCount += 1
+                        continue
+                    }
+                }
+
+                var piece = template
+                piece.itemId = pieceId(of: itemId, index: nextPieceIndex)
+                piece.disabled = itemDisabled
+                // totals for the whole item stay with the item; a piece claiming them too would double them
+                piece.activeEnergyBurned = nil
+                piece.averageHeartRate = nil
+                piece.maxHeartRate = nil
+                piece.hkStepCount = nil
+                nextPieceIndex += 1
+                result.pieces.append(piece)
+                stretches.append(Stretch(itemId: piece.itemId, start: date, end: date, sampleCount: 1))
+                samples[index].timelineItemId = piece.itemId
+                cut = true
+            }
+            if cut { result.itemsCut += 1 }
+        }
+        return result
+    }
+
+    /// An orphan group's samples as stretches with no hole of `emptyGapSplitThreshold` or more
+    /// between them. `sorted` is by date. A two-sample group is returned whole.
+    nonisolated private static func runsBetweenEmptyGaps(_ sorted: [LocomotionSample]) -> [[LocomotionSample]] {
+        guard sorted.count > 2 else { return sorted.isEmpty ? [] : [sorted] }
+        var runs: [[LocomotionSample]] = [[sorted[0]]]
+        for sample in sorted.dropFirst() {
+            if let last = runs[runs.count - 1].last, sample.date.timeIntervalSince(last.date) >= emptyGapSplitThreshold {
+                runs.append([sample])
+            } else {
+                runs[runs.count - 1].append(sample)
+            }
+        }
+        return runs
     }
 
     // MARK: - Exact-duplicate items (decision 2)
@@ -943,15 +1206,18 @@ public enum OldAppBackupImporter {
     /// or no item file at all, keeps the smallest id, which is the same answer in every week
     /// the group appears in. Items already collapsed in an earlier week are not regrouped.
     private static func collapseDuplicateItems(among samples: [LegacyBackup.Sample], sets: [LegacyBackup.BackupSet]) -> Set<String> {
-        var byItem: [String: [SampleSignature]] = [:]
+        // an item's samples as a multiset, not a list: the old app's data has many samples
+        // sharing a timestamp inside one item, and a list sorted by date left those in whatever
+        // order they arrived, so two identical copies could compare unequal (device and
+        // simulator disagreed by five items)
+        var byItem: [String: [SampleSignature: Int]] = [:]
         for sample in samples {
             guard let itemId = sample.timelineItemId, !collapsedItemIds.contains(itemId) else { continue }
-            byItem[itemId, default: []].append(SampleSignature(sample))
+            byItem[itemId, default: [:]][SampleSignature(sample), default: 0] += 1
         }
-        var groups: [[SampleSignature]: [String]] = [:]
+        var groups: [[SampleSignature: Int]: [String]] = [:]
         for (itemId, signatures) in byItem {
-            let ordered = signatures.sorted { $0.date < $1.date }
-            groups[ordered, default: []].append(itemId)
+            groups[signatures, default: []].append(itemId)
         }
         var losers = Set<String>()
         var groupsByCopyCount: [Int: Int] = [:]
@@ -973,7 +1239,7 @@ public enum OldAppBackupImporter {
             groupsByCopyCount[itemIds.count, default: 0] += 1
             // per group to the console only: a Moves-era decade is thousands of these, and in the
             // log file they would bury the lines a support case needs
-            Log.debug("OldAppBackupImporter: \(itemIds.count) identical item copies (\(signatures.count) samples each) — keeping \(winner)", subsystem: .importing)
+            Log.debug("OldAppBackupImporter: \(itemIds.count) identical item copies (\(signatures.values.reduce(0, +)) samples each) — keeping \(winner)", subsystem: .importing)
         }
         if !losers.isEmpty {
             let shape = groupsByCopyCount.keys.sorted().map { "\(groupsByCopyCount[$0]!) item(s) × \($0) copies" }.joined(separator: ", ")
@@ -1065,6 +1331,7 @@ public enum OldAppBackupImporter {
         deletedItemIds = []
         handledPlaceIds = []
         collapsedItemIds = []
+        splitTemplates = [:]
         disabledSamplesFromEnabledParents = [:]
 
         // timeline processing and recording stay out of the way while rows land (the Migrate pattern)
