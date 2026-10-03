@@ -110,6 +110,7 @@ public enum OldAppBackupImporter {
         public var placesAlreadyPresent = 0
         public var placesMissingFile = 0    // visit references a place no set holds → placeless visit
         public var placesUnconvertible = 0
+        public var placesCollapsed = 0      // place copies folded into a kept place (BIG-827); a resumed or second run counts them again as it meets them
         public var orphanSamples = 0
         public var orphanItemsRecreated = 0
         public var orphanIndividualItems = 0
@@ -118,7 +119,7 @@ public enum OldAppBackupImporter {
             "\(sets) sets, \(filesCopied) files (\(bytesCopied / 1_048_576) MB) copied, \(weeksProcessed)/\(weeksTotal) weeks (\(weeksSkippedAfterCutoff) after cutoff); "
             + "samples \(samplesImported) imported, \(samplesAlreadyPresent) present, \(samplesAfterCutoff) after cutoff, \(samplesDeleted) deleted, \(samplesOfDeletedItems) of deleted items, \(samplesCollapsed) collapsed, \(samplesUndecodable) undecodable, \(sampleFilesUnreadable) week files unreadable, \(weeksUnreadable.count) weeks with no readable file; "
             + "items \(itemsImported) imported, \(itemsAlreadyPresent) present, \(itemsDeleted) deleted, \(itemsMissingFile) missing files, \(itemsUnreferenced) unreferenced, \(itemsCollapsed) collapsed, \(itemsUnconvertible) unconvertible, \(itemsSplit) split at empty gaps (+\(splitPieces) pieces, \(splitPiecesEmpty) empty); "
-            + "places \(placesImported) imported, \(placesAlreadyPresent) present, \(placesMissingFile) missing files, \(placesUnconvertible) unconvertible; "
+            + "places \(placesImported) imported, \(placesAlreadyPresent) present, \(placesMissingFile) missing files, \(placesCollapsed) collapsed, \(placesUnconvertible) unconvertible; "
             + "orphans \(orphanSamples) samples → \(orphanItemsRecreated) items recreated, \(orphanIndividualItems) individual"
         }
     }
@@ -137,6 +138,9 @@ public enum OldAppBackupImporter {
     /// item copies collapsed onto a kept item (decision 2); their samples are dropped in every
     /// week they appear in, so an item straddling a week boundary loses consistently
     private static var collapsedItemIds = Set<String>()
+    /// place copies folded into a kept place (BIG-827): copy id → kept id. Visits naming a
+    /// copy are pointed at the kept place in every week they appear in.
+    private static var placeAliases: [String: String] = [:]
     /// item records read for a cut (BIG-825), nil for an item no set holds a live record of
     private static var splitTemplates: [String: LegacyItem?] = [:]
 
@@ -581,6 +585,7 @@ public enum OldAppBackupImporter {
     /// What one week's transaction did, read back out of the write closure.
     struct WeekCounts: Sendable {
         var placesImported = 0, placesPresent = 0, placesFailed = 0
+        var placeAliases: [String: String] = [:]
         var itemsImported = 0, itemsPresent = 0, itemsFailed = 0
         var samplesInserted = 0
         var orphansRecreated = 0, orphansIndividual = 0
@@ -821,10 +826,19 @@ public enum OldAppBackupImporter {
 
         // 4. one transaction for the week
         let stem = week.stem
-        let (batchResult, counts) = try await Database.pool.write { [placesToInsert, itemsToInsert, samples] db -> (SampleBatchResult, WeekCounts) in
+        let (batchResult, counts) = try await Database.pool.write { [placesToInsert, itemsToInsert, samples, knownAliases = placeAliases] db -> (SampleBatchResult, WeekCounts) in
             var placesImported = 0, placesPresent = 0, placesFailed = 0
+            var newAliases: [String: String] = [:]
             for legacyPlace in placesToInsert {
                 do {
+                    // the old app's repeated imports minted the same place again under new ids
+                    // (BIG-827): a copy of a place already here is not inserted, and its visits
+                    // go to the kept one. A resumed or second run finds the kept place the same
+                    // way, since the copy never got a row.
+                    if let kept = try keptTwin(of: legacyPlace, db: db) {
+                        newAliases[legacyPlace.placeId] = kept
+                        continue
+                    }
                     try db.inSavepoint {
                         try Place(from: legacyPlace).insert(db, onConflict: .ignore)
                         if db.changesCount == 1 { placesImported += 1 } else { placesPresent += 1 }
@@ -837,6 +851,7 @@ public enum OldAppBackupImporter {
             }
 
             var itemsImported = 0, itemsPresent = 0, itemsFailed = 0
+            var placesGivenVisits = Set<String>()   // kept places that took a folded copy's visits this week
             for legacyItem in itemsToInsert {
                 do {
                     let item = try TimelineItem(from: legacyItem)
@@ -845,6 +860,10 @@ public enum OldAppBackupImporter {
                         let inserted = db.changesCount == 1
                         if let visit = item.visit {
                             var visit = visit
+                            if let placeId = visit.placeId, let kept = newAliases[placeId] ?? knownAliases[placeId] {
+                                visit.placeId = kept
+                                placesGivenVisits.insert(kept)
+                            }
                             if let placeId = visit.placeId, try Place.filter({ $0.id == placeId }).fetchCount(db) == 0 {
                                 // the set never held this place (zero-visit places were never backed up)
                                 visit.clearPlace()
@@ -859,6 +878,14 @@ public enum OldAppBackupImporter {
                     itemsFailed += 1
                     Log.error("OldAppBackupImporter: skipping item \(legacyItem.itemId): \(error)", subsystem: .importing)
                 }
+            }
+
+            // a kept place's stats were computed from its own visits; nothing else marks it for
+            // a recount when a folded copy's visits arrive
+            if !placesGivenVisits.isEmpty {
+                try Place
+                    .filter(placesGivenVisits.contains(Place.Columns.id))
+                    .updateAll(db, Place.Columns.isStale.set(to: true))
             }
 
             // parent truth comes from the database, not the files: an item may already be here
@@ -900,7 +927,7 @@ public enum OldAppBackupImporter {
             let (recreated, individual) = recreateOrphanGroups(result.orphans, db: db)
 
             return (result, WeekCounts(
-                placesImported: placesImported, placesPresent: placesPresent, placesFailed: placesFailed,
+                placesImported: placesImported, placesPresent: placesPresent, placesFailed: placesFailed, placeAliases: newAliases,
                 itemsImported: itemsImported, itemsPresent: itemsPresent, itemsFailed: itemsFailed,
                 samplesInserted: result.insertedCount, orphansRecreated: recreated, orphansIndividual: individual
             ))
@@ -909,6 +936,8 @@ public enum OldAppBackupImporter {
         summary.placesImported += counts.placesImported
         summary.placesAlreadyPresent += counts.placesPresent
         summary.placesUnconvertible += counts.placesFailed
+        summary.placesCollapsed += counts.placeAliases.count
+        placeAliases.merge(counts.placeAliases) { _, new in new }
         summary.itemsImported += counts.itemsImported
         summary.itemsAlreadyPresent += counts.itemsPresent
         summary.itemsUnconvertible += counts.itemsFailed
@@ -941,7 +970,7 @@ public enum OldAppBackupImporter {
             }
         }
 
-        Log.info("OldAppBackupImporter: \(stem) landed — \(samples.count) samples, \(itemsToInsert.count) items, \(placesToInsert.count) places, \(batchResult.orphanCount) orphans → \(counts.orphansRecreated + counts.orphansIndividual) items", subsystem: .importing)
+        Log.info("OldAppBackupImporter: \(stem) landed — \(samples.count) samples, \(itemsToInsert.count) items, \(placesToInsert.count - counts.placeAliases.count) places\(counts.placeAliases.isEmpty ? "" : " (+\(counts.placeAliases.count) copies folded)"), \(batchResult.orphanCount) orphans → \(counts.orphansRecreated + counts.orphansIndividual) items", subsystem: .importing)
     }
 
     // MARK: - Empty gaps inside an item (BIG-825)
@@ -1171,6 +1200,34 @@ public enum OldAppBackupImporter {
         return runs
     }
 
+    // MARK: - Place copies (BIG-827)
+
+    /// The id of a place already in the database that this one is a copy of: the same name at
+    /// the same coordinates, to the last digit, and known to the map providers as the same
+    /// thing (each provider id equal, or absent on both). No nearness, no name matching: a place
+    /// a few metres off, or spelt differently, is the user's to merge (Matt, 2026-10-03).
+    /// Unnamed places are never copies of each other, and a place whose own row exists is
+    /// itself. The smallest id wins when several rows qualify, so every run picks the same one.
+    nonisolated private static func keptTwin(of legacyPlace: LegacyPlace, db: GRDB.Database) throws -> String? {
+        guard legacyPlace.name?.nonEmpty != nil else { return nil }
+        let place = Place(from: legacyPlace)
+        guard place.name != unnamedPlaceName else { return nil }
+        if try Place.filter(Place.Columns.id == place.id).fetchCount(db) > 0 { return nil }
+        let twins = try Place
+            .filter(Place.Columns.name == place.name)
+            .filter(Place.Columns.latitude == place.latitude && Place.Columns.longitude == place.longitude)
+            .order(Place.Columns.id)
+            .fetchAll(db)
+        return twins.first { twin in
+            twin.googlePlaceId == place.googlePlaceId
+                && twin.foursquarePlaceId == place.foursquarePlaceId
+                && twin.mapboxPlaceId == place.mapboxPlaceId
+        }?.id
+    }
+
+    /// the name the converter gives a place that had none (`Place(from: LegacyPlace)`)
+    nonisolated private static let unnamedPlaceName = "Unnamed Place"
+
     // MARK: - Exact-duplicate items (decision 2)
 
     /// A sample with its identity stripped: every recorded field except `sampleId`,
@@ -1332,6 +1389,7 @@ public enum OldAppBackupImporter {
         handledPlaceIds = []
         collapsedItemIds = []
         splitTemplates = [:]
+        placeAliases = [:]
         disabledSamplesFromEnabledParents = [:]
 
         // timeline processing and recording stay out of the way while rows land (the Migrate pattern)
