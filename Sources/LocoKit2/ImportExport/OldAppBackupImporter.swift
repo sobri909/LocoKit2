@@ -88,6 +88,8 @@ public enum OldAppBackupImporter {
         public var samplesDeleted = 0
         public var samplesOfDeletedItems = 0
         public var samplesCollapsed = 0     // samples of item copies identical to a kept item's (decision 2)
+        public var sampleParentsRestored = 0  // newest copy named no item, an older copy in another set did: that parent is used
+        public var samplesWithoutParent = 0   // no copy in any set names an item (or only a deleted one): imported parentless, as recorded
         public var samplesUndecodable = 0
         public var sampleFilesUnreadable = 0   // a week file in the local copy that could not be read, unzipped or decoded
         /// Weeks for which NO set held a readable file: that week of history did not come across,
@@ -117,7 +119,7 @@ public enum OldAppBackupImporter {
 
         public var description: String {
             "\(sets) sets, \(filesCopied) files (\(bytesCopied / 1_048_576) MB) copied, \(weeksProcessed)/\(weeksTotal) weeks (\(weeksSkippedAfterCutoff) after cutoff); "
-            + "samples \(samplesImported) imported, \(samplesAlreadyPresent) present, \(samplesAfterCutoff) after cutoff, \(samplesDeleted) deleted, \(samplesOfDeletedItems) of deleted items, \(samplesCollapsed) collapsed, \(samplesUndecodable) undecodable, \(sampleFilesUnreadable) week files unreadable, \(weeksUnreadable.count) weeks with no readable file; "
+            + "samples \(samplesImported) imported, \(samplesAlreadyPresent) present, \(samplesAfterCutoff) after cutoff, \(samplesDeleted) deleted, \(samplesOfDeletedItems) of deleted items, \(samplesCollapsed) collapsed, \(sampleParentsRestored) parents restored from an older copy, \(samplesWithoutParent) with no parent, \(samplesUndecodable) undecodable, \(sampleFilesUnreadable) week files unreadable, \(weeksUnreadable.count) weeks with no readable file; "
             + "items \(itemsImported) imported, \(itemsAlreadyPresent) present, \(itemsDeleted) deleted, \(itemsMissingFile) missing files, \(itemsUnreferenced) unreferenced, \(itemsCollapsed) collapsed, \(itemsUnconvertible) unconvertible, \(itemsSplit) split at empty gaps (+\(splitPieces) pieces, \(splitPiecesEmpty) empty); "
             + "places \(placesImported) imported, \(placesAlreadyPresent) present, \(placesMissingFile) missing files, \(placesCollapsed) collapsed, \(placesUnconvertible) unconvertible; "
             + "orphans \(orphanSamples) samples → \(orphanItemsRecreated) items recreated, \(orphanIndividualItems) individual"
@@ -722,6 +724,8 @@ public enum OldAppBackupImporter {
 
         // 1. read and union this week's samples across sets (newest lastSaved wins; nil never overwrites)
         var unioned: [String: LegacyBackup.Sample] = [:]
+        // the newest copy of each sample that names a parent item, kept beside the union (1a)
+        var parentedCopies: [String: (itemId: String, lastSaved: Date?)] = [:]
         var readableFiles = 0
         for file in week.files {
             guard let gz = readFile(at: file.url) else { summary.sampleFilesUnreadable += 1; continue }
@@ -748,6 +752,17 @@ public enum OldAppBackupImporter {
                 guard let sample = element.value else { summary.samplesUndecodable += 1; continue }
                 if let cutoff, sample.date >= cutoff { summary.samplesAfterCutoff += 1; continue }
                 merge(sample, into: &unioned, id: sample.sampleId, lastSaved: sample.lastSaved)
+                if let itemId = sample.timelineItemId {
+                    if let known = parentedCopies[sample.sampleId] {
+                        switch (known.lastSaved, sample.lastSaved) {
+                        case (nil, .some): parentedCopies[sample.sampleId] = (itemId, sample.lastSaved)
+                        case (.some(let a), .some(let b)) where b > a: parentedCopies[sample.sampleId] = (itemId, sample.lastSaved)
+                        default: break
+                        }
+                    } else {
+                        parentedCopies[sample.sampleId] = (itemId, sample.lastSaved)
+                    }
+                }
             }
         }
 
@@ -771,6 +786,44 @@ public enum OldAppBackupImporter {
             let before = liveSamples.count
             liveSamples.removeAll { $0.timelineItemId.map(collapsedItemIds.contains) ?? false }
             summary.samplesCollapsed += before - liveSamples.count
+        }
+
+        // 1c. a parent lost between backups. The old app's failed restores brought samples back
+        //     without their items, and a later backup recorded them that way: the newest copy
+        //     names no item while an older copy in another set still does. A sample without a
+        //     parent is never a state the old app meant to keep, so the newest copy that names
+        //     one supplies it. It is the same sample; only the link is taken from the older
+        //     record. Left alone these land enabled and parentless, and the app's launch-time
+        //     adoption makes one item per sample (35,911 samples in the corpus this was built
+        //     on, 35,791 of them with an older parent; BIG-830 is the adoption's own cost).
+        //     Three limits:
+        //     - after the duplicate collapse, and never to a collapsed item: the collapse sees
+        //       exactly the samples it always did, and no restored sample can be dropped by it
+        //     - not for a sample already in the database (an earlier import brought it in
+        //       parentless and it has since been adopted elsewhere): the stored row is kept as it
+        //       is, and naming its old parent here would import that item with nothing in it
+        //     - if the parent turns out to be deleted, step 3 puts the sample back to parentless;
+        //       if its file is in no set, the sample takes the ordinary missing-item path with
+        //       its siblings
+        var restoredSampleIds = Set<String>()
+        let restoreCandidates = liveSamples.indices.filter { liveSamples[$0].timelineItemId == nil && parentedCopies[liveSamples[$0].sampleId] != nil }
+        if !restoreCandidates.isEmpty {
+            let candidateIds = restoreCandidates.map { liveSamples[$0].sampleId }
+            let alreadyStored: Set<String> = try await Database.pool.read { db in
+                var stored = Set<String>()
+                for chunk in candidateIds.chunked(into: 500) {
+                    stored.formUnion(try String.fetchAll(db, LocomotionSample
+                        .filter(chunk.contains(LocomotionSample.Columns.id))
+                        .select(LocomotionSample.Columns.id)))
+                }
+                return stored
+            }
+            for index in restoreCandidates {
+                let sampleId = liveSamples[index].sampleId
+                guard !alreadyStored.contains(sampleId), let older = parentedCopies[sampleId], !collapsedItemIds.contains(older.itemId) else { continue }
+                liveSamples[index].timelineItemId = older.itemId
+                restoredSampleIds.insert(sampleId)
+            }
         }
 
         // 2. the items the LIVE samples reference, and the places those items reference. An
@@ -808,9 +861,26 @@ public enum OldAppBackupImporter {
         // 3. convert the samples that will be inserted
         var samples: [LocomotionSample] = []
         samples.reserveCapacity(liveSamples.count)
+        var parentsRestored = 0
         for legacy in liveSamples {
-            if let itemId = legacy.timelineItemId, deletedItemIds.contains(itemId) { summary.samplesOfDeletedItems += 1; continue }
+            if let itemId = legacy.timelineItemId, deletedItemIds.contains(itemId) {
+                // a restored parent (1a) that is deleted is no parent: the sample stays as its
+                // newest copy recorded it. Only a sample whose own newest copy names the deleted
+                // item is dropped with it.
+                guard restoredSampleIds.contains(legacy.sampleId) else { summary.samplesOfDeletedItems += 1; continue }
+                var parentless = legacy
+                parentless.timelineItemId = nil
+                summary.samplesWithoutParent += 1
+                samples.append(LocomotionSample(from: LegacySample(backup: parentless)))
+                continue
+            }
+            if legacy.timelineItemId == nil { summary.samplesWithoutParent += 1 }
+            else if restoredSampleIds.contains(legacy.sampleId) { parentsRestored += 1 }
             samples.append(LocomotionSample(from: LegacySample(backup: legacy)))
+        }
+        summary.sampleParentsRestored += parentsRestored
+        if parentsRestored > 0 {
+            Log.info("OldAppBackupImporter: \(week.stem) restored the parent of \(parentsRestored) sample(s) from an older copy", subsystem: .importing)
         }
         samples.sort { $0.date < $1.date }
 

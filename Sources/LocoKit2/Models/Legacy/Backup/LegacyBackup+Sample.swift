@@ -44,7 +44,7 @@ extension LegacyBackup {
         public let classifiedType: String?
 
         // old LocoKit PersistentSample
-        public let timelineItemId: String?
+        public var timelineItemId: String?  // var: the importer restores a parent from an older copy (BIG-399)
         public let lastSaved: Date?
         public let deleted: Bool?
         public let disabled: Bool?
