@@ -56,11 +56,17 @@ public enum OldLocoKitImporter {
         /// legacy items from the parallel-running era (>= AT4's earliest recording),
         /// absent BY DESIGN — the import's dedup window never fetches them. Diagnostic only.
         public let absentAfterCutoff: Int
+        /// legacy items with no startDate. Mostly the old app's queued-but-never-written
+        /// shells (BIG-776); also items whose remaining samples were all deleted, disabled
+        /// against the item, or reassigned away. The date-ranged item read can never fetch
+        /// one, and any in-window samples it still holds come across through the samples
+        /// phase's orphan path regardless, so it must not hold the gate open (BIG-778).
+        public let absentDateless: Int
         public let absentInWindowBySource: [String: Int]
         public let absentInWindowEarliest: Date?
         public let absentInWindowLatest: Date?
         public let at4EarliestRecorded: Date?
-        public var migratedCount: Int { legacyItemCount - absentInWindow - absentAfterCutoff }
+        public var migratedCount: Int { legacyItemCount - absentInWindow - absentAfterCutoff - absentDateless }
     }
 
     // cached per launch; reset when an import starts (a completed import changes the answer)
@@ -114,35 +120,39 @@ public enum OldLocoKitImporter {
 
         var absentInWindow = 0
         var absentAfterCutoff = 0
+        var absentDateless = 0
         var absentInWindowBySource: [String: Int] = [:]
         var absentInWindowEarliest: Date?
         var absentInWindowLatest: Date?
         for row in legacyRows {
             if at4Ids.contains(row.itemId) { continue }
-            // nil-date absents count in-window: they're the broken-row shape the import
-            // may have skipped, which is exactly what the gate should surface, not hide
-            if let cutoff, let startDate = row.startDate, startDate >= cutoff {
+            // a dateless item can never be fetched by the date-ranged item read, and its
+            // samples (if any) come across as orphans either way; counting it in-window
+            // held the gate open for good (56,095 of them on one forum user's phone, BIG-778)
+            guard let startDate = row.startDate else {
+                absentDateless += 1
+                continue
+            }
+            if let cutoff, startDate >= cutoff {
                 absentAfterCutoff += 1
                 continue
             }
             absentInWindow += 1
             absentInWindowBySource[row.source ?? "NULL", default: 0] += 1
-            if let startDate = row.startDate {
-                if absentInWindowEarliest == nil || startDate < absentInWindowEarliest! { absentInWindowEarliest = startDate }
-                if absentInWindowLatest == nil || startDate > absentInWindowLatest! { absentInWindowLatest = startDate }
-            }
+            if absentInWindowEarliest == nil || startDate < absentInWindowEarliest! { absentInWindowEarliest = startDate }
+            if absentInWindowLatest == nil || startDate > absentInWindowLatest! { absentInWindowLatest = startDate }
         }
 
         let analysis = MigrationAnalysis(
             legacyItemCount: legacyRows.count,
-            absentInWindow: absentInWindow, absentAfterCutoff: absentAfterCutoff,
+            absentInWindow: absentInWindow, absentAfterCutoff: absentAfterCutoff, absentDateless: absentDateless,
             absentInWindowBySource: absentInWindowBySource,
             absentInWindowEarliest: absentInWindowEarliest, absentInWindowLatest: absentInWindowLatest,
             at4EarliestRecorded: cutoff
         )
         let sources = absentInWindowBySource.sorted { $0.value > $1.value }
             .map { "\($0.key): \($0.value)" }.joined(separator: ", ")
-        Log.info("Migration analysis: legacy=\(analysis.legacyItemCount), migrated=\(analysis.migratedCount), absentInWindow=\(absentInWindow) [\(sources)] span=\(absentInWindowEarliest?.description ?? "-")..\(absentInWindowLatest?.description ?? "-"), absentAfterCutoff=\(absentAfterCutoff) (cutoff=\(cutoff?.description ?? "none"))", subsystem: .importing)
+        Log.info("Migration analysis: legacy=\(analysis.legacyItemCount), migrated=\(analysis.migratedCount), absentInWindow=\(absentInWindow) [\(sources)] span=\(absentInWindowEarliest?.description ?? "-")..\(absentInWindowLatest?.description ?? "-"), absentAfterCutoff=\(absentAfterCutoff), dateless=\(absentDateless) (cutoff=\(cutoff?.description ?? "none"))", subsystem: .importing)
         cachedMigrationAnalysis = .some(analysis)
         return analysis
     }
