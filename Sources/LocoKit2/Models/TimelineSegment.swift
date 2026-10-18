@@ -36,6 +36,7 @@ public final class TimelineSegment: Sendable {
     @ObservationIgnored
     nonisolated(unsafe)
     private var processingInterrupted = false
+    private var loggedInactiveSkip = false
 
     private let updateDebouncer = Debouncer()
 
@@ -199,10 +200,17 @@ public final class TimelineSegment: Sendable {
         guard shouldReprocessOnUpdate else { return }
         guard UIApplication.shared.applicationState == .active else {
             // BIG-789: on a slow day view the load outlives the foreground session that started
-            // it, and nothing was classified or processed for days with no line saying why
-            Log.info("TimelineSegment.update(from:) skipped classify/process: app not active (\(newItems.count) items)", subsystem: .timeline)
+            // it, and nothing was classified or processed for days with no line saying why.
+            // Once per inactive stretch: a background relaunch updates the day segment on every
+            // sample write (Matt's 13 Pro, 2026-10-18: 65 of these in 52 minutes), and the line's
+            // whole value is the first one.
+            if !loggedInactiveSkip {
+                loggedInactiveSkip = true
+                Log.info("TimelineSegment.update(from:) skipped classify/process: app not active (\(newItems.count) items); logged once until the app is active again", subsystem: .timeline)
+            }
             return
         }
+        loggedInactiveSkip = false
 
         processingTask?.cancel()
         processingTask = Task {
