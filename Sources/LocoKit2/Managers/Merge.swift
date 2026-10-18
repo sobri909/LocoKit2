@@ -113,10 +113,11 @@ internal final class Merge: Hashable, Sendable {
             return nil
         }
 
-        if TimelineProcessor.debugLogging {
-            if let description = try? description {
-                Log.info("Doing merge: \(description)", subsystem: .timeline)
-            }
+        // BIG-864: an executed merge is one line in the log file, always. Rejections were already
+        // logged and merges were not, so a bundle could show the aftermath of a merge and nothing of
+        // the decision; a merge is rare against samples and consequential against the timeline.
+        if let description = try? description {
+            Log.info("Doing merge: \(description)", subsystem: .timeline)
         }
 
         guard await Self.isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {

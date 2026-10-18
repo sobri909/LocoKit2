@@ -129,6 +129,8 @@ extension TimelineProcessor {
                 }
             }
 
+            // BIG-864: every segment type change is an extraction; one line records what it decided
+            Log.info("extractItem: segment \(segment.dateRange.start)…\(segment.dateRange.end) (\(segment.samples.count) samples); overlappers \(overlappers.map { $0.debugShortId }); delete \(itemsToDelete.map { $0.debugShortId }); break prev edges \(prevEdgesToBreak.map { $0.debugShortId }), next edges \(nextEdgesToBreak.map { $0.debugShortId }); new \(newItem.debugShortId); heal \(itemsToHeal.map { String($0.prefix(8)) })", subsystem: .timeline)
             // delete items
             for var item in itemsToDelete {
                 try item.base.updateChanges(db) {

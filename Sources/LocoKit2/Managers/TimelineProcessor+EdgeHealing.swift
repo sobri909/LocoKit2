@@ -56,6 +56,9 @@ extension TimelineProcessor {
 
         // if fully contained, transfer samples and delete (but not if locked)
         if let container, let samples = item.samples, !item.base.locked {
+            // BIG-864: the containment move is the one path that empties an item with no keepness
+            // check, so it gets a line in the log file
+            Log.info("healEdges: \(item.debugShortId) (\(item.isVisit ? "visit" : "trip"), \(samples.count) samples, \(dateRange.start)…\(dateRange.end)) lies inside \(container.debugShortId) (\(container.isVisit ? "visit" : "trip"), \(String(describing: container.dateRange?.start))…\(String(describing: container.dateRange?.end))); moving its samples and deleting it", subsystem: .timeline)
             try await Database.pool.write { db in
                 for var sample in samples {
                     try sample.updateChanges(db) {
