@@ -2348,6 +2348,1134 @@
           }
         }
       }
+    },
+    "Access to the backup folder was lost. Choose the folder again.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Zugriff auf den Backup-Ordner ist verloren gegangen. Wählen Sie den Ordner erneut aus."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se perdió el acceso a la carpeta de copia de seguridad. Elige la carpeta de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'accès au dossier de sauvegarde a été perdu. Choisissez à nouveau le dossier."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップフォルダへのアクセスが失われました。フォルダをもう一度選択してください。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สูญเสียสิทธิ์เข้าถึงโฟลเดอร์ข้อมูลสำรอง โปรดเลือกโฟลเดอร์อีกครั้ง"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法再访问备份文件夹。请重新选择该文件夹。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法再存取備份資料夾。請重新選擇該資料夾。"
+          }
+        }
+      }
+    },
+    "Another import or export is already running.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderer Import oder Export läuft bereits."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay otra importación o exportación en curso."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une autre importation ou exportation est déjà en cours."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別のインポートまたはエクスポートがすでに実行中です。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "มีการนำเข้าหรือส่งออกอื่นกำลังทำงานอยู่"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另一个导入或导出正在进行中。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另一個匯入或匯出正在進行中。"
+          }
+        }
+      }
+    },
+    "iCloud Drive isn't available on this iPhone.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive ist auf diesem iPhone nicht verfügbar."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive no está disponible en este iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive n'est pas disponible sur cet iPhone."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このiPhoneではiCloud Driveを利用できません。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive ไม่พร้อมใช้งานบน iPhone เครื่องนี้"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 iPhone 上无法使用 iCloud 云盘。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 iPhone 上無法使用 iCloud 雲碟。"
+          }
+        }
+      }
+    },
+    "Importing the backup's %@ failed.": {
+      "comment": "ImportExportError (BIG-795); %@ is one of: places, timeline items, samples, notes",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Import folgender Backup-Daten ist fehlgeschlagen: %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo importar lo siguiente de la copia de seguridad: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'importation de ces données de la sauvegarde a échoué : %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップの%@のインポートに失敗しました。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การนำเข้า%@จากข้อมูลสำรองล้มเหลว"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入备份的%@失败。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入備份的%@失敗。"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "comment": "ImportExportError noun slot",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadaten"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "metadatos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "métadonnées"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メタデータ"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ข้อมูลเมตา"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "元数据"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "元資料"
+          }
+        }
+      }
+    },
+    "No Arc Timeline 3 backups were found in that folder.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In diesem Ordner wurden keine Arc Timeline 3-Backups gefunden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se encontraron copias de seguridad de Arc Timeline 3 en esa carpeta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune sauvegarde Arc Timeline 3 n'a été trouvée dans ce dossier."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "そのフォルダにArc Timeline 3のバックアップが見つかりませんでした。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่พบข้อมูลสำรองของ Arc Timeline 3 ในโฟลเดอร์นั้น"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在该文件夹中未找到 Arc Timeline 3 备份。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在該資料夾中找不到 Arc Timeline 3 備份。"
+          }
+        }
+      }
+    },
+    "notes": {
+      "comment": "ImportExportError noun slot",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "notas"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "notes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メモ"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึก"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "筆記"
+          }
+        }
+      }
+    },
+    "places": {
+      "comment": "ImportExportError noun slot",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orte"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "lugares"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "lieux"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "場所"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สถานที่"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地点"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地點"
+          }
+        }
+      }
+    },
+    "samples": {
+      "comment": "ImportExportError noun slot",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Samples"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "muestras"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "échantillons"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サンプル"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ตัวอย่าง"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "样本"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "樣本"
+          }
+        }
+      }
+    },
+    "Some backup files are still in iCloud. Download them in the Files app, then try again.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einige Backup-Dateien befinden sich noch in iCloud. Laden Sie sie in der Dateien-App herunter und versuchen Sie es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algunos archivos de la copia de seguridad siguen en iCloud. Descárgalos en la app Archivos y vuelve a intentarlo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certains fichiers de sauvegarde sont encore dans iCloud. Téléchargez-les dans l'app Fichiers, puis réessayez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一部のバックアップファイルはまだiCloudにあります。ファイルAppでダウンロードしてから、もう一度お試しください。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไฟล์ข้อมูลสำรองบางไฟล์ยังอยู่ใน iCloud โปรดดาวน์โหลดในแอปไฟล์แล้วลองอีกครั้ง"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分备份文件仍在 iCloud 中。请在“文件”App 中下载后重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分備份檔案仍在 iCloud 中。請在「檔案」App 中下載後再試一次。"
+          }
+        }
+      }
+    },
+    "The backup folder has data but no manifest, so nothing was overwritten.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Backup-Ordner enthält Daten, aber kein Manifest, daher wurde nichts überschrieben."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La carpeta de copia de seguridad tiene datos pero no un manifiesto, así que no se sobrescribió nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le dossier de sauvegarde contient des données mais pas de manifeste, rien n'a donc été écrasé."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップフォルダにデータはありますがマニフェストがないため、何も上書きされませんでした。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "โฟลเดอร์ข้อมูลสำรองมีข้อมูลแต่ไม่มีไฟล์ manifest จึงไม่มีการเขียนทับใด ๆ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份文件夹有数据但没有清单文件，因此没有覆盖任何内容。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "備份資料夾有資料但沒有清單檔案，因此沒有覆寫任何內容。"
+          }
+        }
+      }
+    },
+    "The backup is missing its %@.": {
+      "comment": "ImportExportError (BIG-795); %@ is one of: metadata, places, timeline items, samples, timeline links",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Backup fehlt Folgendes: %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A la copia de seguridad le falta lo siguiente: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il manque à la sauvegarde : %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップに%@がありません。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ข้อมูลสำรองขาด%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份缺少%@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "備份缺少%@。"
+          }
+        }
+      }
+    },
+    "The backup's database isn't in a format this app can read.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Datenbank des Backups liegt in einem Format vor, das diese App nicht lesen kann."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La base de datos de la copia de seguridad no está en un formato que esta app pueda leer."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La base de données de la sauvegarde n'est pas dans un format que cette app peut lire."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップのデータベースは、このアプリが読み取れる形式ではありません。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ฐานข้อมูลของข้อมูลสำรองอยู่ในรูปแบบที่แอปนี้อ่านไม่ได้"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "备份的数据库格式无法被此 App 读取。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "備份的資料庫格式無法被此 App 讀取。"
+          }
+        }
+      }
+    },
+    "The backup's manifest couldn't be read.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Manifest des Backups konnte nicht gelesen werden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo leer el manifiesto de la copia de seguridad."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le manifeste de la sauvegarde n'a pas pu être lu."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックアップのマニフェストを読み取れませんでした。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถอ่านไฟล์ manifest ของข้อมูลสำรองได้"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取备份的清单文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取備份的清單檔案。"
+          }
+        }
+      }
+    },
+    "The import couldn't be set up. Please try again.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Import konnte nicht vorbereitet werden. Bitte versuchen Sie es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo preparar la importación. Inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'importation n'a pas pu être préparée. Veuillez réessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インポートを準備できませんでした。もう一度お試しください。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถเตรียมการนำเข้าได้ โปรดลองอีกครั้ง"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法准备导入。请重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法準備匯入。請再試一次。"
+          }
+        }
+      }
+    },
+    "The import was cancelled.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Import wurde abgebrochen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La importación se canceló."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'importation a été annulée."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インポートがキャンセルされました。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การนำเข้าถูกยกเลิก"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入已取消。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入已取消。"
+          }
+        }
+      }
+    },
+    "The import's local copy of the backup is gone. Start the import again.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die lokale Kopie des Backups für den Import ist nicht mehr vorhanden. Starten Sie den Import erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La copia local de la copia de seguridad para la importación ya no está. Inicia la importación de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La copie locale de la sauvegarde pour l'importation a disparu. Relancez l'importation."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インポート用のバックアップのローカルコピーがなくなりました。インポートをもう一度開始してください。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สำเนาข้อมูลสำรองในเครื่องสำหรับการนำเข้าหายไป โปรดเริ่มการนำเข้าใหม่"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入所用的备份本地副本已不存在。请重新开始导入。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入所用的備份本機副本已不存在。請重新開始匯入。"
+          }
+        }
+      }
+    },
+    "The imported data didn't pass its checks.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die importierten Daten haben die Prüfung nicht bestanden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los datos importados no superaron las comprobaciones."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les données importées n'ont pas passé les vérifications."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インポートしたデータが検証に合格しませんでした。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ข้อมูลที่นำเข้าไม่ผ่านการตรวจสอบ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入的数据未通过检查。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "匯入的資料未通過檢查。"
+          }
+        }
+      }
+    },
+    "The old app's database couldn't be opened.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Datenbank der alten App konnte nicht geöffnet werden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo abrir la base de datos de la app antigua."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La base de données de l'ancienne app n'a pas pu être ouverte."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以前のアプリのデータベースを開けませんでした。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถเปิดฐานข้อมูลของแอปเก่าได้"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法打开旧版 App 的数据库。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法開啟舊版 App 的資料庫。"
+          }
+        }
+      }
+    },
+    "There isn't enough free space on this iPhone for the import.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf diesem iPhone ist nicht genügend freier Speicher für den Import vorhanden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay suficiente espacio libre en este iPhone para la importación."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Il n'y a pas assez d'espace libre sur cet iPhone pour l'importation."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このiPhoneにはインポートに必要な空き容量がありません。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone เครื่องนี้มีพื้นที่ว่างไม่พอสำหรับการนำเข้า"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 iPhone 没有足够的可用空间来完成导入。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 iPhone 沒有足夠的可用空間來完成匯入。"
+          }
+        }
+      }
+    },
+    "This backup belongs to a different export.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Backup gehört zu einem anderen Export."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta copia de seguridad pertenece a una exportación diferente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette sauvegarde appartient à une autre exportation."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このバックアップは別のエクスポートのものです。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ข้อมูลสำรองนี้เป็นของการส่งออกอื่น"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此备份属于另一次导出。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此備份屬於另一次匯出。"
+          }
+        }
+      }
+    },
+    "This iPhone's identifier couldn't be read.": {
+      "comment": "ImportExportError (BIG-795)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kennung dieses iPhones konnte nicht gelesen werden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo leer el identificador de este iPhone."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'identifiant de cet iPhone n'a pas pu être lu."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このiPhoneの識別子を読み取れませんでした。"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ไม่สามารถอ่านตัวระบุของ iPhone เครื่องนี้ได้"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取此 iPhone 的标识符。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取此 iPhone 的識別碼。"
+          }
+        }
+      }
+    },
+    "timeline items": {
+      "comment": "ImportExportError noun slot",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitachsen-Einträge"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "elementos de la cronología"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "éléments de la chronologie"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイムライン項目"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "รายการไทม์ไลน์"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "时间线项目"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時間軸項目"
+          }
+        }
+      }
+    },
+    "timeline links": {
+      "comment": "ImportExportError noun slot",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitachsen-Verknüpfungen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "enlaces de la cronología"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "liens de la chronologie"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タイムラインのつながり"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "การเชื่อมต่อไทม์ไลน์"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "时间线链接"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時間軸連結"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
