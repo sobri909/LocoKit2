@@ -46,37 +46,74 @@ extension TimelineProcessor {
             mutableDeadman.visit = mutableVisit
         }
 
-        var merges: Set<Merge> = []
+        // BIG-865: bridges (a neighbour consuming the deadman AND the other neighbour) and
+        // adjacent merges (a neighbour consuming only the deadman) are kept apart, because
+        // only the adjacent ones may run as a fallback. The deadman is scored as disposable
+        // in the adjacent merges: the user has said it isn't worth keeping, so its keeper
+        // duration can't make every candidate .impossible (which is what used to hand the
+        // choice to Set hash order, and let a bridge delete a keeper trip the user never
+        // touched).
+        var bridgeMerges: Set<Merge> = []
+        var adjacentMerges: Set<Merge> = []
 
         // try merge next and previous
         if let next = await mutableDeadman.nextItem(in: list),
             let previous = await mutableDeadman.previousItem(in: list) {
-            merges.insert(await Merge(keeper: next, betweener: mutableDeadman, deadman: previous, in: list))
-            merges.insert(await Merge(keeper: previous, betweener: mutableDeadman, deadman: next, in: list))
+            bridgeMerges.insert(await Merge(keeper: next, betweener: mutableDeadman, deadman: previous, in: list))
+            bridgeMerges.insert(await Merge(keeper: previous, betweener: mutableDeadman, deadman: next, in: list))
         }
 
         // try merge into previous
         if let previous = await mutableDeadman.previousItem(in: list) {
-            merges.insert(await Merge(keeper: previous, deadman: mutableDeadman, in: list))
+            adjacentMerges.insert(await Merge(keeper: previous, deadman: mutableDeadman, in: list, deadmanIsDisposable: true))
         }
 
         // try merge into next
         if let next = await mutableDeadman.nextItem(in: list) {
-            merges.insert(await Merge(keeper: next, deadman: mutableDeadman, in: list))
+            adjacentMerges.insert(await Merge(keeper: next, deadman: mutableDeadman, in: list, deadmanIsDisposable: true))
         }
 
-        let sortedMerges = merges.sorted { $0.score.rawValue > $1.score.rawValue }
+        // highest score first; on equal scores an adjacent merge sorts ahead of a bridge, so a
+        // tie never hands "which neighbour also dies" to Set order
+        let sortedMerges = bridgeMerges.union(adjacentMerges).sorted {
+            ($0.score.rawValue, $0.betweener == nil ? 1 : 0) > ($1.score.rawValue, $1.betweener == nil ? 1 : 0)
+        }
 
         if TimelineProcessor.debugLogging {
-            print("Considering \(merges.count) merges")
+            print("Considering \(sortedMerges.count) merges")
             if let bestScore = sortedMerges.first?.score {
                 print("Best merge score: \(bestScore)")
             }
         }
 
-        // try the best scoring merge first
-        if let winningMerge = sortedMerges.first {
+        // the best scoring merge, when one actually scores
+        if let winningMerge = sortedMerges.first, winningMerge.score != .impossible {
             if let results = await winningMerge.doIt() {
+                await processFrom(itemId: results.kept.id)
+            } else {
+                // a failed doIt() writes nothing (the transaction rolls back), so the visit is
+                // simply still there; no fallback, since the scored merge was the right one
+                Log.info("safeDeleteVisit: the winning merge didn't apply; visit left as is", subsystem: .timeline)
+            }
+            return
+        }
+
+        // nothing scores: the user still wants the visit gone, so fall back to an adjacent
+        // merge (the deadman's own samples into its nearer neighbour). Never a bridge: a
+        // bridge also deletes the other neighbour, which the user didn't ask for. Data gap
+        // and nolo neighbours are left out: located samples merged into them would stop
+        // them being what they are. Ties on distance go to the neighbour worth more.
+        func fallbackRank(_ merge: Merge) -> (Double, Int) {
+            let gap = ((try? merge.keeper.distance(from: mutableDeadman)) ?? nil) ?? .greatestFiniteMagnitude
+            let keepness = (try? merge.keeper.keepnessScore) ?? 0
+            return (gap, -keepness)
+        }
+        let fallback = adjacentMerges
+            .filter { ((try? $0.keeper.isDataGap) ?? true) == false && ((try? $0.keeper.isNolo) ?? true) == false }
+            .min { fallbackRank($0) < fallbackRank($1) }
+        if let fallback {
+            Log.info("safeDeleteVisit: no merge scored above impossible; falling back to adjacent merge into \(fallback.keeper.isVisit ? "visit" : "trip") \(fallback.keeper.id)", subsystem: .timeline)
+            if let results = await fallback.doIt() {
                 await processFrom(itemId: results.kept.id)
                 return
             }

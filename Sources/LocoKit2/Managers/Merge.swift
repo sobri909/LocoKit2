@@ -18,17 +18,19 @@ internal final class Merge: Hashable, Sendable {
     let deadman: TimelineItem
     let score: MergeScore
 
-    init(keeper: TimelineItem, betweener: TimelineItem? = nil, deadman: TimelineItem, in list: TimelineLinkedList) async {
+    /// `deadmanIsDisposable`: the deadman is a visit the user is deleting (BIG-865); its keeper
+    /// status is ignored when scoring. Only `TimelineProcessor.safeDeleteVisit` passes true.
+    init(keeper: TimelineItem, betweener: TimelineItem? = nil, deadman: TimelineItem, in list: TimelineLinkedList, deadmanIsDisposable: Bool = false) async {
         self.list = list
         self.keeper = keeper
         self.deadman = deadman
         self.betweener = betweener
-        self.score = await Self.calculateScore(keeper: keeper, betweener: betweener, deadman: deadman, in: list)
+        self.score = await Self.calculateScore(keeper: keeper, betweener: betweener, deadman: deadman, in: list, deadmanIsDisposable: deadmanIsDisposable)
     }
 
     // MARK: -
 
-    private static func calculateScore(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> MergeScore {
+    private static func calculateScore(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList, deadmanIsDisposable: Bool) async -> MergeScore {
         guard await isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
             return .impossible
         }
@@ -38,7 +40,7 @@ internal final class Merge: Hashable, Sendable {
         // exceeds the betweener's (collectBridgeMerges / collectAdjacentMerges in
         // TimelineProcessor+Merges.swift), so the betweener consult happens one
         // layer up, at collection time. Keeper-sized items never enter a bridge.
-        return await keeper.scoreForConsuming(deadman)
+        return await keeper.scoreForConsuming(deadman, consumeeIsDisposable: deadmanIsDisposable)
     }
 
     private static func isValid(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> Bool {

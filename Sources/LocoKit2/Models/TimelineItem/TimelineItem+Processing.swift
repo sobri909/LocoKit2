@@ -10,9 +10,11 @@ import CoreLocation
 
 extension TimelineItem {
 
+    /// `consumeeIsDisposable` is the user-deletion case (BIG-865): the consumee's
+    /// keeper status is ignored because the user has said it isn't worth keeping.
     @TimelineActor
-    public func scoreForConsuming(_ item: TimelineItem) async -> ConsumptionScore {
-        return await MergeScores.consumptionScoreFor(self, toConsume: item)
+    public func scoreForConsuming(_ item: TimelineItem, consumeeIsDisposable: Bool = false) async -> ConsumptionScore {
+        return await MergeScores.consumptionScoreFor(self, toConsume: item, consumeeIsDisposable: consumeeIsDisposable)
     }
 
     public var keepnessScore: Int {

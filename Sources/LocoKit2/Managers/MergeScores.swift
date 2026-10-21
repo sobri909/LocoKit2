@@ -21,7 +21,13 @@ public enum ConsumptionScore: Int {
 public final class MergeScores {
 
     // MARK: - SOMETHING <- SOMETHING
-    static func consumptionScoreFor(_ consumer: TimelineItem, toConsume consumee: TimelineItem) async -> ConsumptionScore {
+
+    /// `consumeeIsDisposable`: the consumee is a visit the user is deleting (BIG-865), so its
+    /// keeper status (confirmed place, custom title, or keeper duration) must not make the
+    /// merge impossible. This changes scoring only: the mergeable-distance and overlap checks
+    /// still run, and whether an .impossible merge runs anyway is the caller's decision. Only
+    /// `TimelineProcessor.safeDeleteVisit` passes true; normal processing is unchanged.
+    static func consumptionScoreFor(_ consumer: TimelineItem, toConsume consumee: TimelineItem, consumeeIsDisposable: Bool = false) async -> ConsumptionScore {
         guard let consumerSamples = consumer.samples else { return .impossible }
         guard let consumeeSamples = consumee.samples else { return .impossible }
 
@@ -78,7 +84,7 @@ public final class MergeScores {
             if consumer.isVisit {
                 return consumptionScoreFor(visit: consumer, toConsume: consumee)
             } else { // trip <- something
-                return try await consumptionScoreFor(trip: consumer, toConsume: consumee)
+                return try await consumptionScoreFor(trip: consumer, toConsume: consumee, consumeeIsDisposable: consumeeIsDisposable)
             }
 
         } catch {
@@ -88,7 +94,7 @@ public final class MergeScores {
     }
 
     // MARK: - TRIP <- SOMETHING
-    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsume consumee: TimelineItem) async throws -> ConsumptionScore {
+    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsume consumee: TimelineItem, consumeeIsDisposable: Bool) async throws -> ConsumptionScore {
         guard consumer.isTrip else { fatalError() }
 
         // consumer is invalid
@@ -102,7 +108,7 @@ public final class MergeScores {
         }
 
         // trip <- visit
-        if consumee.isVisit { return try consumptionScoreFor(trip: consumer, toConsumeVisit: consumee) }
+        if consumee.isVisit { return try consumptionScoreFor(trip: consumer, toConsumeVisit: consumee, consumeeIsDisposable: consumeeIsDisposable) }
 
         // trip <- trip
         if consumee.isTrip { return try await consumptionScoreFor(trip: consumer, toConsumeTrip: consumee) }
@@ -111,11 +117,11 @@ public final class MergeScores {
     }
     
     // MARK: - TRIP <- VISIT
-    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeVisit consumee: TimelineItem) throws -> ConsumptionScore {
+    private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeVisit consumee: TimelineItem, consumeeIsDisposable: Bool) throws -> ConsumptionScore {
         guard consumer.isTrip, consumee.isVisit else { fatalError() }
 
-        // can't consume a keeper visit
-        if try consumee.isWorthKeeping { return .impossible }
+        // can't consume a keeper visit (unless the user is deleting it, BIG-865)
+        if !consumeeIsDisposable, try consumee.isWorthKeeping { return .impossible }
 
         // consumer is keeper
         if try consumer.isWorthKeeping {
