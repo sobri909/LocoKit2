@@ -88,7 +88,7 @@ extension TimelineProcessor {
 
         // the best scoring merge, when one actually scores
         if let winningMerge = sortedMerges.first, winningMerge.score != .impossible {
-            if let results = await winningMerge.doIt() {
+            if case .merged(let results) = await winningMerge.doIt() {
                 await processFrom(itemId: results.kept.id)
             } else {
                 // a failed doIt() writes nothing (the transaction rolls back), so the visit is
@@ -113,7 +113,7 @@ extension TimelineProcessor {
             .min { fallbackRank($0) < fallbackRank($1) }
         if let fallback {
             Log.info("safeDeleteVisit: no merge scored above impossible; falling back to adjacent merge into \(fallback.keeper.isVisit ? "visit" : "trip") \(fallback.keeper.id)", subsystem: .timeline)
-            if let results = await fallback.doIt() {
+            if case .merged(let results) = await fallback.doIt() {
                 await processFrom(itemId: results.kept.id)
                 return
             }

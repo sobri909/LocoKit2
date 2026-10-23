@@ -794,8 +794,21 @@ public final class LocomotionManager: @unchecked Sendable {
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = true
-        manager.allowsBackgroundLocationUpdates = true
+        manager.allowsBackgroundLocationUpdates = LocomotionManager.hostAllowsBackgroundLocation
         return manager
+    }()
+
+    /// On device, always true. On the simulator, only when the host bundle declares the location
+    /// background mode: a host without it (the package's xctest runner, BIG-752's tests) throws
+    /// NSInternalInconsistencyException on `allowsBackgroundLocationUpdates = true`. The app declares
+    /// the mode, so nothing changes for it.
+    private static let hostAllowsBackgroundLocation: Bool = {
+        #if targetEnvironment(simulator)
+        let backgroundModes = Bundle.main.infoDictionary?["UIBackgroundModes"] as? [String] ?? []
+        return backgroundModes.contains("location")
+        #else
+        return true
+        #endif
     }()
 
     // Created in the shield config, matching useShieldRegime's default: this closure runs at
@@ -809,7 +822,7 @@ public final class LocomotionManager: @unchecked Sendable {
         manager.desiredAccuracy = 999
         manager.pausesLocationUpdatesAutomatically = false
         manager.showsBackgroundLocationIndicator = false
-        manager.allowsBackgroundLocationUpdates = true
+        manager.allowsBackgroundLocationUpdates = LocomotionManager.hostAllowsBackgroundLocation
         return manager
     }()
 

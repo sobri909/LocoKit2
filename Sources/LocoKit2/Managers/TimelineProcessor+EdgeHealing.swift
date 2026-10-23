@@ -15,13 +15,42 @@ extension TimelineProcessor {
     static let edgeHealingThreshold: TimeInterval = .minutes(15)
 
     static func healEdges(itemId: String) async throws {
-        guard let item = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) else {
+        guard let fetched = try await TimelineItem.fetchItem(itemId: itemId, includeSamples: true) else {
             return
         }
 
-        if item.deleted || item.disabled {
+        if fetched.deleted || fetched.disabled {
             return
         }
+
+        // an edge whose item is deleted or missing is cleared first and then healed like a nil edge
+        // (BIG-752): old data can carry one, and nothing else repairs it; the edge triggers only prevent
+        // new ones. Cleared before the zombie check, so an empty item whose only edges dangle is a zombie.
+        let (previousDangling, nextDangling) = try await Database.pool.read { db in
+            func dangling(_ id: String?) throws -> Bool {
+                guard let id else { return false }
+                return try TimelineItemBase
+                    .filter(TimelineItemBase.Columns.id == id)
+                    .filter(TimelineItemBase.Columns.deleted == false)
+                    .fetchCount(db) == 0
+            }
+            return (try dangling(fetched.base.previousItemId), try dangling(fetched.base.nextItemId))
+        }
+        var cleared = fetched
+        if previousDangling || nextDangling {
+            let which = [previousDangling ? "previous" : nil, nextDangling ? "next" : nil].compactMap { $0 }.joined(separator: " and ")
+            Log.info("healEdges: \(fetched.debugShortId) has a \(which) edge to a deleted or missing item; clearing it (BIG-752)", subsystem: .timeline)
+            try await Database.pool.write { db in
+                var row = fetched
+                try row.base.updateChanges(db) {
+                    if previousDangling { $0.previousItemId = nil }
+                    if nextDangling { $0.nextItemId = nil }
+                }
+            }
+            if previousDangling { cleared.base.previousItemId = nil }
+            if nextDangling { cleared.base.nextItemId = nil }
+        }
+        let item = cleared
 
         // detect and soft delete zombie items (empty with no edges)
         if (item.samples?.isEmpty ?? true) && item.base.previousItemId == nil && item.base.nextItemId == nil {

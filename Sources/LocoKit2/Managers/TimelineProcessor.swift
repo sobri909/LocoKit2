@@ -60,9 +60,13 @@ public enum TimelineProcessor {
 
         defer { OperationRegistry.endOperation(handle) }
         
-        var lastResult: MergeResult?
+        // BIG-752: the belt and the no-repeat set. A merge whose write is refused twice sits out the rest
+        // of this call, and three iterations in a row without a merge end the call with one error line,
+        // where the loop used to retry a refused write against the same cached list without limit.
+        var failures: [String: Int] = [:]
+        var noProgress = 0
         do {
-            while true {
+            processing: while true {
                 try await sanitiseEdges(for: list)
 
                 // heal broken edges for items in the list
@@ -75,6 +79,7 @@ public enum TimelineProcessor {
                 }
 
                 let merges = try await collectPotentialMerges(for: list)
+                    .filter { (failures[$0.key] ?? 0) < 2 }
                     .sorted { $0.score.rawValue > $1.score.rawValue }
 
                 if TimelineProcessor.debugLogging {
@@ -96,21 +101,60 @@ public enum TimelineProcessor {
                     break
                 }
 
-                lastResult = await winningMerge.doIt()
+                let outcome = await winningMerge.doIt()
 
                 // might've deleted current item
                 TimelineRecorder.updateCurrentItemId()
 
-                if let lastResult {
-                    list.invalidate(itemId: lastResult.kept.id)
-                    for killed in lastResult.killed {
+                switch outcome {
+                case .merged(let result):
+                    noProgress = 0
+                    list.invalidate(itemId: result.kept.id)
+                    for killed in result.killed {
                         list.invalidate(itemId: killed.id)
                     }
+                    // the keeper's neighbours were rewired by the edge triggers; their cached copies are
+                    // stale, and the next merge may inherit from them (BIG-752)
+                    for neighbourId in [result.kept.base.previousItemId, result.kept.base.nextItemId].compactMap({ $0 }) {
+                        list.invalidate(itemId: neighbourId)
+                    }
+                case .notValid:
+                    noProgress += 1
+                    invalidate(winningMerge, in: list)
+                case .failed:
+                    noProgress += 1
+                    failures[winningMerge.key, default: 0] += 1
+                    invalidate(winningMerge, in: list)
+                case .blocked:
+                    break processing
+                }
+
+                if noProgress >= 3 {
+                    let betweener = winningMerge.betweener.map { ", betweener \($0.debugShortId)" } ?? ""
+                    let line = "TimelineProcessor.process: no progress after \(noProgress) attempts; stopping this call. last merge: keeper \(winningMerge.keeper.debugShortId), deadman \(winningMerge.deadman.debugShortId)\(betweener)"
+                    // a refused write is the fault this belt exists for; three not-valid results in a row are
+                    // concurrent churn (another call on an overlapping list), worth a line but not an error
+                    if failures.isEmpty {
+                        Log.info(line, subsystem: .timeline)
+                    } else {
+                        Log.error(line, subsystem: .timeline)
+                    }
+                    break processing
                 }
             }
 
         } catch {
             Log.error(error, subsystem: .timeline)
+        }
+    }
+
+    /// The three items of a merge that did not apply are re-read from the database on the next
+    /// iteration (BIG-752).
+    private static func invalidate(_ merge: Merge, in list: TimelineLinkedList) {
+        list.invalidate(itemId: merge.keeper.id)
+        list.invalidate(itemId: merge.deadman.id)
+        if let betweener = merge.betweener {
+            list.invalidate(itemId: betweener.id)
         }
     }
 

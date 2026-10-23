@@ -76,20 +76,29 @@ public enum ActivityTypesManager {
     }
     
     private static func processModelsForBackground() async throws {
+        // BIG-752: a model whose needsUpdate write fails, or whose update is refused as a duplicate, was
+        // fetched again at once and forever. One attempt per model per run: the fetch excludes the keys
+        // already tried, so a model re-flagged mid-run waits for the next run and the others still get theirs.
+        var attempted: Set<String> = []
         while true {
             if Task.isCancelled { throw CancellationError() }
             
             // get prioritised model to update (one at a time)
-            let model = await fetchNextModelToUpdate()
+            let model = await fetchNextModelToUpdate(excluding: attempted)
             
             // no more models to update? we're done
             guard let model else { return }
+
+            guard attempted.insert(model.geoKey).inserted else {
+                Log.error("ActivityTypesManager.processModelsForBackground: \(model.geoKey) came back despite the exclusion; stopping this run", subsystem: .activitytypes)
+                return
+            }
             
             await updateModel(geoKey: model.geoKey)
         }
     }
     
-    private static func fetchNextModelToUpdate() async -> ActivityTypesModel? {
+    private static func fetchNextModelToUpdate(excluding attempted: Set<String> = []) async -> ActivityTypesModel? {
 
         // CD0 update interval for already "complete" models
         let cd0UpdateInterval: TimeInterval = .days(7)
@@ -114,6 +123,7 @@ public enum ActivityTypesManager {
                         """,
                         arguments: [ActivityTypesModel.modelMinTrainingSamples[0]!, ActivityTypesModel.modelMinTrainingSamples[0]!]
                     )
+                    .filter { !attempted.contains($0.geoKey) }
                     .order { [$0.depth.desc, $0.totalSamples.asc] }
                     .fetchOne(db)
             }
