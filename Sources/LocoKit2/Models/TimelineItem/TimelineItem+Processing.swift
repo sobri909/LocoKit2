@@ -12,9 +12,10 @@ extension TimelineItem {
 
     /// `consumeeIsDisposable` is the user-deletion case (BIG-865): the consumee's
     /// keeper status is ignored because the user has said it isn't worth keeping.
+    /// `ignoringLocks` is the same case for locked imports (BIG-908).
     @TimelineActor
-    public func scoreForConsuming(_ item: TimelineItem, consumeeIsDisposable: Bool = false) async -> ConsumptionScore {
-        return await MergeScores.consumptionScoreFor(self, toConsume: item, consumeeIsDisposable: consumeeIsDisposable)
+    public func scoreForConsuming(_ item: TimelineItem, consumeeIsDisposable: Bool = false, ignoringLocks: Bool = false) async -> ConsumptionScore {
+        return await MergeScores.consumptionScoreFor(self, toConsume: item, consumeeIsDisposable: consumeeIsDisposable, ignoringLocks: ignoringLocks)
     }
 
     public var keepnessScore: Int {
@@ -94,8 +95,8 @@ extension TimelineItem {
         // TRIP <-> TRIP
 
         // get the same edge samples we'll use for distance calculation
-        guard let edge = try? edgeSample(withOtherItemId: otherItem.id, requireLocation: true),
-              let otherEdge = try? otherItem.edgeSample(withOtherItemId: self.id, requireLocation: true) else {
+        guard let edge = try? edgeSample(facing: otherItem, requireLocation: true),
+              let otherEdge = try? otherItem.edgeSample(facing: self, requireLocation: true) else {
             return 0
         }
 
@@ -128,9 +129,9 @@ extension TimelineItem {
     private func distanceFromTripToTrip(_ otherItem: TimelineItem) throws -> CLLocationDistance? {
         guard self.isTrip, otherItem.isTrip else { fatalError() }
 
-        // get the edge samples requiring valid locations
-        guard let selfEdge = try edgeSample(withOtherItemId: otherItem.id, requireLocation: true),
-              let otherEdge = try otherItem.edgeSample(withOtherItemId: self.id, requireLocation: true),
+        // get the edge samples requiring valid locations (facing, not only linked: BIG-908)
+        guard let selfEdge = try edgeSample(facing: otherItem, requireLocation: true),
+              let otherEdge = try otherItem.edgeSample(facing: self, requireLocation: true),
               let selfLocation = selfEdge.location,
               let otherLocation = otherEdge.location else {
             return nil
@@ -202,6 +203,23 @@ extension TimelineItem {
         }
 
         return nil
+    }
+
+    /// The end of this item that faces `otherItem`: the linked edge when the two are neighbours,
+    /// otherwise the end nearer in time (the earlier item's last sample, the later item's first).
+    /// For distances between trips that aren't linked yet, as in a bridge merge, where the two trips
+    /// either side of the betweener become neighbours once it's consumed. Old LocoKit measured
+    /// path-to-path distance this way (`edgeSample(with:requireEdgeLink: false)`); the LocoKit2 port
+    /// kept only the linked edge, so a trip <- visit <- trip bridge could never score (BIG-908).
+    internal func edgeSample(facing otherItem: TimelineItem, requireLocation: Bool = false) throws -> LocomotionSample? {
+        if let linked = try edgeSample(withOtherItemId: otherItem.id, requireLocation: requireLocation) {
+            return linked
+        }
+        guard let samples, let myStart = dateRange?.start, let theirStart = otherItem.dateRange?.start else {
+            return nil
+        }
+        let fromFacingEnd = myStart < theirStart ? Array(samples.reversed()) : samples
+        return requireLocation ? fromFacingEnd.first { $0.hasUsableCoordinate } : fromFacingEnd.first
     }
 
     public func secondToEdgeSample(withOtherItemId otherItemId: String) throws -> LocomotionSample? {

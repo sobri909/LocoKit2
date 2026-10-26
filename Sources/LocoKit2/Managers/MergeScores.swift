@@ -27,7 +27,11 @@ public final class MergeScores {
     /// merge impossible. This changes scoring only: the mergeable-distance and overlap checks
     /// still run, and whether an .impossible merge runs anyway is the caller's decision. Only
     /// `TimelineProcessor.safeDeleteVisit` passes true; normal processing is unchanged.
-    static func consumptionScoreFor(_ consumer: TimelineItem, toConsume consumee: TimelineItem, consumeeIsDisposable: Bool = false) async -> ConsumptionScore {
+    ///
+    /// `ignoringLocks`: the merge carries out a user's delete (BIG-908). An import's lock protects
+    /// its structure from processing, not from the user, so it doesn't make the merge impossible.
+    /// Only `safeDeleteVisit` passes true.
+    static func consumptionScoreFor(_ consumer: TimelineItem, toConsume consumee: TimelineItem, consumeeIsDisposable: Bool = false, ignoringLocks: Bool = false) async -> ConsumptionScore {
         guard let consumerSamples = consumer.samples else { return .impossible }
         guard let consumeeSamples = consumee.samples else { return .impossible }
 
@@ -37,8 +41,8 @@ public final class MergeScores {
         // disabled can't consume or be consumed
         if consumer.disabled || consumee.disabled { return .impossible }
 
-        // locked can't consume or be consumed
-        if consumer.locked || consumee.locked { return .impossible }
+        // locked can't consume or be consumed (unless the user is deleting, BIG-908)
+        if !ignoringLocks, consumer.locked || consumee.locked { return .impossible }
 
         // if consumee is currentItem and not a keeper, no merge allowed
         if consumee.id == TimelineRecorder.currentItemId {

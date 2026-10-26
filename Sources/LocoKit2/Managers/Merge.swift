@@ -17,37 +17,56 @@ internal final class Merge: Hashable, Sendable {
     let betweener: TimelineItem?
     let deadman: TimelineItem
     let score: MergeScore
+    let overridesLocks: Bool
 
     /// `deadmanIsDisposable`: the deadman is a visit the user is deleting (BIG-865); its keeper
     /// status is ignored when scoring. Only `TimelineProcessor.safeDeleteVisit` passes true.
-    init(keeper: TimelineItem, betweener: TimelineItem? = nil, deadman: TimelineItem, in list: TimelineLinkedList, deadmanIsDisposable: Bool = false) async {
+    ///
+    /// `overridesLocks`: the merge carries out a user's delete (BIG-908), so locked items may take
+    /// part. An import's lock (workout, GPX) protects its structure from processing, not from the
+    /// user. It applies to scoring, the validity check and `doIt()`'s fresh-row recheck alike; a
+    /// kept item keeps its own lock. Only `TimelineProcessor.safeDeleteVisit` passes true.
+    init(keeper: TimelineItem, betweener: TimelineItem? = nil, deadman: TimelineItem, in list: TimelineLinkedList, deadmanIsDisposable: Bool = false, overridesLocks: Bool = false) async {
         self.list = list
         self.keeper = keeper
         self.deadman = deadman
         self.betweener = betweener
-        self.score = await Self.calculateScore(keeper: keeper, betweener: betweener, deadman: deadman, in: list, deadmanIsDisposable: deadmanIsDisposable)
+        self.overridesLocks = overridesLocks
+        self.score = await Self.calculateScore(keeper: keeper, betweener: betweener, deadman: deadman, in: list, deadmanIsDisposable: deadmanIsDisposable, overridesLocks: overridesLocks)
     }
 
     // MARK: -
 
-    private static func calculateScore(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList, deadmanIsDisposable: Bool) async -> MergeScore {
-        guard await isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
+    private static func calculateScore(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList, deadmanIsDisposable: Bool, overridesLocks: Bool) async -> MergeScore {
+        guard await isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list, overridesLocks: overridesLocks) else {
             return .impossible
         }
         // NB: the betweener's content is deliberately not scored here. This is NOT a
-        // gap (it's been repeatedly misdiagnosed as one): betweener-carrying merges
-        // are only ever constructed when BOTH neighbours' keepnessScore strictly
-        // exceeds the betweener's (collectBridgeMerges / collectAdjacentMerges in
-        // TimelineProcessor+Merges.swift), so the betweener consult happens one
-        // layer up, at collection time. Keeper-sized items never enter a bridge.
-        return await keeper.scoreForConsuming(deadman, consumeeIsDisposable: deadmanIsDisposable)
+        // gap (it's been repeatedly misdiagnosed as one): in normal processing,
+        // betweener-carrying merges are only ever constructed when BOTH neighbours'
+        // keepnessScore strictly exceeds the betweener's (collectBridgeMerges /
+        // collectBetweenerMerges in TimelineProcessor+Merges.swift), so the betweener
+        // consult happens one layer up, at collection time. The exception is
+        // safeDeleteVisit, whose betweener is whatever visit the user deleted. A data
+        // gap betweener is refused outright in isValid (BIG-908).
+        return await keeper.scoreForConsuming(deadman, consumeeIsDisposable: deadmanIsDisposable, ignoringLocks: overridesLocks)
     }
 
-    private static func isValid(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList) async -> Bool {
+    private static func isValid(keeper: TimelineItem, betweener: TimelineItem?, deadman: TimelineItem, in list: TimelineLinkedList, overridesLocks: Bool) async -> Bool {
         // check 1: basic state validity
         if keeper.deleted || deadman.deleted || betweener?.deleted == true { return false }
         if keeper.disabled || deadman.disabled || betweener?.disabled == true { return false }
-        if keeper.locked || deadman.locked || betweener?.locked == true { return false }
+        if !overridesLocks, keeper.locked || deadman.locked || betweener?.locked == true { return false }
+
+        // a bridge never swallows a data gap. Its middle item isn't scored, so once trip-to-trip
+        // distance could reach across a betweener (BIG-908) a gap between two same-type trips would
+        // vanish into one trip; before that the distance was nil and such a bridge never ran
+        if let betweener, !betweener.isVisit, (try? betweener.isDataGap) == true { return false }
+
+        // a bridge joins two items of the same lock state only. Across a locked import and an unlocked
+        // recording, which survives (its lock, and whose samples end up inside it) would come down to
+        // which of two equal bridges sorted first. Old LocoKit required matching sources here (BIG-908)
+        if betweener != nil, keeper.locked != deadman.locked { return false }
 
         // check 2: items are in a valid merge pattern and result won't be circular or same-neighbor.
         // The same-neighbor checks compare the edge the keeper would inherit against the keeper's
@@ -143,7 +162,7 @@ internal final class Merge: Hashable, Sendable {
             Log.info("Doing merge: \(description) [\(ids); \(keeper.dateRange?.start.description ?? "no date")]", subsystem: .timeline)
         }
 
-        guard await Self.isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list) else {
+        guard await Self.isValid(keeper: keeper, betweener: betweener, deadman: deadman, in: list, overridesLocks: overridesLocks) else {
             Log.error("Merge no longer valid", subsystem: .timeline)
             return .notValid
         }
@@ -169,7 +188,7 @@ internal final class Merge: Hashable, Sendable {
 
         // do the db changes
         do {
-            let result: MergeResult = try await Database.pool.write { [mutableKeeper, itemsToDelete] db in
+            let result: MergeResult = try await Database.pool.write { [mutableKeeper, itemsToDelete, overridesLocks] db in
                 var mutableKeeper = mutableKeeper
 
                 // BIG-752: the edge the keeper inherits is read from the rows as they are NOW, not from the
@@ -180,13 +199,13 @@ internal final class Merge: Hashable, Sendable {
                 // forever (4,587 identical merges in 33 s on the 13 Pro, 2026-10-22).
                 guard let freshKeeper = try TimelineItemBase.fetchOne(db, key: self.keeper.id),
                       let freshDeadman = try TimelineItemBase.fetchOne(db, key: self.deadman.id),
-                      !freshKeeper.deleted, !freshKeeper.disabled, !freshKeeper.locked,
-                      !freshDeadman.deleted, !freshDeadman.disabled, !freshDeadman.locked
+                      !freshKeeper.deleted, !freshKeeper.disabled, overridesLocks || !freshKeeper.locked,
+                      !freshDeadman.deleted, !freshDeadman.disabled, overridesLocks || !freshDeadman.locked
                 else { throw NoLongerValid() }
                 var freshBetweener: TimelineItemBase?
                 if let betweener = self.betweener {
                     guard let fresh = try TimelineItemBase.fetchOne(db, key: betweener.id),
-                          !fresh.deleted, !fresh.disabled, !fresh.locked
+                          !fresh.deleted, !fresh.disabled, overridesLocks || !fresh.locked
                     else { throw NoLongerValid() }
                     freshBetweener = fresh
                 }

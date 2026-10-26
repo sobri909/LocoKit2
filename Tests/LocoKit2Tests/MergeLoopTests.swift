@@ -16,12 +16,8 @@ import GRDB
 
 final class MergeLoopTests: XCTestCase {
 
-    private static let migrated: Void = {
-        Database.highlander.doMigrations()
-    }()
-
     override func setUp() async throws {
-        _ = Self.migrated
+        _ = TimelineTestFixtures.migrated
     }
 
     // MARK: - Case B: the deadman's edge points at a deleted item in the database
@@ -31,7 +27,7 @@ final class MergeLoopTests: XCTestCase {
     /// loop retried the same merge without limit. Now the inherited edge is read fresh and a dangling
     /// one is inherited as nil, so the merge applies and the loop ends.
     func testMergeInheritingADanglingEdgeAppliesAndTheLoopEnds() async throws {
-        let base = Self.freshWindow()
+        let base = TimelineTestFixtures.freshWindow()
         let home = CLLocationCoordinate2D(latitude: 13.75, longitude: 100.55)
 
         let (deadId, keeperId, invalidId) = try await Self.stageDanglingPair(base: base, at: home)
@@ -60,16 +56,16 @@ final class MergeLoopTests: XCTestCase {
     /// while the loop's cache keeps I's old copy; K's merge of I used to inherit that stale edge and
     /// be refused forever. The loop must end with every edge pointing at a live item.
     func testChainOfMergesEndsWithNoEdgeToADeletedItem() async throws {
-        let base = Self.freshWindow()
+        let base = TimelineTestFixtures.freshWindow()
         let home = CLLocationCoordinate2D(latitude: -8.65, longitude: 115.13)
         let away = CLLocationCoordinate2D(latitude: -8.70, longitude: 115.20)
 
         let ids = try await Database.pool.write { db -> [String] in
-            let v = try Self.makeItem(isVisit: true, start: base, count: 12, at: home, db: db)
-            let t = try Self.makeItem(isVisit: false, start: base.addingTimeInterval(13 * 60), count: 1, at: home, db: db)
-            let i = try Self.makeItem(isVisit: true, start: base.addingTimeInterval(15 * 60), count: 1, at: home, db: db)
-            let k = try Self.makeItem(isVisit: true, start: base.addingTimeInterval(17 * 60), count: 12, at: away, db: db)
-            try Self.link(db, v.id, t.id, i.id, k.id)
+            let v = try TimelineTestFixtures.makeItem(isVisit: true, start: base, count: 12, at: home, db: db)
+            let t = try TimelineTestFixtures.makeItem(isVisit: false, start: base.addingTimeInterval(13 * 60), count: 1, at: home, db: db)
+            let i = try TimelineTestFixtures.makeItem(isVisit: true, start: base.addingTimeInterval(15 * 60), count: 1, at: home, db: db)
+            let k = try TimelineTestFixtures.makeItem(isVisit: true, start: base.addingTimeInterval(17 * 60), count: 12, at: away, db: db)
+            try TimelineTestFixtures.link(db, v.id, t.id, i.id, k.id)
             return [v.id, t.id, i.id, k.id]
         }
 
@@ -97,7 +93,7 @@ final class MergeLoopTests: XCTestCase {
 
     /// D(deleted) <- I -> K, merged directly: the keeper inherits nil for the dangling edge.
     func testMergeInheritsNilForADanglingEdge() async throws {
-        let base = Self.freshWindow()
+        let base = TimelineTestFixtures.freshWindow()
         let home = CLLocationCoordinate2D(latitude: 1.29, longitude: 103.85)
         let (deadId, keeperId, invalidId) = try await Self.stageDanglingPair(base: base, at: home)
 
@@ -130,15 +126,15 @@ final class MergeLoopTests: XCTestCase {
     /// it. K consuming the cached I used to inherit I's stale previous edge (T, now deleted) and be
     /// refused; the merge reads the edge fresh now and K.previous becomes V.
     func testMergeReadsTheInheritedEdgeFreshWhenTheCacheIsStale() async throws {
-        let base = Self.freshWindow()
+        let base = TimelineTestFixtures.freshWindow()
         let home = CLLocationCoordinate2D(latitude: 48.86, longitude: 2.35)
         let away = CLLocationCoordinate2D(latitude: 48.90, longitude: 2.40)
         let ids = try await Database.pool.write { db -> [String] in
-            let v = try Self.makeItem(isVisit: true, start: base, count: 12, at: home, db: db)
-            let t = try Self.makeItem(isVisit: false, start: base.addingTimeInterval(13 * 60), count: 1, at: home, db: db)
-            let i = try Self.makeItem(isVisit: true, start: base.addingTimeInterval(15 * 60), count: 1, at: away, db: db)
-            let k = try Self.makeItem(isVisit: true, start: base.addingTimeInterval(17 * 60), count: 12, at: away, db: db)
-            try Self.link(db, v.id, t.id, i.id, k.id)
+            let v = try TimelineTestFixtures.makeItem(isVisit: true, start: base, count: 12, at: home, db: db)
+            let t = try TimelineTestFixtures.makeItem(isVisit: false, start: base.addingTimeInterval(13 * 60), count: 1, at: home, db: db)
+            let i = try TimelineTestFixtures.makeItem(isVisit: true, start: base.addingTimeInterval(15 * 60), count: 1, at: away, db: db)
+            let k = try TimelineTestFixtures.makeItem(isVisit: true, start: base.addingTimeInterval(17 * 60), count: 12, at: away, db: db)
+            try TimelineTestFixtures.link(db, v.id, t.id, i.id, k.id)
             return [v.id, t.id, i.id, k.id]
         }
         let (v, t, i, k) = (ids[0], ids[1], ids[2], ids[3])
@@ -170,12 +166,12 @@ final class MergeLoopTests: XCTestCase {
     /// The write is the fresh row plus one edge: a column that moved in the database after the list
     /// cached the keeper (here stepCount, as the recording item's end date would) survives the merge.
     func testMergeDoesNotWriteStaleCachedColumnsBack() async throws {
-        let base = Self.freshWindow()
+        let base = TimelineTestFixtures.freshWindow()
         let home = CLLocationCoordinate2D(latitude: 35.68, longitude: 139.69)
         let (invalidId, keeperId) = try await Database.pool.write { db -> (String, String) in
-            let invalid = try Self.makeItem(isVisit: true, start: base, count: 1, at: home, db: db)
-            let keeper = try Self.makeItem(isVisit: true, start: base.addingTimeInterval(120), count: 12, at: home, db: db)
-            try Self.link(db, invalid.id, keeper.id)
+            let invalid = try TimelineTestFixtures.makeItem(isVisit: true, start: base, count: 1, at: home, db: db)
+            let keeper = try TimelineTestFixtures.makeItem(isVisit: true, start: base.addingTimeInterval(120), count: 12, at: home, db: db)
+            try TimelineTestFixtures.link(db, invalid.id, keeper.id)
             return (invalid.id, keeper.id)
         }
 
@@ -201,11 +197,11 @@ final class MergeLoopTests: XCTestCase {
     /// An item alone in its window whose previous edge names a deleted item. Nothing could merge it;
     /// before the fix nothing repaired it either (healing only ever filled nil edges).
     func testHealingClearsAnEdgeToADeletedItem() async throws {
-        let base = Self.freshWindow()
+        let base = TimelineTestFixtures.freshWindow()
         let somewhere = CLLocationCoordinate2D(latitude: 35.68, longitude: 139.69)
 
         let (itemId, deadId) = try await Database.pool.write { db -> (String, String) in
-            let item = try Self.makeItem(isVisit: true, start: base, count: 12, at: somewhere, db: db)
+            let item = try TimelineTestFixtures.makeItem(isVisit: true, start: base, count: 12, at: somewhere, db: db)
             let deadId = UUID().uuidString
             var itemBase = item.base
             try itemBase.updateChanges(db) { $0.previousItemId = deadId }
@@ -231,7 +227,7 @@ final class MergeLoopTests: XCTestCase {
         try await Database.pool.write { db -> (String, String, String) in
             // I first, naming D before D exists: the BEFORE INSERT trigger checks only against rows
             // that exist, and the deferred foreign key is satisfied once D is inserted below
-            let invalid = try Self.makeItem(isVisit: true, start: base, count: 1, at: coordinate, db: db)
+            let invalid = try TimelineTestFixtures.makeItem(isVisit: true, start: base, count: 1, at: coordinate, db: db)
             let deadId = UUID().uuidString
             var invalidBase = invalid.base
             try invalidBase.updateChanges(db) { $0.previousItemId = deadId }
@@ -240,18 +236,11 @@ final class MergeLoopTests: XCTestCase {
             dead.deleted = true
             try dead.insert(db)
 
-            let keeper = try Self.makeItem(isVisit: true, start: base.addingTimeInterval(120), count: 12, at: coordinate, db: db)
+            let keeper = try TimelineTestFixtures.makeItem(isVisit: true, start: base.addingTimeInterval(120), count: 12, at: coordinate, db: db)
             var keeperBase = keeper.base
             try keeperBase.updateChanges(db) { $0.previousItemId = invalid.id }
             return (deadId, keeper.id, invalid.id)
         }
-    }
-
-    /// The test host's database persists across runs, and edge healing searches a day either side of an
-    /// item, so every test gets a window of its own: a random three-day slot between 1980 and 2062.
-    private static func freshWindow() -> Date {
-        let slot = Double(Int.random(in: 0..<10_000))
-        return Date(timeIntervalSince1970: 315_532_800 + slot * 3 * 86_400)
     }
 
     /// Runs the processing loop under a timeout: a loop that never returns is the bug under test.
@@ -289,33 +278,5 @@ final class MergeLoopTests: XCTestCase {
             return bad
         }
         XCTAssertTrue(bad.isEmpty, "live edges to deleted items: \(bad)", file: file, line: line)
-    }
-
-    /// An item of `count` samples a minute apart at `coordinate`, inserted with its samples.
-    private static func makeItem(isVisit: Bool, start: Date, count: Int, at coordinate: CLLocationCoordinate2D, db: GRDB.Database) throws -> TimelineItem {
-        var samples: [LocomotionSample] = []
-        for index in 0..<count {
-            let location = CLLocation(
-                coordinate: coordinate, altitude: 10, horizontalAccuracy: 10, verticalAccuracy: 10,
-                course: 0, speed: isVisit ? 0 : 5, timestamp: start.addingTimeInterval(Double(index) * 60)
-            )
-            var sample = LocomotionSample(
-                date: location.timestamp,
-                movingState: isVisit ? .stationary : .moving,
-                recordingState: .recording,
-                location: location
-            )
-            try sample.insert(db)
-            samples.append(sample)
-        }
-        return try TimelineItem.createItem(from: samples, isVisit: isVisit, db: db)
-    }
-
-    /// Chains items by their next edges; the AFTER UPDATE triggers set the matching previous edges.
-    private static func link(_ db: GRDB.Database, _ ids: String...) throws {
-        for (current, next) in zip(ids, ids.dropFirst()) {
-            guard var base = try TimelineItemBase.fetchOne(db, key: current) else { throw TimelineError.itemNotFound }
-            try base.updateChanges(db) { $0.nextItemId = next }
-        }
     }
 }

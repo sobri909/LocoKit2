@@ -53,24 +53,35 @@ extension TimelineProcessor {
         // duration can't make every candidate .impossible (which is what used to hand the
         // choice to Set hash order, and let a bridge delete a keeper trip the user never
         // touched).
+        //
+        // BIG-908: every merge here passes overridesLocks. Imported items are locked (workout
+        // segments and pauses, GPX tracks and waypoints) so that processing can't restructure them,
+        // and that left a user's delete of a locked visit, or of any visit between locked items, with
+        // no merge that could run: the visit stayed. The lock guards against processing, not the user.
+        // Scored bridges can join two locked neighbours: trip-to-trip distance measures the edges that
+        // face each other across the betweener (`edgeSample(facing:)`), so a deleted pause between two
+        // ride segments that score as one (same type, or matched by the classifier) joins them, as
+        // processing would on an unlocked timeline. A bridge never joins a locked item to an unlocked
+        // one (`Merge.isValid`); an adjacent merge takes the visit instead. The fallback stays
+        // adjacent-only.
         var bridgeMerges: Set<Merge> = []
         var adjacentMerges: Set<Merge> = []
 
         // try merge next and previous
         if let next = await mutableDeadman.nextItem(in: list),
             let previous = await mutableDeadman.previousItem(in: list) {
-            bridgeMerges.insert(await Merge(keeper: next, betweener: mutableDeadman, deadman: previous, in: list))
-            bridgeMerges.insert(await Merge(keeper: previous, betweener: mutableDeadman, deadman: next, in: list))
+            bridgeMerges.insert(await Merge(keeper: next, betweener: mutableDeadman, deadman: previous, in: list, overridesLocks: true))
+            bridgeMerges.insert(await Merge(keeper: previous, betweener: mutableDeadman, deadman: next, in: list, overridesLocks: true))
         }
 
         // try merge into previous
         if let previous = await mutableDeadman.previousItem(in: list) {
-            adjacentMerges.insert(await Merge(keeper: previous, deadman: mutableDeadman, in: list, deadmanIsDisposable: true))
+            adjacentMerges.insert(await Merge(keeper: previous, deadman: mutableDeadman, in: list, deadmanIsDisposable: true, overridesLocks: true))
         }
 
         // try merge into next
         if let next = await mutableDeadman.nextItem(in: list) {
-            adjacentMerges.insert(await Merge(keeper: next, deadman: mutableDeadman, in: list, deadmanIsDisposable: true))
+            adjacentMerges.insert(await Merge(keeper: next, deadman: mutableDeadman, in: list, deadmanIsDisposable: true, overridesLocks: true))
         }
 
         // highest score first; on equal scores an adjacent merge sorts ahead of a bridge, so a
