@@ -33,6 +33,12 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
     public var averageHeartRate: Double?
     public var maxHeartRate: Double?
 
+    /// When HealthKit stats were last fetched for this item's current date range (BIG-963). nil means
+    /// never, or the range has moved since: a sample-dates trigger clears it when the start or end
+    /// moves. Filled only in the foreground, by `HealthManager.updateHealthIfNeeded(for:)` from the
+    /// visible day's segment, since HealthKit isn't queried in the background.
+    public var healthUpdated: Date?
+
     public var dateRange: DateInterval? {
         if let startDate, let endDate {
             return DateInterval(start: startDate, end: endDate)
@@ -86,6 +92,7 @@ public struct TimelineItemBase: FetchableRecord, PersistableRecord, Identifiable
         public static let activeEnergyBurned = Column(CodingKeys.activeEnergyBurned)
         public static let averageHeartRate = Column(CodingKeys.averageHeartRate)
         public static let maxHeartRate = Column(CodingKeys.maxHeartRate)
+        public static let healthUpdated = Column(CodingKeys.healthUpdated)
         public static let previousItemId = Column(CodingKeys.previousItemId)
         public static let nextItemId = Column(CodingKeys.nextItemId)
     }

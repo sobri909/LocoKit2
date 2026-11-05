@@ -383,8 +383,10 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
         await visit?.update(from: updatedSamples)
         await trip?.update(from: updatedSamples)
 
-        await HealthManager.updateHealthData(for: self)
-        await HealthManager.updateHeartRateForSamples(in: self)
+        // No HealthKit here (BIG-963): this runs in the background too, where HealthKit isn't read,
+        // and clearing the flag after a skipped fetch left the item's health never fetched. Health
+        // is filled by `HealthManager.updateHealthIfNeeded(for:)` from the visible day, for items
+        // whose `healthUpdated` a date move has cleared.
 
         // TODO: this triggers db observers. would be nice if it didn't
         base.samplesChanged = false

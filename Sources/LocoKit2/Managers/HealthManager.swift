@@ -122,214 +122,284 @@ public enum HealthManager {
         return false
     }
 
-    // MARK: - Updating TimelineItem Properties
+    // MARK: - Updating TimelineItem health stats (BIG-963)
 
-    public static func updateHealthData(for item: TimelineItem, force: Bool = false) async {
+    /// The item-level sums and heart rate figures for one date range.
+    struct HealthStats: Sendable {
+        let stepCount: Int?
+        let floorsAscended: Int?
+        let activeEnergyBurned: Double?
+        let averageHeartRate: Double?
+        let maxHeartRate: Double?
+    }
+
+    /// One item's fetched health data, for `writeHealthResults`.
+    struct ItemHealthResult: Sendable {
+        let itemId: String
+        /// The range the stats were fetched for. The checked date is stamped only while the row still has it.
+        let startDate: Date
+        let endDate: Date
+        /// What came back; a query that failed leaves its figure nil here.
+        let stats: HealthStats
+        /// Sample id → matched heart rate.
+        let sampleHeartRates: [String: Double]
+        /// Every query succeeded. Only then is the item stamped checked; otherwise what did come back is
+        /// written, and the item is tried again once the throttle allows.
+        let complete: Bool
+    }
+
+    /// A HealthKit query that ran out of time. Counted as a failure, not as "no data", so the item
+    /// stays unchecked and is tried again.
+    struct HealthQueryTimeout: Error {}
+
+    /// Fills HealthKit data (the item's sums, and heart rates on its samples) for the items that need
+    /// it: those whose `healthUpdated` is nil, because they were never checked or their date range has
+    /// moved since. Foreground only: HealthKit can't be read while the phone is locked, and a background
+    /// app can't tell locked from merely backgrounded. So this is called from the visible day's segment,
+    /// not from `updateFrom`, which runs in the background too (BIG-963).
+    ///
+    /// An item is stamped checked even when HealthKit has nothing for it, so an empty item isn't queried
+    /// again at every launch. One with a query that failed or timed out gets what did come back, and stays
+    /// unchecked. Each item is queried at most once per `healthUpdateThrottle`, which is what paces a
+    /// recording item: its end moves with every sample, so its date never stays set for long.
+    public static func updateHealthIfNeeded(for items: [TimelineItem]) async {
         guard healthKitEnabled else { return }
-        guard let dateRange = item.dateRange else { return }
-        
-        if await UIApplication.shared.applicationState == .background { return }
-
-        if !force, let lastUpdate = lastHealthUpdateTimes[item.id], lastUpdate.age < healthUpdateThrottle {
-            return
-        }
-        
         guard HKHealthStore.isHealthDataAvailable() else { return }
-        
-        // fetch all health data concurrently
-        async let steps = fetchStepCount(from: dateRange.start, to: dateRange.end)
-        async let flights = fetchFlightsClimbed(from: dateRange.start, to: dateRange.end)
-        async let energy = fetchActiveEnergy(from: dateRange.start, to: dateRange.end)
-        async let heartRateStats = fetchHeartRateStats(from: dateRange.start, to: dateRange.end)
-        
-        // wait for all results
-        let stepCount = await steps
-        let floorsAscended = await flights
-        let activeEnergyBurned = await energy
-        let (averageHeartRate, maxHeartRate) = await heartRateStats
-        
-        // check if we have any data to update
-        guard stepCount != nil || floorsAscended != nil || activeEnergyBurned != nil || 
-              averageHeartRate != nil || maxHeartRate != nil else {
-            return
-        }
-        
-        // single consolidated database write
-        do {
-            try await Database.pool.uncancellableWrite { db in
-                var mutableItem = item.base
-                try mutableItem.updateChanges(db) { item in
-                    if let stepCount { item.stepCount = stepCount }
-                    if let floorsAscended { item.floorsAscended = floorsAscended }
-                    if let activeEnergyBurned { item.activeEnergyBurned = activeEnergyBurned }
-                    if let averageHeartRate { item.averageHeartRate = averageHeartRate }
-                    if let maxHeartRate { item.maxHeartRate = maxHeartRate }
-                }
+
+        var results: [ItemHealthResult] = []
+        var incomplete = 0
+        var firstFailure: String?
+
+        for item in items {
+            if Task.isCancelled { break }
+            // per item, not once per pass: a phone locked mid-pass fails every query after it (HealthKit
+            // error 6), and each failed item would then sit out the throttle for nothing
+            if await UIApplication.shared.applicationState == .background { break }
+            guard !item.deleted, item.base.healthUpdated == nil,
+                  let startDate = item.base.startDate, let endDate = item.base.endDate else { continue }
+            if let lastUpdate = lastHealthUpdateTimes[item.id], lastUpdate.age < healthUpdateThrottle { continue }
+            lastHealthUpdateTimes[item.id] = .now
+
+            let fetched = await fetchHealth(from: startDate, to: endDate, samples: item.samples ?? [])
+            // a segment torn down mid-fetch cancels its queries, which then read as failures; drop the item
+            // rather than log a failure that wasn't one (the throttle lapses and it's tried again)
+            if Task.isCancelled { break }
+            if !fetched.complete {
+                incomplete += 1
+                if firstFailure == nil { firstFailure = fetched.firstFailure }
             }
+            results.append(ItemHealthResult(
+                itemId: item.id,
+                startDate: startDate,
+                endDate: endDate,
+                stats: fetched.stats,
+                sampleHeartRates: fetched.sampleHeartRates,
+                complete: fetched.complete
+            ))
+        }
+
+        if incomplete > 0 {
+            Log.error("HealthManager: \(incomplete) of \(results.count) items had a health query fail, left unchecked; first: \(firstFailure ?? "?")", subsystem: .healthkit)
+        }
+
+        guard !results.isEmpty else { return }
+
+        do {
+            let stamped = try await writeHealthResults(results, checkedAt: .now)
+            Log.info("HealthManager: health fetched for \(results.count) items, \(stamped) stamped checked (BIG-963)", subsystem: .healthkit)
         } catch {
             Log.error(error, subsystem: .database)
         }
-        
-        lastHealthUpdateTimes[item.id] = .now
     }
 
-    private static func fetchStepCount(from startDate: Date, to endDate: Date) async -> Int? {
-        do {
-            let stepType = HKQuantityType(.stepCount)
-            let sumQuantity = try await fetchSum(for: stepType, from: startDate, to: endDate)
-            
-            if let steps = sumQuantity?.doubleValue(for: .count()) {
-                return Int(steps)
+    /// The write half of `updateHealthIfNeeded`, separate so the stamp's condition can be tested without
+    /// HealthKit. The stats and heart rates are written for the range that was fetched, which is fresher
+    /// than what's stored. The checked date is stamped only for a complete fetch, and only if the row's
+    /// dates still equal that range: otherwise the range moved while HealthKit was answering, the dates
+    /// trigger had nothing to clear (the date was already nil), and a stamp would claim a range nobody
+    /// fetched. The item then stays unchecked and the next pass fetches its new range.
+    /// Returns how many items were stamped.
+    @discardableResult
+    static func writeHealthResults(_ results: [ItemHealthResult], checkedAt: Date) async throws -> Int {
+        try await Database.pool.uncancellableWrite { db in
+            var stamped = 0
+            for result in results {
+                // Only figures that came back are written; a nil never overwrites a stored figure.
+                // HealthKit answers nil both for "nothing in this range" and for history it doesn't hold
+                // (an imported item's stats can predate this phone's HealthKit), and wiping the second is
+                // worse than a shrunk range keeping a figure it no longer earns.
+                // Only figures that differ, too: an unchanged write still bumps lastSaved (a backup bucket
+                // rewritten, a segment refetch), and an item whose one failing query keeps it unstamped
+                // would otherwise be rewritten every throttle period while its day is open.
+                guard let stored = try TimelineItemBase.fetchOne(db, key: result.itemId) else { continue }
+                var stats: [ColumnAssignment] = []
+                if let value = result.stats.stepCount, value != stored.stepCount {
+                    stats.append(TimelineItemBase.Columns.stepCount.set(to: value))
+                }
+                if let value = result.stats.floorsAscended, value != stored.floorsAscended {
+                    stats.append(TimelineItemBase.Columns.floorsAscended.set(to: value))
+                }
+                if let value = result.stats.activeEnergyBurned, value != stored.activeEnergyBurned {
+                    stats.append(TimelineItemBase.Columns.activeEnergyBurned.set(to: value))
+                }
+                if let value = result.stats.averageHeartRate, value != stored.averageHeartRate {
+                    stats.append(TimelineItemBase.Columns.averageHeartRate.set(to: value))
+                }
+                if let value = result.stats.maxHeartRate, value != stored.maxHeartRate {
+                    stats.append(TimelineItemBase.Columns.maxHeartRate.set(to: value))
+                }
+                if !stats.isEmpty {
+                    try TimelineItemBase.filter(key: result.itemId).updateAll(db, stats)
+                }
+
+                // only rates that differ: an unchanged write still fires the sample's lastSaved trigger,
+                // which would send its week back through the next incremental backup
+                for (sampleId, heartRate) in result.sampleHeartRates {
+                    try LocomotionSample
+                        .filter(key: sampleId)
+                        .filter(LocomotionSample.Columns.heartRate == nil || LocomotionSample.Columns.heartRate != heartRate)
+                        .updateAll(db, LocomotionSample.Columns.heartRate.set(to: heartRate))
+                }
+
+                guard result.complete else { continue }
+                stamped += try TimelineItemBase
+                    .filter(key: result.itemId)
+                    .filter(TimelineItemBase.Columns.startDate == result.startDate)
+                    .filter(TimelineItemBase.Columns.endDate == result.endDate)
+                    .updateAll(db, TimelineItemBase.Columns.healthUpdated.set(to: checkedAt))
             }
-            return nil
-            
-        } catch {
-            Log.error(error, subsystem: .healthkit)
-            return nil
+            return stamped
         }
     }
-    
-    private static func fetchFlightsClimbed(from startDate: Date, to endDate: Date) async -> Int? {
+
+    private struct FetchedHealth: Sendable {
+        let stats: HealthStats
+        let sampleHeartRates: [String: Double]
+        let complete: Bool
+        let firstFailure: String?
+    }
+
+    /// The five queries for one range, each kept on its own, so one that fails or times out costs only its
+    /// own figure (as each stat did before BIG-963) and marks the fetch incomplete.
+    private static func fetchHealth(from startDate: Date, to endDate: Date, samples: [LocomotionSample]) async -> FetchedHealth {
+        async let steps = attempt { try await fetchStepCount(from: startDate, to: endDate) }
+        async let flights = attempt { try await fetchFlightsClimbed(from: startDate, to: endDate) }
+        async let energy = attempt { try await fetchActiveEnergy(from: startDate, to: endDate) }
+        async let heartRateStats = attempt { try await fetchHeartRateStats(from: startDate, to: endDate) }
+        async let sampleRates = attempt { () async throws -> [String: Double] in
+            let readings = try await fetchHeartRateSamples(from: startDate, to: endDate)
+            return heartRates(from: readings, for: samples)
+        }
+        let (stepsResult, flightsResult, energyResult, heartRateStatsResult, sampleRatesResult) =
+            await (steps, flights, energy, heartRateStats, sampleRates)
+
+        let failures: [Error] = [
+            stepsResult.failureValue, flightsResult.failureValue, energyResult.failureValue,
+            heartRateStatsResult.failureValue, sampleRatesResult.failureValue
+        ].compactMap { $0 }
+
+        let heartRateFigures = try? heartRateStatsResult.get()
+        return FetchedHealth(
+            stats: HealthStats(
+                stepCount: try? stepsResult.get(),
+                floorsAscended: try? flightsResult.get(),
+                activeEnergyBurned: try? energyResult.get(),
+                averageHeartRate: heartRateFigures?.average,
+                maxHeartRate: heartRateFigures?.max
+            ),
+            sampleHeartRates: (try? sampleRatesResult.get()) ?? [:],
+            complete: failures.isEmpty,
+            firstFailure: failures.first.map { "\($0)" }
+        )
+    }
+
+    private static func attempt<T: Sendable>(_ operation: @Sendable () async throws -> T) async -> Result<T, Error> {
         do {
-            let flightsType = HKQuantityType(.flightsClimbed)
-            let sumQuantity = try await fetchSum(for: flightsType, from: startDate, to: endDate)
-            
-            if let flights = sumQuantity?.doubleValue(for: .count()) {
-                return Int(flights)
-            }
-            return nil
-            
+            return .success(try await operation())
         } catch {
-            Log.error(error, subsystem: .healthkit)
-            return nil
+            return .failure(error)
         }
     }
-    
-    private static func fetchActiveEnergy(from startDate: Date, to endDate: Date) async -> Double? {
-        do {
-            let energyType = HKQuantityType(.activeEnergyBurned)
-            let sumQuantity = try await fetchSum(for: energyType, from: startDate, to: endDate)
-            
-            if let energy = sumQuantity?.doubleValue(for: .kilocalorie()) {
-                return energy
-            }
-            return nil
-            
-        } catch {
-            Log.error(error, subsystem: .healthkit)
-            return nil
-        }
+
+    private static func fetchStepCount(from startDate: Date, to endDate: Date) async throws -> Int? {
+        let sumQuantity = try await fetchSum(for: HKQuantityType(.stepCount), from: startDate, to: endDate)
+        return sumQuantity.map { Int($0.doubleValue(for: .count())) }
     }
-    
-    private static func fetchHeartRateStats(from startDate: Date, to endDate: Date) async -> (average: Double?, max: Double?) {
-        do {
-            let avgResult = try await TaskTimeout.withTimeout(seconds: 10) {
-                let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
-                let heartRateType = HKQuantityType(.heartRate)
-                let avgDescriptor = HKStatisticsQueryDescriptor(
-                    predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
-                    options: .discreteAverage
-                )
-                return try await avgDescriptor.result(for: healthStore)
-            }
-            
-            let maxResult = try await TaskTimeout.withTimeout(seconds: 10) {
-                let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
-                let heartRateType = HKQuantityType(.heartRate)
-                let maxDescriptor = HKStatisticsQueryDescriptor(
-                    predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
-                    options: .discreteMax
-                )
-                return try await maxDescriptor.result(for: healthStore)
-            }
-            
-            if avgResult == nil {
-                print("HealthKit average heart rate query timed out")
-            }
-            if maxResult == nil {
-                print("HealthKit max heart rate query timed out")
-            }
-            
-            let averageQuantity = avgResult??.averageQuantity()
-            let maxQuantity = maxResult??.maximumQuantity()
-            
-            let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
-            let average = averageQuantity?.doubleValue(for: heartRateUnit)
-            let max = maxQuantity?.doubleValue(for: heartRateUnit)
-            
-            return (average: average, max: max)
-            
-        } catch {
-            Log.error(error, subsystem: .healthkit)
-            return (average: nil, max: nil)
+
+    private static func fetchFlightsClimbed(from startDate: Date, to endDate: Date) async throws -> Int? {
+        let sumQuantity = try await fetchSum(for: HKQuantityType(.flightsClimbed), from: startDate, to: endDate)
+        return sumQuantity.map { Int($0.doubleValue(for: .count())) }
+    }
+
+    private static func fetchActiveEnergy(from startDate: Date, to endDate: Date) async throws -> Double? {
+        let sumQuantity = try await fetchSum(for: HKQuantityType(.activeEnergyBurned), from: startDate, to: endDate)
+        return sumQuantity?.doubleValue(for: .kilocalorie())
+    }
+
+    private static func fetchHeartRateStats(from startDate: Date, to endDate: Date) async throws -> (average: Double?, max: Double?) {
+        let avgResult = try await TaskTimeout.withTimeout(seconds: 10) {
+            let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+            let heartRateType = HKQuantityType(.heartRate)
+            let avgDescriptor = HKStatisticsQueryDescriptor(
+                predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
+                options: .discreteAverage
+            )
+            return try await avgDescriptor.result(for: healthStore)
         }
+
+        let maxResult = try await TaskTimeout.withTimeout(seconds: 10) {
+            let samplePredicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+            let heartRateType = HKQuantityType(.heartRate)
+            let maxDescriptor = HKStatisticsQueryDescriptor(
+                predicate: .quantitySample(type: heartRateType, predicate: samplePredicate),
+                options: .discreteMax
+            )
+            return try await maxDescriptor.result(for: healthStore)
+        }
+
+        // the outer optional is the timeout; the inner is HealthKit's "no statistics"
+        guard let avgResult, let maxResult else { throw HealthQueryTimeout() }
+
+        let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
+        let average = avgResult?.averageQuantity()?.doubleValue(for: heartRateUnit)
+        let max = maxResult?.maximumQuantity()?.doubleValue(for: heartRateUnit)
+
+        return (average: average, max: max)
     }
 
     // MARK: - Heart Rate for LocomotionSamples
-    
-    private static var lastSampleHeartRateUpdateTimes: [String: Date] = [:]
-    private static let sampleHeartRateUpdateThrottle: TimeInterval = .minutes(15)
-    
-    internal static func updateHeartRateForSamples(in item: TimelineItem) async {
-        guard healthKitEnabled else { return }
-        guard let samples = item.samples, !samples.isEmpty else { return }
-        guard let dateRange = item.dateRange else { return }
 
-        // throttle updates to prevent excessive HealthKit queries
-        if let lastUpdate = lastSampleHeartRateUpdateTimes[item.id], lastUpdate.age < sampleHeartRateUpdateThrottle {
-            return
-        }
-        
-        lastSampleHeartRateUpdateTimes[item.id] = .now
+    /// HealthKit heart rate readings matched to samples: to every sample at the same second, else to the
+    /// nearest sample within 15 seconds. Where two readings match one sample, the later reading wins.
+    nonisolated
+    static func heartRates(from heartRateSamples: [HKQuantitySample], for locomotionSamples: [LocomotionSample]) -> [String: Double] {
+        guard !heartRateSamples.isEmpty, !locomotionSamples.isEmpty else { return [:] }
 
-        guard HKHealthStore.isHealthDataAvailable() else { return }
-        if await UIApplication.shared.applicationState == .background { return }
-
-        do {
-            let heartRateSamples = try await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
-            if heartRateSamples.isEmpty { return }
-
-            await matchHeartRateToSamples(heartRateSamples: heartRateSamples, locomotionSamples: samples)
-
-        } catch {
-            Log.error(error, subsystem: .healthkit)
-        }
-    }
-
-    private static func matchHeartRateToSamples(heartRateSamples: [HKQuantitySample], locomotionSamples: [LocomotionSample]) async {
-        guard !heartRateSamples.isEmpty, !locomotionSamples.isEmpty else { return }
-        
         let heartRateUnit = HKUnit.count().unitDivided(by: .minute())
-        
+
         let locomotionDict = Dictionary(grouping: locomotionSamples) { sample in
             return Date(timeIntervalSince1970: round(sample.date.timeIntervalSince1970))
         }
-        
-        // structure to hold sample/heart rate pairs for batch updating
-        struct HeartRateUpdate {
-            let sample: LocomotionSample
-            let heartRate: Double
-        }
-        
-        var updates: [HeartRateUpdate] = []
-        
+
+        var rates: [String: Double] = [:]
+
         for hrSample in heartRateSamples {
             let hrValue = hrSample.quantity.doubleValue(for: heartRateUnit)
             let hrDate = hrSample.startDate
-            
+
             // try exact timestamp match first (rounded to nearest second)
             let roundedDate = Date(timeIntervalSince1970: round(hrDate.timeIntervalSince1970))
             if let exactMatches = locomotionDict[roundedDate] {
                 for sample in exactMatches {
-                    updates.append(HeartRateUpdate(sample: sample, heartRate: hrValue))
+                    rates[sample.id] = hrValue
                 }
                 continue
             }
-            
+
             // if no exact match, find nearest sample within threshold
             var closestSample: LocomotionSample?
             var closestTimeDiff = TimeInterval.greatestFiniteMagnitude
-            
+
             for sample in locomotionSamples {
                 let timeDiff = abs(sample.date.timeIntervalSince(hrDate))
                 if timeDiff < closestTimeDiff {
@@ -337,30 +407,14 @@ public enum HealthManager {
                     closestSample = sample
                 }
             }
-            
+
             // only use nearest match if within 15 seconds
             if closestTimeDiff < 15, let sample = closestSample {
-                updates.append(HeartRateUpdate(sample: sample, heartRate: hrValue))
+                rates[sample.id] = hrValue
             }
         }
-        
-        if !updates.isEmpty {
-            let finalUpdates = updates
-            
-            do {
-                try await Database.pool.uncancellableWrite { db in
-                    for update in finalUpdates {
-                        var mutableSample = update.sample
-                        try mutableSample.updateChanges(db) {
-                            $0.heartRate = update.heartRate
-                        }
-                    }
-                }
-                
-            } catch {
-                Log.error(error, subsystem: .database)
-            }
-        }
+
+        return rates
     }
 
     // MARK: - Public Fetching
@@ -373,7 +427,13 @@ public enum HealthManager {
             throw TimelineError.backgroundRestriction
         }
 
-        return try await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
+        do {
+            return try await fetchHeartRateSamples(from: dateRange.start, to: dateRange.end)
+        } catch is HealthQueryTimeout {
+            // as before BIG-963: the chart shows nothing rather than failing beside the sleep data
+            print("HealthKit heart rate query timed out")
+            return []
+        }
     }
 
     // MARK: - Private Fetching
@@ -388,11 +448,9 @@ public enum HealthManager {
             return try await descriptor.result(for: healthStore)
         }
         
-        guard let statistics = result else {
-            print("HealthKit query timed out for \(quantityType)")
-            return nil
-        }
-        
+        // a timeout is a failure, not "no data": the item stays unchecked (BIG-963)
+        guard let statistics = result else { throw HealthQueryTimeout() }
+
         return statistics?.sumQuantity()
     }
     
@@ -408,12 +466,16 @@ public enum HealthManager {
             return try await descriptor.result(for: healthStore)
         }
         
-        guard let samples = result else {
-            print("HealthKit heart rate query timed out")
-            return []
-        }
-        
+        guard let samples = result else { throw HealthQueryTimeout() }
+
         return samples
     }
 
+}
+
+private extension Result {
+    var failureValue: Failure? {
+        if case .failure(let error) = self { return error }
+        return nil
+    }
 }

@@ -35,6 +35,10 @@ public final class TimelineSegment: Sendable {
 
     @ObservationIgnored
     nonisolated(unsafe)
+    private var healthTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    nonisolated(unsafe)
     private var processingInterrupted = false
     private var loggedInactiveSkip = false
 
@@ -50,6 +54,7 @@ public final class TimelineSegment: Sendable {
     deinit {
         changesTask?.cancel()
         processingTask?.cancel()
+        healthTask?.cancel()
     }
 
     // MARK: - Processing lifecycle
@@ -62,6 +67,12 @@ public final class TimelineSegment: Sendable {
     }
 
     public func resumeProcessingIfNeeded() {
+        // BIG-963: a preloaded page fetched its items while hidden, when the health pass is skipped, and
+        // showing it doesn't refetch unless processing was interrupted. So the pass runs here from the
+        // loaded items; a page whose fetch hasn't landed yet gets it from that fetch's update instead.
+        if shouldReprocessOnUpdate, let timelineItems, UIApplication.shared.applicationState == .active {
+            updateHealthIfNeeded(for: timelineItems)
+        }
         guard processingInterrupted, shouldReprocessOnUpdate else { return }
         processingInterrupted = false
         Task { await fetchItems() }
@@ -212,10 +223,26 @@ public final class TimelineSegment: Sendable {
         }
         loggedInactiveSkip = false
 
+        updateHealthIfNeeded(for: newItems)
+
         processingTask?.cancel()
         processingTask = Task {
             await classify(items: newItems)
             await processItems(newItems, oldItems: oldItems)
+        }
+    }
+
+    /// BIG-963: HealthKit data for the visible day, filled here rather than in `updateFrom`, behind the
+    /// same foreground and visibility gates as classify and process. Its own task, not the processing
+    /// task, which every update cancels: a recording day updates every few seconds and the pass would
+    /// rarely finish. One pass at a time; items that need health while one runs are picked up by the
+    /// next update, which the pass's own write triggers.
+    private func updateHealthIfNeeded(for items: [TimelineItem]) {
+        guard healthTask == nil else { return }
+        guard items.contains(where: { $0.base.healthUpdated == nil }) else { return }
+        healthTask = Task { [weak self] in
+            await HealthManager.updateHealthIfNeeded(for: items)
+            self?.healthTask = nil
         }
     }
 

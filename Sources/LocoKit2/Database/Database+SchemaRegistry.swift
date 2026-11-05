@@ -25,13 +25,20 @@ public struct TriggerDefinition: Sendable {
     public let name: String
     public let table: String
     public let family: TriggerFamily
+    /// Columns of `table` that the body names and that a delayed migration adds. Creation waits until
+    /// they exist (BIG-963): SQLite accepts a trigger that names a missing column, then fails every
+    /// statement that fires it, so a migration chain that stalled before the column landed would turn
+    /// the launch-time repair, which runs after migrations whether or not they succeeded, into a
+    /// recording outage. Columns the table has had since its initial schema needn't be listed.
+    public let requiredColumns: [String]
     /// Everything after `CREATE TRIGGER <name>`: the event clause, WHEN, and BEGIN…END.
     public let body: String
 
-    public init(name: String, table: String, family: TriggerFamily, body: String) {
+    public init(name: String, table: String, family: TriggerFamily, requiredColumns: [String] = [], body: String) {
         self.name = name
         self.table = table
         self.family = family
+        self.requiredColumns = requiredColumns
         self.body = body
     }
 
@@ -135,7 +142,7 @@ extension Database {
     /// Create every registry trigger of one family. Used by the migrations that introduced them.
     static func createTriggers(family: TriggerFamily, in db: GRDB.Database) throws {
         for trigger in allTriggerDefinitions where trigger.family == family {
-            try db.execute(sql: trigger.createSQL)
+            try createIfColumnsPresent(trigger, in: db)
         }
     }
 
@@ -143,7 +150,7 @@ extension Database {
     /// rebuild, which drops them all.
     static func createTriggers(on table: String, in db: GRDB.Database) throws {
         for trigger in allTriggerDefinitions where trigger.table == table {
-            try db.execute(sql: trigger.createSQL)
+            try createIfColumnsPresent(trigger, in: db)
         }
     }
 
@@ -151,7 +158,24 @@ extension Database {
         guard let trigger = allTriggerDefinitions.first(where: { $0.name == name }) else {
             throw DatabaseError(message: "No registered trigger named \(name)")
         }
+        try createIfColumnsPresent(trigger, in: db)
+    }
+
+    /// Every create goes through here, so no path can install a trigger ahead of the columns it names
+    /// (`TriggerDefinition.requiredColumns`). A skipped trigger stays in the audit's missing list,
+    /// and the repair at a later launch, once the column's migration has landed, creates it.
+    @discardableResult
+    static func createIfColumnsPresent(_ trigger: TriggerDefinition, in db: GRDB.Database) throws -> Bool {
+        if !trigger.requiredColumns.isEmpty {
+            let columns = Set(try db.columns(in: trigger.table).map(\.name))
+            let missing = trigger.requiredColumns.filter { !columns.contains($0) }
+            if !missing.isEmpty {
+                Log.error("schema: not creating \(trigger.name) until \(trigger.table) has \(missing.joined(separator: ", ")) (its migration hasn't landed)", subsystem: .database)
+                return false
+            }
+        }
         try db.execute(sql: trigger.createSQL)
+        return true
     }
 
     /// Create every explicitly registered index ON one table. Used after a table rebuild.
@@ -470,8 +494,9 @@ extension Database {
         let tables = Set(try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'"))
         let live = Set(try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'trigger'"))
         for trigger in allTriggerDefinitions where tables.contains(trigger.table) && !live.contains(trigger.name) {
-            try db.execute(sql: trigger.createSQL)
-            Log.info("schema repair: created missing trigger \(trigger.name)", subsystem: .database)
+            if try createIfColumnsPresent(trigger, in: db) {
+                Log.info("schema repair: created missing trigger \(trigger.name)", subsystem: .database)
+            }
         }
     }
 
@@ -543,13 +568,14 @@ extension Database {
             }
         }
 
-        if case .repaired = outcome {
-            do {
-                try await pool.write { db in try Database.createMissingTriggers(in: db) }
-            } catch {
-                Log.error("schema repair: triggers failed, rolled back: \(error)", subsystem: .database)
-                outcome = .failed("\(error)")
-            }
+        // Triggers whatever the index work's outcome: they don't depend on it, and a device whose index
+        // build was postponed for space or failed still needs them for correctness, where the indexes
+        // are for speed (BIG-963: the health-date trigger is what makes a stamped item's stats go stale).
+        do {
+            try await pool.write { db in try Database.createMissingTriggers(in: db) }
+        } catch {
+            Log.error("schema repair: triggers failed, rolled back: \(error)", subsystem: .database)
+            if case .repaired = outcome { outcome = .failed("\(error)") }
         }
 
         let seconds = -start.timeIntervalSinceNow

@@ -103,6 +103,7 @@ extension Database {
                 table.column("activeEnergyBurned", .double)
                 table.column("averageHeartRate", .double)
                 table.column("maxHeartRate", .double)
+                table.column("healthUpdated", .datetime)  // BIG-963; existing installs: TimelineItemBase.healthUpdated
             }
 
             try db.create(

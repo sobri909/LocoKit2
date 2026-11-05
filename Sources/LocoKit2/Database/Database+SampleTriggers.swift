@@ -103,6 +103,24 @@ extension Database {
                  WHERE id = NEW.timelineItemId;
              END;
             """),
+
+        // BIG-963: an item's HealthKit stats are sums over its date range, so a range that moves
+        // makes them stale, and clearing healthUpdated is what sends the foreground health pass back
+        // to fetch them. Per-sample heart rates ride on the same date: a matched rate is a sample
+        // column and moves with its sample, and the only samples without one are newly recorded,
+        // which always move the end. Deletes leave the dates alone (see above), so pruning doesn't
+        // clear it. `NEW.healthUpdated IS NOT NULL` keeps this to one extra row write per check:
+        // a recording item's date is already nil, so its every-sample date moves don't fire it.
+        TriggerDefinition(name: "TimelineItemBase_AFTER_UPDATE_dates_healthUpdated", table: "TimelineItemBase", family: .sampleDates, requiredColumns: ["healthUpdated"], body: """
+            AFTER UPDATE OF startDate, endDate ON TimelineItemBase
+            WHEN NEW.healthUpdated IS NOT NULL
+                AND (OLD.startDate IS NOT NEW.startDate OR OLD.endDate IS NOT NEW.endDate)
+            BEGIN
+                UPDATE TimelineItemBase
+                SET healthUpdated = NULL
+                WHERE id = NEW.id;
+            END;
+            """),
     ]
 
     // MARK: - Disabled state: item→sample cascade + sample-side guards

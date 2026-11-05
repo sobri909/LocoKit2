@@ -311,5 +311,21 @@ extension Database {
                 table.add(column: "cutoffDate", .datetime)
             }
         }
+
+        // BIG-963: when HealthKit stats were last fetched for an item's current date range. Every
+        // existing item starts nil, so each day's stats are fetched again the first time it is opened
+        // in the foreground: that is also what catches items whose stats were never fetched because
+        // their samples were last refreshed in the background. The trigger that clears it when a
+        // date moves is a registry entry (sample-dates family) and reaches existing installs through
+        // the launch-time schema repair, which runs after this.
+        // foreignKeyChecks: .immediate — a column add, nothing dropped or renamed. Not wrapped in
+        // try?: it only runs where the column is missing, so a failure there is real (BIG-792).
+        migrator.registerMigration("TimelineItemBase.healthUpdated", foreignKeyChecks: .immediate) { db in
+            let columns = try db.columns(in: "TimelineItemBase").map(\.name)
+            guard !columns.contains("healthUpdated") else { return }
+            try db.alter(table: "TimelineItemBase") { table in
+                table.add(column: "healthUpdated", .datetime)
+            }
+        }
     }
 }

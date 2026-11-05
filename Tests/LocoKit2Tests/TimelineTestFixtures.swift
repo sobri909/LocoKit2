@@ -16,15 +16,43 @@ enum TimelineTestFixtures {
 
     /// Migrations run once per test process. Each class holding its own copy registered them twice when
     /// two classes ran together, and GRDB stops on "already registered migration".
+    ///
+    /// In the app's launch order: the initial schema, the delayed migrations, then the schema repair's
+    /// trigger half. Until BIG-963 only the initial five ran, so the persistent test database never got
+    /// a column or trigger added after it was first created (healthUpdated and its trigger were the
+    /// first a test needed). Index repair is left out: the launch does it, and no test reads it.
     static let migrated: Void = {
-        Database.highlander.doMigrations()
+        let db = Database.highlander
+        db.doMigrations()
+        db.addDelayedMigrations(to: &db.migrator)
+        db.runMigrations()
+        // runMigrations logs a failure and carries on; tests on a half-migrated database prove nothing
+        precondition(!db.havePendingMigrations, "TimelineTestFixtures: migrations left pending; read the test log for the failure")
+        do {
+            try Database.pool.write { try Database.createMissingTriggers(in: $0) }
+        } catch {
+            preconditionFailure("TimelineTestFixtures: creating missing triggers failed: \(error)")
+        }
     }()
 
     /// The test host's database persists across runs, and edge healing searches a day either side of an
     /// item, so every test gets a window of its own: a random three-day slot between 1980 and 2062.
+    /// The slot is checked empty first (BIG-308, 2026-11-05): the database keeps every earlier run's rows,
+    /// so a random slot had started landing on an occupied window, and edge healing then rewired the
+    /// test's items against another run's (two of three full runs failed that way in one afternoon).
     static func freshWindow() -> Date {
-        let slot = Double(Int.random(in: 0..<10_000))
-        return Date(timeIntervalSince1970: 315_532_800 + slot * 3 * 86_400)
+        for _ in 0..<100 {
+            let slot = Double(Int.random(in: 0..<10_000))
+            let start = Date(timeIntervalSince1970: 315_532_800 + slot * 3 * 86_400)
+            let occupied = (try? Database.pool.read { db in
+                try TimelineItemBase
+                    .filter(TimelineItemBase.Columns.startDate < start.addingTimeInterval(3 * 86_400))
+                    .filter(TimelineItemBase.Columns.endDate > start.addingTimeInterval(-86_400))
+                    .fetchCount(db)
+            }) ?? 1
+            if occupied == 0 { return start }
+        }
+        preconditionFailure("TimelineTestFixtures: no empty three-day test window in 100 tries; the test database needs clearing")
     }
 
     /// An item of `count` samples a minute apart at `coordinate`, inserted with its samples.

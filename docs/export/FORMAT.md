@@ -228,6 +228,9 @@ Base fields common to all timeline items:
     activeEnergyBurned: number | null
     averageHeartRate: number | null
     maxHeartRate: number | null
+    healthUpdated: string | null  // ISO8601; when the HealthKit stats were last fetched for this
+                                  // date range. null = never, or the range has moved since. Absent
+                                  // in exports made before it existed. (BIG-963)
   }
 }
 ```
