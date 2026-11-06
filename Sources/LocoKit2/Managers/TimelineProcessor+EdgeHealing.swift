@@ -164,8 +164,9 @@ extension TimelineProcessor {
 
             } else {
                 // represent longer gaps with explicit data gap items
-                try await createDataGapItem(between: nearest, and: item)
-                Log.info("Created data gap between \(nearest.debugShortId) and \(item.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                if try await createDataGapItem(between: nearest, and: item) {
+                    Log.info("Created data gap between \(nearest.debugShortId) and \(item.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                }
             }
 
         } else {
@@ -225,8 +226,9 @@ extension TimelineProcessor {
 
             } else {
                 // represent longer gaps with explicit data gap items
-                try await createDataGapItem(between: item, and: nearest)
-                Log.info("Created data gap between \(item.debugShortId) and \(nearest.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                if try await createDataGapItem(between: item, and: nearest) {
+                    Log.info("Created data gap between \(item.debugShortId) and \(nearest.debugShortId) (\(Int(abs(gap)))s)", subsystem: .timeline)
+                }
             }
             
         } else {
