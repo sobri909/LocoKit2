@@ -78,8 +78,11 @@ extension TimelineItem {
         // visit-trip gaps less than this should be forgiven
         let minimum: CLLocationDistance = 150
 
+        // the distance the trip could have covered in the gap, times four (AT3's formula). BIG-631: this
+        // was `speed ?? 0 * timeSeparation * 4`, which parses as `speed ?? (0 * ...)`, so the allowance
+        // was the speed in metres and the floor held for every pair
         let timeSeparation = abs(self.timeInterval(from: otherItem))
-        let rawMax = CLLocationDistance(otherItem.trip?.speed ?? 0 * timeSeparation * 4)
+        let rawMax = CLLocationDistance((otherItem.trip?.speed ?? 0) * timeSeparation * 4)
 
         return max(rawMax, minimum)
     }
