@@ -51,6 +51,30 @@ public enum HealthManager {
         healthKitEnabled = false
     }
 
+    // MARK: - Logging (BIG-980)
+
+    /// HealthKit's `errorDatabaseInaccessible` (code 6, "Protected health data is inaccessible"): protected
+    /// health data was unavailable when HealthKit answered, which is the device being locked. Matches the
+    /// bridged `NSError` and the native `HKError` alike.
+    nonisolated
+    public static func isDataInaccessible(_ error: Error) -> Bool {
+        (error as? HKError)?.code == .errorDatabaseInaccessible
+    }
+
+    /// Logs a caught HealthKit failure, except the one that says nothing about the query or the data: code 6
+    /// (the device was locked) goes to debug, console only, never the file log. Every other error keeps its
+    /// ERROR line, with the caller's file and function as `Log.error` writes them (BIG-745). Use it where a
+    /// locked-out query is simply retried the next time its surface is shown; a site where code 6 has a
+    /// consequence of its own (`Session.updateHealthKitState` disables HealthKit on it) logs that itself.
+    nonisolated
+    public static func logError(_ error: Error, function: String = #function, fileID: String = #fileID) {
+        if isDataInaccessible(error) {
+            Log.debug("\(error) — in \(fileID) \(function)", subsystem: .healthkit)
+        } else {
+            Log.error(error, subsystem: .healthkit, function: function, fileID: fileID)
+        }
+    }
+
     // MARK: - Requesting Access
 
     public static func requestAuthorization() async {
@@ -60,7 +84,7 @@ public enum HealthManager {
             try await healthStore.requestAuthorization(toShare: [], read: healthDataTypes)
 
         } catch {
-            Log.error(error, subsystem: .healthkit)
+            logError(error)
         }
     }
 
@@ -169,6 +193,7 @@ public enum HealthManager {
         var results: [ItemHealthResult] = []
         var incomplete = 0
         var firstFailure: String?
+        var lockedOut = 0
 
         for item in items {
             if Task.isCancelled { break }
@@ -185,8 +210,17 @@ public enum HealthManager {
             // rather than log a failure that wasn't one (the throttle lapses and it's tried again)
             if Task.isCancelled { break }
             if !fetched.complete {
-                incomplete += 1
-                if firstFailure == nil { firstFailure = fetched.firstFailure }
+                // an item whose every failure is "the device was locked" (HealthKit code 6) is counted apart:
+                // it stays unchecked like any other, but the line for it isn't an error (BIG-980). The ERROR
+                // line's example is the first failure that is NOT code 6, so a mixed item never prints one.
+                if fetched.failures.allSatisfy(isDataInaccessible) {
+                    lockedOut += 1
+                } else {
+                    incomplete += 1
+                    if firstFailure == nil {
+                        firstFailure = fetched.failures.first(where: { !isDataInaccessible($0) }).map { "\($0)" }
+                    }
+                }
             }
             results.append(ItemHealthResult(
                 itemId: item.id,
@@ -200,6 +234,9 @@ public enum HealthManager {
 
         if incomplete > 0 {
             Log.error("HealthManager: \(incomplete) of \(results.count) items had a health query fail, left unchecked; first: \(firstFailure ?? "?")", subsystem: .healthkit)
+        }
+        if lockedOut > 0 {
+            Log.info("HealthManager: \(lockedOut) of \(results.count) items had protected health data unavailable (device locked, HealthKit code 6), left unchecked (BIG-980)", subsystem: .healthkit)
         }
 
         guard !results.isEmpty else { return }
@@ -276,7 +313,8 @@ public enum HealthManager {
         let stats: HealthStats
         let sampleHeartRates: [String: Double]
         let complete: Bool
-        let firstFailure: String?
+        /// Every query that failed, in query order; empty when `complete`.
+        let failures: [Error]
     }
 
     /// The five queries for one range, each kept on its own, so one that fails or times out costs only its
@@ -309,7 +347,7 @@ public enum HealthManager {
             ),
             sampleHeartRates: (try? sampleRatesResult.get()) ?? [:],
             complete: failures.isEmpty,
-            firstFailure: failures.first.map { "\($0)" }
+            failures: failures
         )
     }
 
