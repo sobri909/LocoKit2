@@ -505,11 +505,15 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
     /// "changed" — which made TimelineSegment's sample-reuse path unreachable. A change to the
     /// samples themselves is signalled by `samplesChanged` (set by the sample triggers on insert,
     /// update and delete), which the caller checks first.
+    ///
+    /// BIG-995: when this returns false for the stored parts, TimelineSegment keeps `other` in
+    /// place of the refetched item. A stored part not compared here would go stale there, so
+    /// visit and trip are both compared whatever kind the item is.
     public func hasChanged(from other: TimelineItem?, comparingSamples: Bool = true) -> Bool {
         guard let other else { return true }
         if base != other.base { return true }
-        if isVisit, visit != other.visit { return true }
-        if isTrip, trip != other.trip { return true }
+        if visit != other.visit { return true }
+        if trip != other.trip { return true }
         if place != other.place { return true }
         if comparingSamples, samples != other.samples { return true }
         return false

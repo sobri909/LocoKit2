@@ -191,11 +191,19 @@ public final class TimelineSegment: Sendable {
             } else {
                 let oldItem = oldItems.first { $0.id == newItem.id }
 
-                // copy over existing samples if item hasn't changed. Stored parts only: newItem
-                // was fetched without samples, and a samples change is the samplesChanged
-                // branch above (BIG-790)
-                if let oldItem, let samples = oldItem.samples, !newItem.hasChanged(from: oldItem, comparingSamples: false) {
-                    newItems[index].samples = samples
+                // keep the existing item if it hasn't changed. Stored parts only: newItem was
+                // fetched without samples, and a samples change is the samplesChanged branch
+                // above (BIG-790)
+                //
+                // Kept whole (BIG-995), not rebuilt around its samples: its stored parts equal
+                // newItem's, so it is the same value, and assigning samples collates the
+                // segments again into new arrays. Building those copies and sorts every sample,
+                // on the main actor, and each comparison of the old item with the new one then
+                // walks every sample before it can answer "equal": SwiftUI's, for a view input
+                // holding the item, and processItems' below. Array's == answers at once for one
+                // buffer (the standard library's behaviour, not a documented promise).
+                if let oldItem, oldItem.samples != nil, !newItem.hasChanged(from: oldItem, comparingSamples: false) {
+                    newItems[index] = oldItem
 
                 } else { // need to fetch samples
                     await newItems[index].fetchSamples()
