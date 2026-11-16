@@ -139,7 +139,9 @@ public final class TimelineLinkedList: AsyncSequence {
     ///
     /// The log line counts how often the gap was live: a refresh that turned an item valid or a keeper.
     private static func refreshedOnLoad(_ item: TimelineItem) async -> TimelineItem {
-        guard !item.deleted, item.samplesChanged, let samples = item.samples, !samples.isEmpty else { return item }
+        // (BIG-828: a visit with no visit row comes through here too, whatever its flag says, and
+        // `updateFrom` writes the row before the item is scored)
+        guard !item.deleted, item.samplesChanged || item.isMissingVisitHalf, let samples = item.samples, !samples.isEmpty else { return item }
 
         let wasValid = try? item.isValid
         let wasKeeper = try? item.isWorthKeeping

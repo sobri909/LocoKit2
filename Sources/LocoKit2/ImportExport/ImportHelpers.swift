@@ -61,6 +61,13 @@ public enum ImportHelpers {
                             preservedVisit.copyMetadata(from: originalVisit)
                             try preservedVisit.insert(db)
 
+                        } else if originalItem.base.isVisit {
+                            // BIG-828: the original says visit and has no visit row (item creation used
+                            // to leave that shape behind). The copy gets a row with no centre, not the
+                            // same hole
+                            visits += 1
+                            try TimelineItemVisit(itemId: preservedBase.id, samples: []).insert(db)
+
                         } else if !originalItem.base.isVisit, let originalTrip = originalItem.trip {
                             trips += 1
 

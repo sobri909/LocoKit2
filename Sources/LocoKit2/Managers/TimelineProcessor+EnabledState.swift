@@ -305,7 +305,7 @@ extension TimelineProcessor {
             var newVisit = TimelineItemVisit(itemId: base.id, samples: samples)
             // copy metadata from original visit
             if let originalVisit = originalItem.visit {
-                newVisit?.copyMetadata(from: originalVisit)
+                newVisit.copyMetadata(from: originalVisit)
             }
             visit = newVisit
             trip = nil

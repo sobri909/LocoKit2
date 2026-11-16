@@ -99,8 +99,28 @@ extension TimelineProcessor {
                 }
             }
 
-            // create the new item
-            var newItem = try TimelineItem.createItem(from: segment.samples, isVisit: isVisit, db: db)
+            // create the new item, from the segment's samples as stored. The segment holds its samples
+            // by value, read before the type change that usually brings it here, so they still carry
+            // the old type; BIG-828: bogus ones have no usable coordinate, and a visit made from them
+            // came out with no visit row
+            // (fetched by date range and matched by id in memory: a long segment's ids would run past
+            // SQLite's bound-variable limit as an IN list. The range is a second wide of the segment
+            // each side so a stored date's millisecond rounding can't drop an end sample; the ids decide)
+            let segmentSampleIds = Set(segment.samples.map { $0.id })
+            let fetchStart = segment.dateRange.start.addingTimeInterval(-1)
+            let fetchEnd = segment.dateRange.end.addingTimeInterval(1)
+            let segmentSamples = try LocomotionSample
+                .filter { $0.date >= fetchStart && $0.date <= fetchEnd }
+                .order(\.date.asc)
+                .fetchAll(db)
+                .filter { segmentSampleIds.contains($0.id) }
+            guard !segmentSamples.isEmpty else {
+                throw TimelineError.invalidSegment("none of the segment's \(segment.samples.count) samples are in the database")
+            }
+            if segmentSamples.count != segment.samples.count {
+                Log.info("extractItem: \(segment.samples.count - segmentSamples.count) of the segment's \(segment.samples.count) samples are no longer in the database; extracting the rest", subsystem: .timeline)
+            }
+            var newItem = try TimelineItem.createItem(from: segmentSamples, isVisit: isVisit, db: db)
             itemsToHeal.append(newItem.id)
 
             // assign place or custom title if provided
@@ -130,7 +150,7 @@ extension TimelineProcessor {
             }
 
             // BIG-864: every segment type change is an extraction; one line records what it decided
-            Log.info("extractItem: segment \(segment.dateRange.start)…\(segment.dateRange.end) (\(segment.samples.count) samples); overlappers \(overlappers.map { $0.debugShortId }); delete \(itemsToDelete.map { $0.debugShortId }); break prev edges \(prevEdgesToBreak.map { $0.debugShortId }), next edges \(nextEdgesToBreak.map { $0.debugShortId }); new \(newItem.debugShortId); heal \(itemsToHeal.map { String($0.prefix(8)) })", subsystem: .timeline)
+            Log.info("extractItem: segment \(segment.dateRange.start)…\(segment.dateRange.end) (\(segmentSamples.count) samples); overlappers \(overlappers.map { $0.debugShortId }); delete \(itemsToDelete.map { $0.debugShortId }); break prev edges \(prevEdgesToBreak.map { $0.debugShortId }), next edges \(nextEdgesToBreak.map { $0.debugShortId }); new \(newItem.debugShortId); heal \(itemsToHeal.map { String($0.prefix(8)) })", subsystem: .timeline)
             // delete items
             for var item in itemsToDelete {
                 try item.base.updateChanges(db) {

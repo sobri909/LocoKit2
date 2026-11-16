@@ -154,9 +154,11 @@ public final class MergeScores {
     // MARK: - TRIP <- TRIP
     private static func consumptionScoreFor(trip consumer: TimelineItem, toConsumeTrip consumee: TimelineItem) async throws -> ConsumptionScore {
         guard consumer.isTrip, consumee.isTrip else { fatalError() }
+        // the trip twin of the visit guard below (BIG-828). No trip base without its trip row has been
+        // seen (none in the database that held 1,138 visit ones), and the same answer applies if one is
         guard let consumerTrip = consumer.trip, let consumeeTrip = consumee.trip else {
-            Log.error("TimelineItem marked as trip but .trip is nil (consumer: \(consumer.id), consumee: \(consumee.id))", subsystem: .timeline)
-            fatalError("TimelineItem marked as trip but .trip is nil")
+            Log.error("TimelineItem marked as trip but .trip is nil (consumer: \(consumer.id), consumee: \(consumee.id)); scoring the merge impossible", subsystem: .timeline)
+            return .impossible
         }
 
         let consumerType = consumerTrip.activityType
@@ -214,9 +216,12 @@ public final class MergeScores {
     // MARK: - VISIT <- VISIT
     private static func consumptionScoreFor(visit consumer: TimelineItem, toConsumeVisit consumee: TimelineItem) -> ConsumptionScore {
         guard consumer.isVisit, consumee.isVisit else { fatalError() }
+        // BIG-828: a base that says visit with no visit row is a shape real databases hold (item
+        // creation used to leave it behind for samples with no usable coordinate). This was a
+        // fatalError; an item the scorer can't read can't be merged, and that is all it means
         guard let consumerVisit = consumer.visit, let consumeeVisit = consumee.visit else {
-            Log.error("TimelineItem marked as visit but .visit is nil (consumer: \(consumer.id), consumee: \(consumee.id))", subsystem: .timeline)
-            fatalError("TimelineItem marked as visit but .visit is nil")
+            Log.error("TimelineItem marked as visit but .visit is nil (consumer: \(consumer.id), consumee: \(consumee.id)); scoring the merge impossible", subsystem: .timeline)
+            return .impossible
         }
         guard let consumerRange = consumer.dateRange, let consumeeRange = consumee.dateRange else { return .impossible }
 

@@ -373,14 +373,26 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
 
     // MARK: - Updating Visit and Trip
 
+    /// BIG-828: a base that says visit with no visit row. Item creation used to leave these behind for
+    /// samples with no usable coordinate, and real databases hold them; `updateFrom` writes the row.
+    internal var isMissingVisitHalf: Bool { isVisit && visit == nil }
+
     internal mutating func updateFrom(samples updatedSamples: [LocomotionSample]) async {
-        guard samplesChanged else { return }
+        guard samplesChanged || isMissingVisitHalf else { return }
 
         let oldBase = base
         let oldTrip = trip
         let oldVisit = visit
 
-        await visit?.update(from: updatedSamples)
+        if isMissingVisitHalf {
+            // the repair: the visit half this item should have been created with, from its samples as
+            // they are now (no centre if they still can't give one). Inserted in the write below
+            let newVisit = TimelineItemVisit(itemId: id, samples: updatedSamples)
+            visit = newVisit
+            Log.info("TimelineItem \(debugShortId) says visit and has no visit row; writing one from its \(updatedSamples.count) samples (centre: \(newVisit.center == nil ? "none" : "found")) (BIG-828)", subsystem: .timeline)
+        } else {
+            await visit?.update(from: updatedSamples)
+        }
         await trip?.update(from: updatedSamples)
 
         // No HealthKit here (BIG-963): this runs in the background too, where HealthKit isn't read,
@@ -397,6 +409,12 @@ public struct TimelineItem: FetchableRecord, Codable, Identifiable, Hashable, Se
                 try base.updateChanges(db, from: oldBase)
                 if let oldVisit {
                     try visit?.updateChanges(db, from: oldVisit)
+                } else if let visit, try !TimelineItemVisit.exists(db, key: visit.itemId) {
+                    // the BIG-828 repair's row. Two passes can both find the item without one, so
+                    // the row is looked for first (writes are serialised); a plain insert, so a row
+                    // the schema refuses throws and is logged, where an ignored insert would say
+                    // nothing and the repair would come round again on every load
+                    try visit.insert(db)
                 }
                 if let oldTrip {
                     try trip?.updateChanges(db, from: oldTrip)

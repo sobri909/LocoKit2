@@ -49,12 +49,23 @@ public struct TimelineItemVisit: FetchableRecord, PersistableRecord, Identifiabl
 
     // MARK: - Init
 
-    init?(itemId: String, samples: [LocomotionSample]) {
+    /// BIG-828: never fails. This returned nil for samples with no usable coordinate (bogus ones, or
+    /// ones with no fix), and every creator then inserted the base and skipped the visit row, leaving
+    /// an item that says visit with no visit half: 1,138 live ones in one real database, and a
+    /// fatalError when merge scoring met one. Such a visit now gets its row with no centre, the "not
+    /// yet calculated" state the schema has allowed since BIG-218; `update(from:)` fills the centre
+    /// in when its samples can give one.
+    init(itemId: String, samples: [LocomotionSample]) {
+        self.itemId = itemId
+
         guard let coordinate = samples.weightedCenter() else {
-            return nil
+            self.latitude = nil
+            self.longitude = nil
+            self.radiusMean = Self.minRadius
+            self.radiusSD = 0
+            return
         }
 
-        self.itemId = itemId
         self.latitude = coordinate.latitude
         self.longitude = coordinate.longitude
 
