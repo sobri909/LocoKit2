@@ -91,6 +91,12 @@ public enum iCloudCoordinator {
                 let status = downloadStatus()
                 if status == .current || status == .downloaded { break }
                 try? await Task.sleep(for: .seconds(0.3))
+                // a cancelled task's sleep returns at once; without this the loop would spin on resourceValues until the
+                // deadline (BIG-892: onboarding's rescan is cancelled as a matter of course when its sheet goes)
+                if Task.isCancelled {
+                    Log.info("readCoordinated: \(url.lastPathComponent) wait cancelled after \(String(format: "%.1f", waitStart.age))s — giving up (non-destructive)", subsystem: .exporting)
+                    return .notLocalYet
+                }
             }
             // still not local after the wait (offline / slow sync) — bail non-destructively rather than
             // attempt a coordinated read that could block on a download that can't complete.
