@@ -79,11 +79,42 @@ public enum ExportManager {
 
     // MARK: - Export process
 
+    /// What one read of a backup folder's `metadata.json` established. A pass that writes into the folder decides
+    /// everything from ONE of these (BIG-892): a caller's chain check and `determineIncrementalMode` must not each
+    /// read the file with their own timeout, because the shorter read can miss a manifest iCloud is still bringing
+    /// down while the longer one then finds it, and the pass continues a chain it never checked.
+    public enum ManifestReadResult: Sendable {
+        case read(ExportMetadata)   // materialised and decoded
+        case absent                 // genuinely no manifest: no such file and not a ubiquitous item (a first run is legitimate)
+        case unreadable(String)     // not local yet, a read error, or undecodable: decide nothing from it; try again next pass
+    }
+
+    /// Reads `<folder>/metadata.json` once, materialisation-aware (BIG-597). The safety is in the outcome: only
+    /// `.absent` may ever drive first-run behaviour; `.unreadable` means skip, never re-export.
+    public static func readManifest(in folder: URL, timeout: TimeInterval = 25) async -> ManifestReadResult {
+        let url = folder.appendingPathComponent("metadata.json")
+        switch await iCloudCoordinator.readCoordinated(from: url, timeout: timeout) {
+        case .data(let data):
+            do {
+                return .read(try JSONDecoder.flexibleDateDecoder().decode(ExportMetadata.self, from: data))
+            } catch {
+                Log.error("ExportManager: manifest in \(folder.lastPathComponent) did not decode: \(error)", subsystem: .exporting)
+                return .unreadable("manifest did not decode")
+            }
+        case .absent: return .absent
+        case .notLocalYet: return .unreadable("not local yet")
+        case .failed: return .unreadable("read failed")
+        }
+    }
+
+    /// `manifest`: the result of a `readManifest(in: baseURL)` the caller already made, so that an incremental
+    /// export's mode comes from the same read as the caller's own decisions (BIG-892). nil = read it here.
     public static func export(
         to baseURL: URL,
         type: ExportType = .full,
         extensions: [ExportExtensionHandler] = [],
-        appMetadata: [String: String]? = nil
+        appMetadata: [String: String]? = nil,
+        manifest: ManifestReadResult? = nil
     ) async throws {
         guard !exportInProgress else {
             throw ImportExportError.exportInProgress
@@ -106,7 +137,7 @@ public enum ExportManager {
             catchUpDateRange = nil
             loadedManifest = nil
 
-            try await determineIncrementalMode(type: type, startTime: startTime)
+            try await determineIncrementalMode(type: type, startTime: startTime, manifest: manifest)
 
             // write initial metadata
             try await writeInitialMetadata(type: type, startTime: startTime)
@@ -168,16 +199,24 @@ public enum ExportManager {
 
     // MARK: - Setup
 
-    private static func determineIncrementalMode(type: ExportType, startTime: Date) async throws {
+    private static func determineIncrementalMode(type: ExportType, startTime: Date, manifest: ManifestReadResult?) async throws {
         guard type == .incremental else { return }
-        guard let metadataURL else { throw ImportExportError.exportNotInitialised }
+        guard let currentExportURL else { throw ImportExportError.exportNotInitialised }
 
-        // Read the manifest with materialisation awareness. The safety is in the outcome:
+        // The manifest is read with materialisation awareness, by the caller when it has decisions of its own to
+        // make from it (BIG-892: one read, not two with two timeouts), else here. The safety is in the outcome:
         // only a genuine `.absent` may drive first-run; couldn't-read MUST abort, never re-export.
+        let result: ManifestReadResult
+        if let manifest {
+            result = manifest
+        } else {
+            result = await readManifest(in: currentExportURL)
+        }
+
         let existingManifest: ExportMetadata?
-        switch await iCloudCoordinator.readCoordinated(from: metadataURL) {
-        case .data(let data):
-            existingManifest = try JSONDecoder.flexibleDateDecoder().decode(ExportMetadata.self, from: data)
+        switch result {
+        case .read(let metadata):
+            existingManifest = metadata
 
         case .absent:
             // genuinely no manifest — but a true first run is only legitimate if the backup folder
@@ -189,10 +228,10 @@ public enum ExportManager {
             }
             existingManifest = nil
 
-        case .notLocalYet, .failed:
+        case .unreadable(let reason):
             // couldn't materialise/read the manifest (evicted+offline / error) — skip this run,
             // retry next cycle. Never first-run; that misread is the destructive bug (BIG-597).
-            Log.error("ExportManager: manifest unreadable (evicted/offline) — skipping this backup run", subsystem: .exporting)
+            Log.error("ExportManager: manifest unreadable (\(reason)) — skipping this backup run", subsystem: .exporting)
             throw ImportExportError.manifestUnreadable
         }
 
