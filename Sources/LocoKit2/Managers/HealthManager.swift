@@ -65,7 +65,8 @@ public enum HealthManager {
     /// (the device was locked) goes to debug, console only, never the file log. Every other error keeps its
     /// ERROR line, with the caller's file and function as `Log.error` writes them (BIG-745). Use it where a
     /// locked-out query is simply retried the next time its surface is shown; a site where code 6 has a
-    /// consequence of its own (`Session.updateHealthKitState` disables HealthKit on it) logs that itself.
+    /// consequence of its own (`Session.updateHealthKitState` defers its decision to the next unlock, BIG-981)
+    /// logs that itself.
     nonisolated
     public static func logError(_ error: Error, function: String = #function, fileID: String = #fileID) {
         if isDataInaccessible(error) {
