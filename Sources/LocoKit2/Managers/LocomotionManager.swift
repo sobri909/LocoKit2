@@ -112,6 +112,13 @@ public final class LocomotionManager: @unchecked Sendable {
     /// streak changes. Strip with that logging when BIG-607 closes.
     private var lastLoggedUndergroundStreak: Int?
 
+    /// BIG-1032 instrument state: when the last accepted raw was delivered to the delegate, when the
+    /// last implausible-jump line was written, and how many firing pairs the one-a-minute cap has
+    /// held back since then.
+    private var lastRawDeliveredAt: Date?
+    private var lastJumpLogAt: Date?
+    private var suppressedJumpCount = 0
+
     // MARK: -
 
     public func locationUpdates() -> AsyncStream<CLLocation> {
@@ -401,7 +408,7 @@ public final class LocomotionManager: @unchecked Sendable {
     // MARK: - Incoming locations handling
     
     @MainActor
-    internal func add(location: CLLocation) async {
+    internal func add(location: CLLocation, deliveredAt: Date) async {
         // only accept locations when recording is supposed to be happening
         guard recordingState == .recording || recordingState == .wakeup else { return }
 
@@ -417,6 +424,30 @@ public final class LocomotionManager: @unchecked Sendable {
             let staleness = lastRaw.timestamp.timeIntervalSince(location.timestamp)
             Log.info("Discarding out-of-order raw (\(String(format: "%.1f", staleness))s older than last accepted)", subsystem: .locomotion)
             return
+        }
+
+        // BIG-1032: an instrument, no behaviour change. A pair of consecutive accepted raws that no
+        // vehicle could connect in the time between them, both claiming good accuracy, gets a log
+        // line with no coordinates (BIG-1029's drive stored such runs and its bundle could not say
+        // what the phone had delivered). The fix is handled exactly as before. At most one line a
+        // minute: two streams interleaved fix by fix (BIG-1029's shape at 1 Hz) would otherwise
+        // write a line on most fixes, each a synchronous file write, so the pairs inside the minute
+        // are counted on the next line instead. Only the recording manager's fixes reach here (the
+        // delegate drops the sleep manager's stream), so no manager is named; batches can overlap
+        // on the main actor, so "previous" is the last raw ACCEPTED, not strictly the last delivered.
+        if let lastRaw = lastRawLocation, let jump = RawFixJumpCheck.report(previous: lastRaw, current: location) {
+            if let lastLog = lastJumpLogAt, deliveredAt.timeIntervalSince(lastLog) < RawFixJumpCheck.minimumLogInterval {
+                suppressedJumpCount += 1
+            } else {
+                var line = RawFixJumpCheck.logLine(jump, previous: lastRaw, current: location,
+                                                   previousDeliveredAt: lastRawDeliveredAt, currentDeliveredAt: deliveredAt)
+                if suppressedJumpCount > 0 {
+                    line += "; +\(suppressedJumpCount) more such pair(s) since the previous line"
+                }
+                Log.info(line, subsystem: .locomotion)
+                lastJumpLogAt = deliveredAt
+                suppressedJumpCount = 0
+            }
         }
 
         // BIG-150: UndergroundDetector evaluates the raw stream for GPS-fallback
@@ -474,6 +505,7 @@ public final class LocomotionManager: @unchecked Sendable {
 
         lastFilteredLocation = kalmanLocation
         lastRawLocation = location
+        lastRawDeliveredAt = deliveredAt
         lastUpdated = .now
     }
 
@@ -869,9 +901,10 @@ public final class LocomotionManager: @unchecked Sendable {
                 }
             }
 
+            let deliveredAt = Date()  // BIG-1032: the batch's delivery time, before the hop to the main actor
             Task.detached {
                 for location in locations {
-                    await self.parent.add(location: location)
+                    await self.parent.add(location: location, deliveredAt: deliveredAt)
                 }
             }
         }
